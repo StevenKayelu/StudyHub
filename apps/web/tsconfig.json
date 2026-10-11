@@ -1,0 +1,12 @@
+{
+  "extends": "@studyhub/config/tsconfig.next.json",
+  "include": [
+    "next-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    ".next/types/**/*.ts",
+    "playwright.config.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next/standalone"]
+}

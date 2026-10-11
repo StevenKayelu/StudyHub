@@ -1,0 +1,236 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "StudyHub API",
+    "version": "0.1.0",
+    "description": "M1 engineering foundation: operational endpoints only. Every error response is RFC 9457 problem+json."
+  },
+  "tags": [
+    {
+      "name": "operations",
+      "description": "Liveness and readiness probes"
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "operationId": "getHealthz",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Liveness: the API process is running",
+        "responses": {
+          "200": {
+            "description": "The process is alive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Healthz"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "operationId": "getReadyz",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Readiness: required dependencies (database) are reachable",
+        "responses": {
+          "200": {
+            "description": "Ready to serve traffic.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readyz"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency is unavailable. The problem carries a `checks` extension member.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Healthz": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "service": {
+            "type": "string",
+            "const": "studyhub-api"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uptimeSeconds": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "status",
+          "service",
+          "version",
+          "uptimeSeconds"
+        ],
+        "additionalProperties": false
+      },
+      "Readyz": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "database": {
+                "type": "string",
+                "const": "ok"
+              }
+            },
+            "required": [
+              "database"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "checks"
+        ],
+        "additionalProperties": false
+      },
+      "ReadinessChecks": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "unavailable"
+            ]
+          }
+        },
+        "required": [
+          "database"
+        ],
+        "additionalProperties": false
+      },
+      "Problem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "VALIDATION_FAILED",
+              "NOT_FOUND",
+              "INTERNAL",
+              "SERVICE_UNAVAILABLE",
+              "RATE_LIMITED",
+              "UNAUTHENTICATED",
+              "FORBIDDEN",
+              "VERSION_CONFLICT",
+              "FEATURE_NOT_ENABLED",
+              "LIMIT_REACHED",
+              "TENANT_NOT_FOUND",
+              "TENANT_CONTEXT_MISSING",
+              "SLUG_TAKEN",
+              "SLUG_RESERVED",
+              "ENROLMENT_INACTIVE",
+              "ALREADY_ENROLLED",
+              "ATTEMPT_CLOSED",
+              "ATTEMPT_LIMIT_REACHED",
+              "PAYMENT_PROVIDER_UNAVAILABLE",
+              "PAYMENT_METHOD_NOT_SUPPORTED"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "code": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "message": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "field",
+                "code",
+                "message"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code",
+          "requestId"
+        ],
+        "additionalProperties": {}
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+# Local development stack for M1: PostgreSQL 17 only.
+# Usage (from the repository root): pnpm db:up / pnpm db:down
+# Values come from the root .env (copied from .env.example). Postgres is bound to localhost only.
+name: studyhub-dev
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-studyhub}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?Set POSTGRES_SUPERUSER_PASSWORD in .env}
+      # Read by infra/postgres/init/01-roles.sql via psql \getenv on first initialisation.
+      STUDYHUB_MIGRATOR_PASSWORD: ${STUDYHUB_MIGRATOR_PASSWORD:?Set STUDYHUB_MIGRATOR_PASSWORD in .env}
+      STUDYHUB_APP_PASSWORD: ${STUDYHUB_APP_PASSWORD:?Set STUDYHUB_APP_PASSWORD in .env}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - studyhub-pgdata:/var/lib/postgresql/data
+      - ../postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d ${POSTGRES_DB:-studyhub}']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  studyhub-pgdata:

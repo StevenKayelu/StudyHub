@@ -1,0 +1,31 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Security overrides for vulnerable transitive dependencies (see docs/security/dependency-audit.md).
+overrides:
+  # Prisma CLI config loader: GHSA stack exhaustion fixed in 8.x.
+  deepmerge-ts: '>=8.0.0'
+  # Prisma CLI MySQL driver (unused: PostgreSQL only): credential-downgrade and zlib-bomb fixes.
+  mysql2: '>=3.23.1'
+
+# Documented audit exceptions only (each one is justified in docs/security/dependency-audit.md).
+auditConfig:
+  ignoreGhsas:
+    # braces <=3.0.3 stack exhaustion; no patched release exists. Dev-only path:
+    # @next/eslint-plugin-next > fast-glob > micromatch > braces, matching our own lint globs.
+    - GHSA-vfj7-8cjw-p6xm
+
+# Dependency lifecycle scripts are blocked unless listed here (supply-chain hardening).
+allowBuilds:
+  # Required: Prisma engines/CLI and native compilers used by tests and builds.
+  '@prisma/engines': true
+  prisma: true
+  '@swc/core': true
+  esbuild: true
+  sharp: true
+  # Not needed: optional SSH transport of the Docker client used by Testcontainers, and a
+  # version-check script. Denied explicitly so the decision is recorded.
+  cpu-features: false
+  ssh2: false
+  protobufjs: false

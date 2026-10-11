@@ -1,0 +1,29 @@
+# gitleaks configuration: default rules plus StudyHub-specific allowlists.
+# Run locally with `pnpm secrets:scan` (working tree) or in CI with `node tools/gitleaks.mjs --git`.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Generated or third-party paths, git-ignored local env files, and documented local-only placeholders"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.next/''',
+  '''(^|/)dist/''',
+  '''(^|/)\.turbo/''',
+  '''(^|/)coverage/''',
+  '''(^|/)playwright-report/''',
+  '''(^|/)test-results/''',
+  '''(^|/)apps/api/src/generated/''',
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)\.git/''',
+  # .env is git-ignored and never committed; the git-history scan in CI covers what is committed.
+  '''(^|/)\.env$''',
+]
+regexes = [
+  # Throwaway placeholders from .env.example (the API refuses them in production).
+  '''change-me-local-[a-z]+''',
+  # Documentation example: the illustrative Idempotency-Key UUID in docs/blueprint/05-database-and-api.md §5
+  # (an API request sample, not a credential). Allowlisted by exact value, not by path.
+  '''6f1c2f0e-3b3c-4c55-9a4a-8d1f0b8d2a11''',
+]

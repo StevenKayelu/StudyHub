@@ -1,0 +1,13 @@
+node_modules
+dist
+.next
+.turbo
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+apps/api/src/generated
+apps/api/prisma/migrations
+apps/api/openapi.json
+# The blueprint is an approved document set; it is copied verbatim and never reformatted.
+docs/blueprint

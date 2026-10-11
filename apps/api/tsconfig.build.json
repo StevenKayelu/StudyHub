@@ -1,0 +1,12 @@
+{
+  "extends": "@studyhub/config/tsconfig.node.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": false,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

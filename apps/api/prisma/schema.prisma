@@ -1,0 +1,21 @@
+// StudyHub database schema (blueprint 05). M1 contains a single global table to prove the
+// migration pipeline. Tenant-owned tables (with tenant_id and row-level security) start in M2.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Typed platform-wide settings (blueprint 05 §8.1). Global: no tenant_id, no RLS.
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("platform_setting")
+}
