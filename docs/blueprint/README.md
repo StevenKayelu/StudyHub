@@ -8,7 +8,7 @@ There is **no existing codebase**. On 2026-10-11, `StudyPlatform/` was empty and
 |---|---|---|
 | 01 | [Executive Assessment](01-executive-assessment.md) | decision makers |
 | 02 | [Baseline Assessment (greenfield)](02-baseline-assessment.md) | what exists, what was checked, risks a new build must avoid |
-| 03 | [Functional Requirements](03-functional-requirements.md) | realms and roles, features F01–F49, rules BR-01–BR-64, money-flow workflows W1–W8, acceptance criteria |
+| 03 | [Functional Requirements](03-functional-requirements.md) | realms and roles, features F01–F49, rules BR-01–BR-71, money-flow workflows W1–W8, acceptance criteria |
 | 04 | [Target Architecture](04-target-architecture.md) | stack, modules, flows, security, operations; **§17 multi-tenancy** |
 | 05 | [Database & API](05-database-and-api.md) | entities, constraints, state machines, API; **§8 tenancy model and API** |
 | 06 | [UI/UX Blueprint](06-ui-ux-blueprint.md) | "Copperline" design system, screens, flows; **§10 white-label, tenant admin, console** |
@@ -45,4 +45,5 @@ There is **no existing codebase**. On 2026-10-11, `StudyPlatform/` was empty and
 |---|---|---|
 | 1 | 2026-10-11 | Initial greenfield blueprint (single-marketplace model) |
 | 2 | 2026-10-11 | Validated against the second brief; added multi-tenancy and white-label throughout; restructured decisions into tiers; fixed the roadmap arithmetic; added document 10 (corrections listed in 10 §2) |
+| 4 | 2026-10-11 | Client approved tenancy decisions D1-D6: shared schema + forced RLS; no RLS-bypassing login role; global accounts with per-school memberships (BR-43 replaced, BR-65 to BR-71 added); school-host sign-in and hand-off switching; 3 ms p95 go/no-go. Amended 01, 03-10. D7 (legal) open |
 | 3 | 2026-10-11 | Final readiness review: privileged-DB allowlist and webhook resolvers; tenant languages, domain, course and material, and capability-limited payment settings; money-flow workflows W1–W8 and commission terminology; settlement reconciliation and platform statements; provider approval gate; M1 split into a decision-free engineering foundation (milestones now M0–M11) (C-13–C-28 in 10 §2) |

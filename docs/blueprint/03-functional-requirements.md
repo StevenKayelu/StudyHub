@@ -5,6 +5,8 @@ Priority: **MUST** (first release), **SHOULD** (first release if time allows, ot
 
 Greenfield note: the brief's "existing implementation location" field is not applicable for every feature. Each feature instead lists its **source**: the client answer or assumption it traces to.
 
+> **Revision 4 (2026-10-11): client-approved tenancy decisions D1-D6** (`docs/design/m2-tenancy-kernel.md` in the code repository). D1 shared schema + forced RLS (dedicated deployments as the exception path); D2 no RLS-bypassing login role (NOLOGIN `studyhub_rls_definer` owns an audited inventory of SECURITY DEFINER functions); D3 one global account per person with explicit per-school memberships and roles; D4 sign-in on the school host, school switching by one-time hand-off, neutral account wording; D5 Prisma + RLS go/no-go at 3 ms p95 overhead; D6 these amendments. D7 (legal controller role) remains open.
+>
 > **Revision 3 (2026-10-11):** F38 tenant-facing domain settings; F41 languages, course and material settings, and provider-dependent payment settings; BR-61–BR-64; **§9.5 money-flow workflows W1–W8** (student payment, instructor commission, payouts, refunds, reconciliation, platform commission). The fee previously called "platform fee" is now **instructor commission** (`instructorCommissionBps`).
 >
 > **Revision 2 (2026-10-11): multi-tenancy.** The client's second brief says the platform must serve **many independent schools, colleges, tutors and education businesses**, each with its own branding, settings, content and enabled features, with **strict tenant data isolation** and **separate platform-owner and tenant-administrator permissions**. Revision 1 had no tenancy at all (VERIFIED: 0 mentions). §3 (roles) has been rewritten, and **§9 adds the tenancy features F37–F49, the rules BR-41–BR-60, and a table showing how F01–F36 change under tenancy. Where §4 says "admin" or "platform setting", read it through §9.2.** The specific tenancy mechanics are recommendations (ASSUMED / PROPOSED) until the decisions in 08 §1 are made.
@@ -34,7 +36,7 @@ The open marketplace from revision 1 (independent tutors applying to sell under 
 
 ## 3. User roles and permissions
 
-There are **two separate realms**, and an account belongs to exactly one of them (B3; realm separation is PROPOSED, ADR-017):
+There are **two separate realms**, and an account belongs to exactly one of them (B3; realm separation CONFIRMED in D3, ADR-017):
 
 **Platform realm.** Platform-owner staff only. They sign in at a dedicated console host (e.g. `console.<platform-domain>`) with separate accounts and mandatory 2FA. Platform accounts can't sign in on tenant sites.
 
@@ -44,7 +46,7 @@ There are **two separate realms**, and an account belongs to exactly one of them
 | **Platform operator** | Provision, activate, suspend and offboard tenants; assign plans and feature overrides; see tenant metadata and usage; request support access | Manage platform staff, plans or global settings; emergency access | PROPOSED |
 | **Platform support** | Read tenant metadata, plan, status, usage and health; request support access (needs tenant approval) | Change tenants; emergency access | PROPOSED (replaces revision 1's Q-ROLE-2) |
 
-**Tenant realm.** Everything below is scoped to **one tenant** and its host. The same person in two tenants has two independent accounts (ASSUMED, BR-43, Q-TEN-1).
+**Tenant realm.** Everything below is scoped to **one tenant** and its host. A person has **one global account** (email, password, 2FA) and an explicit **membership** in each school they belong to, with roles per school (CONFIRMED, D3; BR-43, BR-65 to BR-71). A school sees only its own members and never a member's other schools.
 
 | Role | Who | Can | Cannot | Source |
 |---|---|---|---|---|
@@ -445,7 +447,7 @@ Source: second client brief (B1–B3, §1). The requirement for tenancy, isolati
   2. Each change is audited in the tenant audit log with old and new values.
 
 #### F42 Tenant team and roles — MUST
-- Owners and admins invite people by email as instructor, admin or owner (owners only invite owners). They can change roles, remove members (who are suspended in the tenant) and transfer ownership.
+- Owners and admins invite people by email as instructor, admin or owner (owners only invite owners). They can change roles, suspend or revoke memberships (the person's global account is unaffected, BR-69, BR-70) and transfer ownership. Accepting an invitation creates the membership, and the global account if needed (BR-67).
 - Instructor onboarding mode: `INVITE_ONLY` (default) or `APPLICATION` (revision 1's F06 queue, per tenant).
 - **AC:**
   1. The last owner can't be removed or demoted (BR-58).
@@ -504,9 +506,9 @@ Source: second client brief (B1–B3, §1). The requirement for tenancy, isolati
 
 | Feature | Change |
 |---|---|
-| F01–F03 Identity | Accounts, verification and reset are **per tenant** (unique email per tenant). Emails are tenant-branded. Registration follows the tenant's registration mode (BR-57). |
-| F04 Account | Data export and deletion apply to the account in that tenant only. |
-| F05 Roles | Replaced by the two-realm model in §3. The authorization matrix adds the dimension *same tenant / other tenant / platform realm*. |
+| F01–F03 Identity | One **global account** per person; sign-in happens on the school host and requires an ACTIVE membership there (BR-65). Registration on a school host creates the account and/or a LEARNER membership, following that school's registration mode (BR-57, BR-66). Verification and password reset are global; emails use the branding of the school host the request came from. All responses are generic (no account or membership enumeration). |
+| F04 Account | Profile fields that belong to a school (display name override, student number) live on the membership. **Leave a school** revokes that membership only; **delete account** ends every membership and anonymises personal data in each school by a named, audited system job, keeping financial records per retention (BR-27, BR-70). Email and password changes are global and user-controlled (BR-69). |
+| F05 Roles | Replaced by the two-realm model in §3; tenant roles are attached to the **membership**. The authorization matrix adds the dimensions *same tenant / other tenant / platform realm / user with membership elsewhere only*. |
 | F06 Tutor application | Becomes the instructor application. It is available only when the tenant's onboarding mode is `APPLICATION` (BR-56). Payout details are needed only with `instructorRevenueShare`. |
 | F07 Tutor page | Instructor page within the tenant site. |
 | F08 Categories | Per tenant (each tenant manages its own tree). |
@@ -528,7 +530,7 @@ Source: second client brief (B1–B3, §1). The requirement for tenancy, isolati
 |---|---|---|
 | BR-41 | Every tenant-owned record belongs to exactly one tenant. No read or write crosses tenants, except tenant metadata and aggregated metrics in the console and actions under a support grant | PROPOSED (from B2) |
 | BR-42 | The tenant is determined **only** from the verified request host. Client-supplied tenant identifiers are ignored | PROPOSED |
-| BR-43 | User accounts are tenant-scoped: `unique(tenant_id, email)`. The same email in two tenants means two independent accounts | ASSUMED (Q-TEN-1) |
+| BR-43 | One **global account** per person: `unique(email)` across the platform. Access to a school requires an explicit **membership** in that school; roles are granted per membership. A user may belong to many schools | CONFIRMED (D3, rev. 4; replaces the tenant-scoped account rule) |
 | BR-44 | Sessions are host-only cookies. A session is valid only when `session.tenant_id` equals the resolved tenant | PROPOSED |
 | BR-45 | Platform accounts live in a separate realm (console host only). Tenant accounts can't access the console | PROPOSED |
 | BR-46 | Platform staff can't access tenant personal data, content or financial detail without an active support grant | PROPOSED (from B3) |
@@ -550,6 +552,13 @@ Source: second client brief (B1–B3, §1). The requirement for tenancy, isolati
 | BR-62 | A tenant can enable only payment methods and refund modes that its connected payment account **reports as supported** (adapter capability model, 04 §17.10). Unsupported options are shown disabled with the reason | PROPOSED (rev. 3) |
 | BR-63 | Commission terms: **instructor commission** is the share of an instructor's sale kept by the tenant (ledger, only with `instructorRevenueShare`); **platform commission** is the share of a tenant's sales owed to the platform (`plan.platformCommissionBps`, default 0), invoiced monthly from recorded sales net of refunds; neither is ever deducted from money in transit | PROPOSED (rev. 3, Q-BIZ-9) |
 | BR-64 | Tenant course and material settings are **defaults and limits** for new content. Changing them never silently changes existing lessons or quizzes, except upload limits, which apply to new uploads | PROPOSED (rev. 3) |
+| BR-65 | Sign-in on a school host succeeds only with valid global credentials **and** an ACTIVE membership in that school. Unknown email, wrong password and missing or inactive membership return the same generic error | CONFIRMED (D3, D4) |
+| BR-66 | Registering with an email that already has an account never reveals it: the response is generic and the email invites the person to sign in and confirm "Join *School*", which creates the membership | CONFIRMED (D3, D4) |
+| BR-67 | Accepting an invitation creates the membership with the invited role in one transaction, creating the global account first if none exists. Invitations are single-use and expire after 7 days | CONFIRMED (D3) |
+| BR-68 | School switching uses a one-time hand-off token: 256-bit, stored hashed, valid 60 s, single use, bound to the user and the **target** school; exchanged by POST on the target host, which re-checks the membership before creating a session there | CONFIRMED (D4) |
+| BR-69 | Suspending or revoking a membership deletes that user's sessions in that school in the same transaction; other schools are unaffected. Password change or reset and "sign out everywhere" end the user's sessions in all schools | CONFIRMED (D3) |
+| BR-70 | A school can't change a member's login email or password, can't delete the global account, and can't see the member's other memberships | CONFIRMED (D3) |
+| BR-71 | User-facing copy calls the shared identity "your account" (no platform name required on white-label sites); the privacy notice discloses that the account works with other schools on the platform | CONFIRMED (D4); wording subject to Q-LEG-4 |
 
 ### 9.5 Money-flow workflows (revision 3)
 

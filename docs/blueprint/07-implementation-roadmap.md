@@ -1,5 +1,7 @@
 # 07 — Implementation Roadmap
 
+> **Revision 4 (2026-10-11):** client approved tenancy decisions D1-D6: shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + function inventory); global accounts with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go at 3 ms p95. D7 (legal controller role) remains open.
+>
 > **Revision 3 (2026-10-11).** Revision 2's M1 combined tooling with the tenancy kernel, so it depended on an unanswered critical decision (Q-TEN-3) and on staging decisions (Q-TEN-6, Q-OPS-2). It is now split:
 > - **M1 Engineering foundation:** needs no open decision except where the repository lives (Q-REPO-1).
 > - **M2 Tenancy kernel:** starts once Q-TEN-3 is answered.
@@ -81,7 +83,7 @@ M7 and M8 can run in either order after M6. Do M8 first if an approved provider 
 ### M2 — Tenancy kernel
 - **Prerequisite:** Q-TEN-3 answered. Staging at the end also needs Q-TEN-6 and Q-OPS-2; without them staging is reported as pending.
 - **Scope:**
-  - Third DB role `studyhub_platform` + privileged-client allowlist (04 §17.4).
+  - NOLOGIN role `studyhub_rls_definer` + SECURITY DEFINER inventory (`resolve_tenant`, `claim_due_outbox`) + role-posture checks (04 §17.4, rev. 4); `pnpm db:provision-roles` for existing local volumes.
   - `tenant` and `tenant_domain` tables; `resolve_tenant(host)`; TenantResolver hook; tenant context in AsyncLocalStorage.
   - Tenant-scoped Prisma extension; RLS policy helper; RLS coverage check.
   - First tenant-owned tables (`audit_log`, `outbox`) with forced RLS and composite keys.
@@ -95,12 +97,12 @@ M7 and M8 can run in either order after M6. Do M8 first if an approved provider 
   3. RLS coverage check, including a meta-test with an unprotected fixture table.
   4. SQL isolation: as tenant B, A's rows are invisible and inserts with A's id fail; with no context, 0 rows.
   5. Repository use without a context throws `TENANT_CONTEXT_MISSING`.
-  6. The boundary rule rejects privileged-client imports outside the allowlist.
+  6. Role and function posture: no LOGIN role except the superuser can bypass RLS; `studyhub_app` owns nothing and has DML only; every definer function is on the inventory with a fixed `search_path`; every view is `security_invoker`.
   7. Outbox rollback test.
   8. A job without `tenantId` is rejected.
   9. Cache keys are separated per host (Playwright).
   10. Benchmark report: RLS overhead p95 per query.
-- **DoD:** ADR-016, ADR-017 (draft) and ADR-018 written; the Prisma + RLS go/no-go is recorded (RW-03).
+- **DoD:** ADR-016, ADR-017 and ADR-018 written (accepted per D1-D4); the Prisma + RLS benchmark is recorded against the approved threshold of **3 ms p95** overhead, otherwise tenant data access moves to Kysely (D5, RW-03). Full test list: `docs/design/m2-tenancy-kernel.md` §6.
 
 ### M3 — Design system, theming runtime and shells
 - **Scope:**
@@ -117,12 +119,12 @@ M7 and M8 can run in either order after M6. Do M8 first if an approved provider 
 
 ### M4 — Identity realms and access control
 - **Scope:**
-  - Per-tenant F01–F05, registration modes, invitations (F42 API).
+  - Global accounts with per-school memberships and roles (D3): sign-in on the school host (BR-65), join-school (BR-66), invitations (BR-67), school switching by hand-off (BR-68), revocation and global session revocation (BR-69); definer functions `auth_lookup`, `my_memberships`, `revoke_user_sessions_everywhere`, `exchange_handoff`; registration modes.
   - Platform realm with TOTP and console session lifetimes (04 §17.5).
   - Policy layer; authorization matrix with *other tenant* and *platform realm* rows.
   - Tenant and platform audit logs; rate limits per IP, account and tenant.
 - **Tests and AC:**
-  1. The same email registers in two tenants.
+  1. One account joins two schools; each school sees only its own membership; a school admin can't list global users or see other memberships.
   2. A session replayed on another tenant host is rejected.
   3. Neither realm can use the other's area.
   4. Console requires TOTP and re-authentication for sensitive actions.
@@ -231,7 +233,7 @@ M7 and M8 can run in either order after M6. Do M8 first if an approved provider 
 - **Migrations:** expand/contract; a migration check on an empty DB; drift detection; RLS coverage check (from M2).
 - **Review checklist:**
   - No query without tenant context.
-  - Privileged client only on the allowlist.
+  - Cross-tenant access only through the SECURITY DEFINER inventory; no RLS-bypassing login role.
   - No tenant id from client input.
   - Cache keys include the tenant.
   - Job payloads carry `tenantId`.

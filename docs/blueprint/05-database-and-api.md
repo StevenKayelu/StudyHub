@@ -1,5 +1,7 @@
 # 05 — Database and API Specification
 
+> **Revision 4 (2026-10-11):** client approved tenancy decisions D1-D6: shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + function inventory); global accounts with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go at 3 ms p95. D7 (legal controller role) remains open.
+>
 > **Revision 3 (2026-10-11):** ledger `platform_fee_minor` renamed `commission_minor` (instructor commission); plan pricing (`platformCommissionBps`); grouped tenant settings incl. languages, course and material defaults, payment settings; per-locale tenant texts; payment-account capabilities; new `domain_change_request`, `settlement_report`, `platform_statement`; endpoints for locales, domains, onboarding, capabilities, reconciliation, statements, video webhook.
 >
 > **Revision 2 (2026-10-11): multi-tenancy.** **§8 is authoritative for tenancy:** new entities, the `tenant_id` rule for every tenant-owned table, changed unique keys, RLS, and new tenant-admin and console endpoints. §3–§7 below describe each entity's *business* fields. Under revision 2, every entity not listed as global in §8.1 also gets `tenant_id`, composite tenant foreign keys and tenant-leading indexes, as specified in §8.2. `/admin/*` endpoints are **tenant-admin** endpoints.
@@ -554,7 +556,19 @@ Content-Type: application/problem+json
 
 ## 8. Multi-tenancy data model and API (revision 2, authoritative)
 
-### 8.1 Global (platform-level) entities: no `tenant_id`, no RLS, accessed through the platform client or SECURITY DEFINER functions
+### 8.1 Global (platform-level) entities: no `tenant_id`; platform tables without RLS, identity tables with self/member RLS (rev. 4)
+
+**Global identity (rev. 4, D3):**
+
+**user_account** — `id uuid PK, email citext UNIQUE, email_verified_at?, display_name, default_locale, status ACTIVE|LOCKED|DELETION_REQUESTED|DELETED, deletion_requested_at?, anonymised_at?, created_at, updated_at, version`. RLS: visible if `id = app.user_id` **or** a `tenant_membership` row for this user exists in the current tenant (the membership table is itself under RLS). Sign-in never reads it directly; it uses `auth_lookup(email)`.
+
+**credential** — `user_id PK/FK, password_hash, password_changed_at, failed_count, locked_until?, totp_secret_enc?, totp_enabled_at?, recovery_codes_hash[]`. RLS: `user_id = app.user_id` only.
+
+**one_time_token** — `id, user_id, purpose VERIFY_EMAIL|RESET_PASSWORD|CHANGE_EMAIL, token_hash UNIQUE, payload jsonb, context_tenant_id? (branding of the host where it was requested), expires_at, used_at?`. RLS: self only; redemption goes through a definer function.
+
+**tenant_handoff** — `id, user_id, target_tenant_id, token_hash UNIQUE, created_at, expires_at (= created_at + 60 s), used_at?`. CHECK `expires_at <= created_at + interval '60 seconds'`. Created on the source host for the caller only; redeemed only via `exchange_handoff()` on the target host (BR-68).
+
+**Platform tables (no RLS):**
 
 **tenant**
 | Field | Type | Rules |
@@ -594,7 +608,7 @@ stateDiagram-v2
 
 ### 8.2 Tenant-owned entities
 
-**Rule:** every entity in §3 (`user`, `credential`, `session`, `one_time_token`, `role_assignment`, `tutor_profile`, `payout_method`, `category`, `subject`, `course`, `course_submission`, `section`, `lesson`, `lesson_attachment`, `asset`, `enrollment`, `lesson_progress`, `question`, `question_option`, `quiz`, `quiz_item`, `quiz_draw_rule`, `attempt`, `attempt_item`, `attempt_answer`, `order`, `order_item`, `payment`, `payment_event`, `refund`, `receipt`, `receipt_sequence`, `idempotency_key`, `ledger_entry`, `payout`, `notification`, `notification_preference`, `outbox`, `audit_log`) gains the following:
+**Rule:** every entity in §3 except the global identity tables in §8.1 (`session`, `tutor_profile`, `payout_method`, `category`, `subject`, `course`, `course_submission`, `section`, `lesson`, `lesson_attachment`, `asset`, `enrollment`, `lesson_progress`, `question`, `question_option`, `quiz`, `quiz_item`, `quiz_draw_rule`, `attempt`, `attempt_item`, `attempt_answer`, `order`, `order_item`, `payment`, `payment_event`, `refund`, `receipt`, `receipt_sequence`, `idempotency_key`, `ledger_entry`, `payout`, `notification`, `notification_preference`, `outbox`, `audit_log`) gains the following:
 - `tenant_id uuid NOT NULL`
 - RLS enabled and forced, with the `tenant_isolation` policy (04 §17.4)
 - `UNIQUE (tenant_id, id)` on tables referenced by others
@@ -605,13 +619,13 @@ Changed keys:
 
 | Revision 1 key | Revision 2 key |
 |---|---|
-| `user.email` unique | `unique(tenant_id, email)` |
+| `user.email` unique | **rev. 4:** `user_account.email` stays globally unique (one account per person, D3). Registration, invitation and reset responses are generic to prevent enumeration (BR-65, BR-66) |
 | `course.slug`, `category.slug`, `subject.slug`, `tutor_profile.slug` unique | `unique(tenant_id, slug)` |
 | `receipt_sequence(year)` PK | PK `(tenant_id, year)`; receipt number = `{tenant.receipt_prefix}-{year}-{seq:06}`; `unique(tenant_id, number)` |
 | `payment.reference` unique | stays globally unique (UUID) so provider callbacks can be routed; `unique(payment_account_id, provider_transaction_id)` |
 | `payment_event unique(provider, provider_event_id)` | `unique(payment_account_id, provider_event_id)` |
-| `role_assignment` PK `(user_id, role)` | PK `(tenant_id, user_id, role)`; role enum becomes `LEARNER, INSTRUCTOR, TENANT_ADMIN, TENANT_OWNER` |
-| `session` | adds `support_grant_id?` (support sessions, user_id null for those, CHECK) |
+| `role_assignment` PK `(user_id, role)` | **rev. 4:** replaced by `tenant_membership` + `membership_role` (below); role enum `LEARNER, INSTRUCTOR, TENANT_ADMIN, TENANT_OWNER` |
+| `session` | tenant-owned; adds `membership_id` (FK, composite with tenant) and `support_grant_id?` (support sessions, user_id and membership_id null for those, CHECK) |
 | `asset.storage_key` | prefix `t/{tenant_id}/…` (CHECK `storage_key LIKE 't/' || tenant_id || '/%'`) |
 | `platform_setting` keys used for fee, review, refund window, order expiry | moved to `tenant_setting` |
 
@@ -629,11 +643,15 @@ New tenant-owned entities:
 
 **tenant_feature** — PK `(tenant_id, feature_key)`, `enabled_by_tenant bool`, `platform_override enum NONE|GRANT|REVOKE`, `updated_by`, `updated_at`. Written by the tenant (enabled flag) and the console (override), audited separately.
 
+**tenant_membership** (rev. 4, D3) — `id, tenant_id, user_id (FK user_account), status INVITED|ACTIVE|SUSPENDED|REVOKED, display_name_override?, student_number?, joined_at?, suspended_at?, revoked_at?, revoked_by?, version`. `unique(tenant_id, user_id)`; `UNIQUE (tenant_id, id)` for composite FKs. Status changes to SUSPENDED or REVOKED delete that user's sessions in the tenant in the same transaction (BR-69).
+
+**membership_role** (rev. 4) — PK `(tenant_id, membership_id, role)`; `granted_by`, `granted_at`. A tenant must always keep at least one ACTIVE `TENANT_OWNER` membership (BR-58).
+
 **invitation** — `id, tenant_id, email citext, role, token_hash unique, invited_by, expires_at, accepted_at?, revoked_at?`. Partial unique `(tenant_id, email, role) WHERE accepted_at IS NULL AND revoked_at IS NULL`.
 
 **payment_account** — `id, tenant_id, provider, label, status PENDING|ACTIVE|DISABLED|FAILED_TEST, credentials_enc bytea, data_key_enc bytea, webhook_secret_enc bytea, masked_hint, supported_methods enum[], capabilities jsonb (rev. 3: detected by the connection test — methods and networks, card, refundApi FULL|PARTIAL|NONE, statusQuery, transactionListApi, disbursementApi, currencies), last_tested_at, last_test_result, created_by, version`. Partial unique `(tenant_id) WHERE status='ACTIVE'` (one active account per tenant at launch). `payment.payment_account_id` is a NOT NULL FK.
 
-**support_access_grant** — `id, tenant_id, platform_user_id, reason text (≥20 chars), scope READ_ONLY|READ_WRITE, emergency bool, status REQUESTED|APPROVED|DENIED|ACTIVE|EXPIRED|REVOKED, requested_at, decided_by (tenant user)?, decided_at?, starts_at?, expires_at?, revoked_by?, revoked_at?`. CHECK `expires_at - starts_at <= interval '24 hours'`. This table is readable by both realms: the tenant through RLS, the console through the platform client.
+**support_access_grant** — `id, tenant_id, platform_user_id, reason text (≥20 chars), scope READ_ONLY|READ_WRITE, emergency bool, status REQUESTED|APPROVED|DENIED|ACTIVE|EXPIRED|REVOKED, requested_at, decided_by (tenant user)?, decided_at?, starts_at?, expires_at?, revoked_by?, revoked_at?`. CHECK `expires_at - starts_at <= interval '24 hours'`. This table is readable by both realms: the tenant through RLS, the console through a SECURITY DEFINER function that returns grant metadata only (04 §17.4).
 
 **tenant_usage_daily** — PK `(tenant_id, date)`, `active_learners, instructors, admins, storage_bytes, video_minutes_delivered, emails_sent, payments_count, payments_amount_minor`.
 
@@ -655,7 +673,12 @@ New tenant-owned entities:
 | GET `/admin/features` · PUT `/admin/features/{key}` | Enable or disable features within the plan | TENANT_ADMIN, OWNER |
 | GET/PATCH `/admin/settings` | Tenant settings (typed) | TENANT_ADMIN, OWNER |
 | GET `/admin/team` · POST `/admin/invitations` · DELETE `/admin/invitations/{id}` · PUT `/admin/members/{userId}/roles` · DELETE `/admin/members/{userId}` · POST `/admin/owners/transfer` | Team and roles (BR-58) | ADMIN (no owner grants) / OWNER |
-| POST `/invitations/accept` | Accept an invitation (sets a password or links an existing account in this tenant) | V |
+| POST `/invitations/accept` | Accept an invitation: signs in to (or creates) the global account and creates the membership with the invited role (BR-67) | V |
+| GET `/me/schools` | The caller's own memberships (school name, host, roles, status) via `my_memberships()` | L |
+| POST `/me/schools/{tenantId}/handoff` | Create a one-time hand-off to another school the caller is an ACTIVE member of; returns the target URL (BR-68) | L |
+| POST `/auth/handoff` | Exchange a hand-off token on the target host and create a session there | V |
+| POST `/me/schools/current/join` | Confirm "Join *School*" after signing in with an existing account on a school with open registration (BR-66) | L (no membership yet) |
+| POST `/me/schools/current/leave` | Leave the current school (revokes own membership; not allowed for the last owner) | L |
 | GET/POST `/admin/payment-accounts` · POST `/admin/payment-accounts/{id}/test` · POST `/admin/payment-accounts/{id}/activate` · DELETE `/admin/payment-accounts/{id}` | Connect payment account (credentials write-only) | OWNER |
 | GET `/admin/support-access` · POST `/admin/support-access/{id}/decision` · POST `/admin/support-access/{id}/revoke` | Review and revoke support access | TENANT_ADMIN, OWNER |
 | GET `/admin/usage?from=&to=` · GET `/admin/plan` | Usage vs limits | TENANT_ADMIN, OWNER |

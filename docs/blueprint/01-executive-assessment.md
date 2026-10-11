@@ -1,5 +1,7 @@
 # 01 — Executive Assessment
 
+> **Revision 4 (2026-10-11): client-approved tenancy decisions D1-D6** (`docs/design/m2-tenancy-kernel.md` in the code repository). D1 shared schema + forced RLS (dedicated deployments as the exception path); D2 no RLS-bypassing login role (NOLOGIN `studyhub_rls_definer` owns an audited inventory of SECURITY DEFINER functions); D3 one global account per person with explicit per-school memberships and roles; D4 sign-in on the school host, school switching by one-time hand-off, neutral account wording; D5 Prisma + RLS go/no-go at 3 ms p95 overhead; D6 these amendments. D7 (legal controller role) remains open.
+>
 > **Revision 3 (2026-10-11):** M1 split into a decision-free engineering foundation (M1) and the tenancy kernel (M2); money-flow workflows, tenant languages, domain, course and material, and payment-capability settings added; provider approval gate (Q-PAY-3).
 >
 > **Revision 2 (2026-10-11):** updated for the client's second brief. StudyHub is a **multi-tenant, white-label** platform for many schools, colleges, tutors and education businesses (03 §9, 04 §17).
@@ -30,7 +32,7 @@ There is **no existing system** (VERIFIED: an empty folder and an empty GitHub r
 
 1. **Modular monolith in TypeScript**: web (Next.js), API (NestJS/Fastify) and worker from one codebase (ADR-001/002).
 2. **Shared-schema multi-tenancy with forced PostgreSQL row-level security**, composite tenant foreign keys, host-based tenant resolution and host-only sessions (ADR-016/018/005).
-3. **Two identity realms**: tenant accounts (scoped per tenant) and platform staff accounts (separate console, mandatory 2FA), plus **break-glass support access** (ADR-017/022).
+3. **Two identity realms**: one global learner/staff account per person with **per-school memberships and roles** (CONFIRMED, D3), and separate platform staff accounts (console, mandatory 2FA), plus **break-glass support access** (ADR-017/022).
 4. **Tenant-owned payment accounts**, so the platform never holds tenant money. Server-verified, idempotent and reconciled per account (ADR-019/007).
 5. **Server-authoritative quiz engine** with per-attempt snapshots (ADR-013).
 6. **Media outside the API**: object storage with tenant prefixes, managed video, signed URLs (ADR-008/009).
@@ -50,8 +52,8 @@ There is **no existing system** (VERIFIED: an empty folder and an empty GitHub r
 
 ## 6. Decisions needed before implementation (Tier A, 08 §1)
 
-- Identity model across tenants (Q-TEN-1)
-- Isolation strategy and any dedicated-database requirement (Q-TEN-3)
+- ~~Identity model across tenants (Q-TEN-1)~~ CONFIRMED: global account + per-school memberships (D3)
+- ~~Isolation strategy (Q-TEN-3)~~ CONFIRMED: shared schema + forced RLS (D1); dedicated deployments only for contractual exceptions
 - Platform brand and domain (Q-TEN-6)
 - Money flow and payment aggregator (Q-TEN-4, Q-PAY-1)
 - Jurisdiction and data-protection roles (Q-LEG-1, Q-LEG-4)

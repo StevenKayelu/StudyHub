@@ -2,6 +2,8 @@
 
 **Purpose:** a self-contained brief from which ChatGPT writes the implementation prompts that direct Claude to build StudyHub. It condenses documents 01–08 and 10. Where more detail is needed, it names the section to attach (e.g. "05 §8").
 
+**Revision 4 (2026-10-11):** the client approved D1-D6 (see 08 rev. 4): shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + audited function inventory); one global account per person with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go at 3 ms p95.
+
 **Revision 3 (2026-10-11):**
 - Milestone 1 is now a **decision-free engineering foundation**; the tenancy kernel is M2; milestones run M0–M11.
 - Added tenant languages, domain settings, course and material settings, and provider-capability-limited payment settings.
@@ -14,7 +16,7 @@
 **Instructions to ChatGPT:**
 1. Write the implementation prompt **one milestone at a time** (§9). Attach this handoff's relevant sections and the referenced detail sections. Tell Claude to stop at that milestone's Definition of Done and report.
 2. Keep the labels: **CONFIRMED** (client stated), **ASSUMED** (provisional; keep configurable), **UNKNOWN** (don't hard-code; use a setting or a TODO with the question id).
-3. **Don't present any decision as approved by the client** unless 08 says so. As of revision 3, no Tier A decision is answered, and every ADR is *Proposed*. M1 relies only on Q-REPO-1. The M2 prompt must state the Q-TEN-3 answer (10 §3).
+3. **Don't present any decision as approved by the client** unless 08 says so. As of revision 4, **Q-TEN-3 and Q-TEN-1 are answered** (CONFIRMED) and **ADR-016/017 are Accepted**; every other ADR is *Proposed*. M1 is complete (commit `4c52d4a`). The M2 prompt must cite D1, D2 and D5.
 4. Include §12 ("Non-negotiable build rules") in **every** milestone prompt.
 
 ---
@@ -65,7 +67,7 @@ Authorization = **realm → tenant (from the host only) → role → ownership �
 - **Tenancy:**
   - BR-41 one tenant per record, no cross-tenant access.
   - **BR-42 tenant from the host only.**
-  - BR-43 tenant-scoped accounts (ASSUMED).
+  - BR-43 one global account per person + per-school memberships (CONFIRMED, D3); BR-65 to BR-71 sign-in, join, invitation, hand-off, revocation, privacy and wording rules.
   - BR-44 host-bound sessions.
   - BR-45/46 separate realms, no standing platform access.
   - BR-47 support-grant rules.
@@ -101,7 +103,7 @@ Authorization = **realm → tenant (from the host only) → role → ownership �
 | Language and runtime | TypeScript strict; Node.js 24 LTS |
 | Monorepo | pnpm workspaces + Turborepo: `apps/web`, `apps/api` (HTTP + worker), `packages/contracts`, `packages/ui`, `packages/config`, `infra/`, `docs/` |
 | API | NestJS 11 on Fastify; Zod contracts → validation + OpenAPI 3.1; problem+json |
-| Database | PostgreSQL 17+ (managed, PITR); Prisma + raw SQL migrations for RLS policies, partial uniques, CHECKs, triggers; DB roles `studyhub_migrator`, `studyhub_app` (NOBYPASSRLS), `studyhub_platform` (BYPASSRLS, console and system jobs only) |
+| Database | PostgreSQL 17+ (managed, PITR); Prisma + raw SQL migrations for RLS policies, partial uniques, CHECKs, triggers; DB roles `studyhub_migrator` (DDL), `studyhub_app` (NOBYPASSRLS, DML only), NOLOGIN `studyhub_rls_definer` (owns the SECURITY DEFINER inventory); **no RLS-bypassing login role** |
 | Tenancy kernel | Host → `resolve_tenant()` (SECURITY DEFINER) → AsyncLocalStorage context → Prisma extension `set_config('app.tenant_id', …, true)` per transaction → forced RLS |
 | Jobs | pg-boss + transactional outbox; every job payload carries `tenantId` |
 | Web | Next.js App Router + React 19; middleware rewrite to `/_t/[host]` (host-keyed caches); TanStack Query; RHF + Zod; no DB access |
@@ -122,7 +124,7 @@ Authorization = **realm → tenant (from the host only) → role → ownership �
   - Explicit `tx` for atomic cross-module work.
   - Outbox for async side effects.
   - Providers behind ports with fake adapters.
-  - **Only `console` and named system jobs may import the platform DB client.**
+  - **Cross-tenant access only through the SECURITY DEFINER inventory in 04 §17.4**; there is no privileged DB client in application code.
   - Every tenant-owned table has RLS (coverage check).
 - **Request flow:** Caddy overwrites `X-Forwarded-Host` → Next middleware rewrites by host → API trusts forwarded headers only from Caddy and web → tenant resolved → context → RLS. Unknown host → generic 404.
 - **Key flows:**
@@ -133,10 +135,10 @@ Authorization = **realm → tenant (from the host only) → role → ownership �
 
 ## 8. Data model and API (05 §3–§8)
 
-- **Global tables** (no RLS): `tenant`, `tenant_domain`, `plan`, `platform_user`, `platform_credential`, `platform_session`, `platform_audit_log`, `platform_setting`.
+- **Global tables** (no RLS): `tenant`, `tenant_domain`, `plan`, `platform_user`, `platform_credential`, `platform_session`, `platform_audit_log`, `platform_setting`. **Global identity tables with self/member RLS (rev. 4):** `user_account`, `credential`, `one_time_token`, `tenant_handoff`. **Tenant-owned identity:** `tenant_membership`, `membership_role`, `session`, `invitation`.
 - **Tenant-owned tables** (`tenant_id NOT NULL`, forced RLS, composite tenant FKs, tenant-leading indexes): every revision 1 entity, plus `tenant_branding` (+ versions), `tenant_setting`, `tenant_feature`, `invitation`, `payment_account` (with detected `capabilities`), `support_access_grant`, `tenant_usage_daily`, `tenant_export`, `domain_change_request`, `settlement_report`, `platform_statement` (rev. 3). Tenant-authored texts are stored per locale. `tenant_setting` keys are grouped as languages, learners and catalogue, instructors and review, course and material defaults, commerce (capability-limited) and legal (05 §8.2).
 - **Must-have constraints:**
-  - `unique(tenant_id, email)`; `unique(tenant_id, slug)` for courses, categories, subjects and instructors.
+  - `unique(email)` on the global `user_account`; `unique(tenant_id, user_id)` on `tenant_membership`; `unique(tenant_id, slug)` for courses, categories, subjects and instructors.
   - Active-enrolment partial unique; one in-progress attempt partial unique; one pending payment per order.
   - `unique(payment_account_id, provider_event_id)`; `unique(payment_account_id, provider_transaction_id)`.
   - Ledger arithmetic CHECK and immutability trigger.
@@ -159,7 +161,7 @@ Authorization = **realm → tenant (from the host only) → role → ownership �
 | **M1** | **Engineering foundation (decision-free):** monorepo, CI, API skeleton (config, logging, problem+json, health), Prisma pipeline with one global table, worker skeleton, contracts, Next skeleton, compose with Postgres, test harnesses | M0 (Q-REPO-1) | 1.5 |
 | M2 | **Tenancy kernel:** DB roles + allowlist, tenant tables, host resolution, tenant context, RLS + coverage check, tenant-owned audit and outbox, job envelope, Next host middleware, Caddy `*.localhost`, seed of two tenants, staging (if decided), RLS benchmark | M1 + Q-TEN-3 | 1.5 |
 | M3 | Copperline + **theme compiler**, per-tenant theme, manifest and icons, **i18n with tenant locales**, shells incl. console, system screens | M2 | 2 |
-| M4 | Tenant identity per tenant, platform realm auth, invitations, policy and authorization matrix, two audit logs | M2, M3 | 2 |
+| M4 | Global accounts + per-school memberships, sign-in on the school host, join school, invitations, school switching by hand-off, revocation; platform realm auth; policy and authorization matrix; two audit logs | M2, M3 | 2 |
 | M5 | Instructors, catalogue, authoring, uploads, video (+ webhook resolver), publishing; **course and material settings** | M4 | 2.5 |
 | M6 | Enrolment, player, progress, signed media | M5 | 1.5 |
 | M7 | Question bank, quizzes, attempts, grading, practice, analytics | M6 | 2.5 |
@@ -207,7 +209,7 @@ Total ≈24 effort-weeks (range 20–28, ASSUMED). M7 and M8 are interchangeable
 3. **No business logic in controllers or React components.** Prices, scores, permissions, transitions, fees, feature evaluation and contrast rules are computed in domain and application code (and the shared theme compiler).
 4. **Never trust the client** for access, payment state, quiz timing **or tenant identity**. The tenant comes only from the verified host.
 5. **Every tenant-owned table ships, in the same migration, with** `tenant_id`, forced RLS policy, composite tenant FKs and tenant-leading indexes. The RLS coverage check must pass.
-6. **Never use the platform (RLS-bypassing) DB client outside the exhaustive allowlist in 04 §17.4** (console, the named system jobs, CLI). Webhooks use the SECURITY DEFINER resolvers, never the privileged client. Never read tenant personal data in the console without an active support grant.
+6. **No application code may bypass RLS.** There is no RLS-bypassing login role; cross-tenant work goes only through the SECURITY DEFINER inventory in 04 §17.4 (each function reviewed, fixed `search_path`, minimal columns, CI-checked). Never read tenant personal data in the console without an active support grant.
 7. **Money is integers** in minor units with a currency.
 8. **Cross-module writes are one transaction**; side effects go through the outbox; job payloads carry `tenantId`.
 9. **Every endpoint is in the authorization matrix and the cross-tenant suite** before merge.
@@ -239,8 +241,8 @@ Total ≈24 effort-weeks (range 20–28, ASSUMED). M7 and M8 are interchangeable
 **Tier A (decide before the milestone named in 08 §1; recommendations are not approvals):**
 - Q-REPO-1 repository location [recommend `C:\dev\StudyHub`] — **the only input M1 needs**
 - Q-PAY-3 provider approval gate: no real provider until capabilities are validated (10 §11) and the client approves
-- Q-TEN-1 identity model [recommend tenant-scoped accounts]
-- Q-TEN-3 isolation [recommend shared schema + RLS; dedicated deployments for exceptions]
+- ~~Q-TEN-1 identity model~~ **CONFIRMED (D3):** global account + per-school memberships
+- ~~Q-TEN-3 isolation~~ **CONFIRMED (D1, D2, D5):** shared schema + forced RLS; no RLS-bypassing login role; 3 ms p95 go/no-go
 - Q-TEN-6 platform brand and domain
 - Q-TEN-4/Q-BIZ-1/Q-PAY-1 money flow and aggregator [recommend tenant-owned merchant accounts]
 - Q-LEG-1/Q-LEG-4 jurisdiction and data-protection roles [recommend platform = processor; counsel to confirm]

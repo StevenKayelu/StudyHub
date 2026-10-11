@@ -13,6 +13,8 @@ This document closes the planning phase. It records:
 
 **Nothing here is approved unless marked CONFIRMED.** No application code has been written, no credentials configured and nothing deployed.
 
+> **Status update (revision 4, 2026-10-11):** M1 is complete and committed locally (`4c52d4a`, not pushed). The client approved D1-D6 for M2 (shared schema + forced RLS, no RLS-bypassing login role, global accounts with per-school memberships, school-host sign-in with hand-off switching, 3 ms p95 go/no-go, these amendments). M2 implementation has **not** started and needs explicit approval. Staging remains pending until hosting provider, region, budget and domain are approved.
+
 ---
 
 ## 1. Final readiness review (revision 3)
@@ -141,10 +143,10 @@ Full register: 08. **Recommendations are not approvals.**
 | Decision | Recommended option | Blocks |
 |---|---|---|
 | **Q-REPO-1** Repository location | `C:\dev\StudyHub`, outside OneDrive | **M1** (the only input M1 needs) |
-| **Q-TEN-3** Isolation strategy | Shared schema + forced RLS; dedicated deployment for exceptions | **M2** |
+| **Q-TEN-3** Isolation strategy | **CONFIRMED (D1, D2, D5):** shared schema + forced RLS; no RLS-bypassing login role; 3 ms p95 go/no-go | **M2** (answered) |
 | Q-TEN-6 / Q-BRAND-1 Platform name and domain | Short domain with wildcard DNS | End of M2 (staging); local work unaffected |
 | Q-OPS-2 Hosting region and budget | Latency test SA vs EU; ≤US$150/month + video (estimate) | End of M2 (staging) |
-| Q-TEN-1 Identity model | Tenant-scoped accounts | M4 (identity); shapes M2 design |
+| Q-TEN-1 Identity model | **CONFIRMED (D3, D4):** global account + per-school memberships; school-host sign-in; hand-off switching | M4 (answered) |
 | Q-TEN-4 / Q-BIZ-1 / Q-PAY-1 / **Q-PAY-3** Money flow, provider shortlist, approval | Tenant-owned merchant accounts; validate 2–3 candidates (§11); approve one | M8 (start evaluation and KYC now) |
 | Q-LEG-1 / Q-LEG-4 Jurisdiction and data-protection roles | Platform = processor; data processing agreement per tenant; learners 16+ unless guardian consent (counsel) | M4 (consent texts); M11 (contracts); start now |
 
@@ -399,7 +401,7 @@ pnpm db:down
 | # | Risk | Prevention |
 |---|---|---|
 | RW-01 | Adding tenancy after features exist | Tenancy kernel is M2, before any feature |
-| RW-02 | Wrong identity model (Q-TEN-1) | Decide before M4; recommended tenant-scoped |
+| RW-02 | Wrong identity model (Q-TEN-1) | **Decided (D3): global accounts + memberships**; global identity tables protected by self/member RLS |
 | RW-03 | Prisma + RLS underperforms or misbehaves | M2 benchmark and go/no-go; Kysely fallback for the data layer |
 | RW-04 | Money flow changes to platform-collected | Decide in M0 with legal input; BR-63 keeps platform revenue as invoices |
 | RW-05 | Caches keyed by path only | Host rewrite + cache-isolation e2e in M2 |
@@ -414,7 +416,7 @@ pnpm db:down
 | RW-14 | **Building payments around one provider's assumptions** | Capability model + fake adapter covering all combinations; approval gate Q-PAY-3 |
 | RW-15 | **Languages retrofitted** after single-language texts are stored | Per-locale storage for tenant texts from the first tenant-text table (M3) |
 | RW-16 | **Commission semantics changed late** | Instructor vs platform commission separated now (BR-63) |
-| RW-17 | **Privileged DB access spreading** | Exhaustive allowlist enforced by dependency-cruiser from M2 |
+| RW-17 | **Privileged DB access spreading** | No RLS-bypassing login role (D2); SECURITY DEFINER inventory checked in CI from M2 |
 
 ---
 

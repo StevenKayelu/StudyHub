@@ -1,5 +1,7 @@
 # 06 — UI/UX Design Blueprint: "Copperline"
 
+> **Revision 4 (2026-10-11):** client approved tenancy decisions D1-D6: shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + function inventory); global accounts with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go at 3 ms p95. D7 (legal controller role) remains open.
+>
 > **Revision 3 (2026-10-11):** S-AD09 regrouped (course and material defaults, capability-limited payment settings, languages); new S-AD19 Domain, S-AD20 Payment reconciliation, S-AD21 Billing; learner language switcher; per-language texts in the branding editor; "Platform fee" renamed "Commission" in S-T07.
 >
 > **Revision 2 (2026-10-11): multi-tenancy and white-label.** Copperline is now the **default theme and the structural design system** that every tenant shares. Tenants change identity tokens (logo, accent, font preset, terminology), never layout or components. "Admin" in this document means the **tenant admin space**. The separate **platform console** is specified in §10, together with theming rules, tenant admin screens S-AD11–S-AD18 and console screens S-C01–S-C09.
@@ -258,6 +260,7 @@ A11y: the CTA label includes the price as text; outline sections are buttons wit
 **S-P05 Become a tutor** · Visitor/Learner · Explains how it works (apply → review → build → publish → get paid), the revenue share (from settings), CTA "Apply" (sign-in or verify gate).
 
 **S-A01 Sign in** · Email, password (show/hide), "Forgot password?", "Create account". Errors: generic "Email or password is incorrect"; lockout message with the time remaining. A11y: errors in the summary + focus.
+*Rev. 4:* one account works across schools, so the helper text says "Use your account email and password" (neutral, BR-71). A wrong password, an unknown email and "not a member of this school" all show the same message (BR-65). If the person has an account but no membership and the school allows open registration, after sign-in they see **Join *School*** (S-A06).
 **S-A02 Create account** · Name, email, password (strength meter + breached-password message), terms checkbox (links). After submit → **S-A03 Check your email** (address shown, "Resend" with cooldown countdown, "Change email").
 **S-A04 Verify result** · Success → continue to where the user was heading (stored `returnTo`); expired → resend.
 **S-A05 Forgot / Reset password** · Generic confirmation; reset form with the password rules; success → sign in.
@@ -318,6 +321,9 @@ The learner can leave: "You can close this page — we'll email you and unlock t
 **S-L12 Notifications** · List grouped by day; unread dot; mark all read; each item links to its object.
 
 **S-L13 Account** · Sections: Profile (name, avatar, phone) · Sign-in & security (email change, password, sessions list with "Sign out" per device, 2FA for admins) · Preferences (theme, data saver, email notifications) · Privacy (download data, delete account with consequences listed and 30-day grace). Space switcher at the top for multi-role users.
+*Rev. 4:* the page separates **Your account** (global: email, password, 2FA, "Sign out everywhere", delete account; changes apply to every school, which the page says) from **This school** (school-specific display name and student number, roles shown read-only, **Leave this school**).
+
+**S-A06 Join school** (rev. 4) · Shown after signing in with an existing account on a school where the person has no membership and registration is open: school name and logo, what joining means (the school sees your name and email and your activity there; it can't see your other schools), primary **Join *School***, secondary "Not now" (signs out of this school). Invite-only schools show "Ask the school for an invitation" instead.
 
 ### Studio space (tutor)
 
@@ -502,6 +508,8 @@ Fonts: ≤4 WOFF2 files, Latin subset, ≤120 KB total; preloaded only for UI re
 **S-AD21 Billing** (revision 3) · Owner · Monthly platform statements (period, subscription, sales, refunds, platform commission, total due, status), each with a detail view and PDF. Read-only, plus a "Questions about this statement?" contact link.
 
 **Learner language switcher** (revision 3) · In the account menu and footer, shown only when the tenant has more than one enabled language. Changes the UI language immediately and saves the preference (BR-61).
+
+**School switcher** (revision 4) · In the account menu, shown only when the person has more than one ACTIVE membership: lists their schools (logo, name, roles), current one marked. Choosing another school opens it already signed in through a one-time hand-off (BR-68); a short "Opening *School*…" state covers the redirect. If the hand-off fails (expired, membership changed) the target school shows its normal sign-in with an explanation. The switcher never appears in the platform console.
 
 ### 10.3 Platform console screens
 

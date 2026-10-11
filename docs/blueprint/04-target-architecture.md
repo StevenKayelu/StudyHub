@@ -1,5 +1,7 @@
 # 04 — Target Architecture Specification
 
+> **Revision 4 (2026-10-11): client-approved tenancy decisions D1-D6** (`docs/design/m2-tenancy-kernel.md` in the code repository). D1 shared schema + forced RLS (dedicated deployments as the exception path); D2 no RLS-bypassing login role (NOLOGIN `studyhub_rls_definer` owns an audited inventory of SECURITY DEFINER functions); D3 one global account per person with explicit per-school memberships and roles; D4 sign-in on the school host, school switching by one-time hand-off, neutral account wording; D5 Prisma + RLS go/no-go at 3 ms p95 overhead; D6 these amendments. D7 (legal controller role) remains open.
+>
 > **Revision 3 (2026-10-11):** §17 now has an exhaustive privileged-client allowlist, SECURITY DEFINER resolvers for webhooks, video-webhook routing, the payment capability model and provider approval gate, console session lifetimes, tenant languages, course and material settings, and single-tenant restore (§17.16).
 >
 > **Revision 2 (2026-10-11): multi-tenancy.** The platform must host many isolated tenants with their own branding, settings, content and features (03 §9). **§17 is the authoritative tenancy design.** The sections below were updated where tenancy changes them: drivers, same-origin note, module table, rendering, sessions. Where an older sentence assumes a single site, §17 governs.
@@ -120,7 +122,7 @@ studyhub/
 | Module | Owns (tables) | Responsibilities | Depends on (public interfaces only) |
 |---|---|---|---|
 | `platform` (shared kernel) | pg-boss schema, `outbox` | config, DB client, transactions, clock, ids, logging, storage port, mailer port, event bus, rate limiting | — |
-| `identity` | `user`, `credential`, `session`, `one_time_token`, `role_assignment` | registration, verification, sign-in, sessions, password reset, roles, policy evaluation helpers | platform |
+| `identity` | global `user_account`, `credential`, `one_time_token`, `tenant_handoff`; tenant-owned `tenant_membership`, `membership_role`, `session`, `invitation` | registration, verification, sign-in, sessions, password reset, memberships and roles, school switching, policy evaluation helpers | platform, tenancy |
 | `profiles` | `tutor_profile`, `payout_method`, `notification_preference` | account settings, tutor application, public tutor profile | identity, media |
 | `catalog` | `category`, `subject`, `course`, `section`, `lesson`, `lesson_attachment`, `course_submission` | authoring, outline, publish workflow, public catalogue and search | identity, media, assessment (validation), settings |
 | `media` | `asset` (an upload slot is an asset in `PENDING_UPLOAD`) | upload slots, scanning, signed URLs, video provider integration | platform |
@@ -133,7 +135,7 @@ studyhub/
 | `audit` | `audit_log` (tenant), `platform_audit_log` | append-only audit writes, viewers | platform |
 | `settings` | `platform_setting` (global), `tenant_setting` | typed global and per-tenant settings with audit | audit, tenancy |
 | `tenancy` (revision 2) | `tenant`, `tenant_domain`, `tenant_branding`, `tenant_feature`, `plan`, `tenant_usage_daily`, `invitation` | tenant resolution from host, tenant context, lifecycle, branding and theme compilation, feature entitlement evaluation, limits and quotas, usage metering | platform, media, audit |
-| `console` (revision 2) | `platform_user`, `platform_credential`, `platform_session`, `support_access_grant` | platform realm auth, tenant management, plans, staff, support access, global settings; one of the three entry points on the privileged-client allowlist (§17.4) | tenancy, audit, settings |
+| `console` (revision 2) | `platform_user`, `platform_credential`, `platform_session`, `support_access_grant` | platform realm auth, tenant management, plans, staff, support access, global settings; reads only global tables and aggregate definer functions, never tenant rows outside a support session (§17.4) | tenancy, audit, settings |
 | `payments-accounts` (part of `commerce`) | `payment_account` | per-tenant provider credentials (encrypted), connection tests, webhook secret resolution | commerce, tenancy |
 
 ### 5.2 Layering inside a module
@@ -407,17 +409,16 @@ sequenceDiagram
 - **Roles:**
   - `studyhub_migrator` owns the schema and runs migrations only.
   - `studyhub_app` has `NOBYPASSRLS` and is used by all tenant-realm code.
-  - `studyhub_platform` has `BYPASSRLS`. It may be imported **only** by the closed allowlist below; a dependency-cruiser rule forbids every other import, and every use is logged with the entry-point name.
-- **Privileged-client allowlist (revision 3, exhaustive):**
-  1. `modules/console/**` (platform realm; reads tenant **metadata** only, plus support-grant flows).
-  2. `modules/platform/jobs/system/**`, the **named system jobs**: `outbox.claim` (claims due outbox rows, then dispatches each in its tenant context), `payments.reconcile.sweep`, `orders.expire.sweep`, `attempts.deadline.sweep`, `enrollments.expire.sweep`, `ledger.release.sweep`, `ledger.reconcile.check`, `usage.meter.daily`, `tenants.purge` (offboarding), `accounts.purge.sweep`, `housekeeping.cleanup`. Each sweep **only selects ids and `tenant_id`**, then processes every item in a separate tenant-context transaction under `studyhub_app`.
-  3. `cli/**` (seed and tenant provisioning before the console exists; disabled in production images).
-  Adding an entry needs an ADR amendment and review.
-- **Webhooks don't use the privileged client.** They call narrow `SECURITY DEFINER` functions executable by `studyhub_app` that return only routing data, then continue under RLS:
-  - `resolve_payment_account(account_id) → (tenant_id, provider, status)`
-  - `resolve_video_asset(provider, provider_video_id) → (tenant_id, asset_id)`
-  - `resolve_tenant(host) → (tenant_id, status, primary_host)`
-  Secrets and all other data are then read in that tenant's context.
+  - `studyhub_rls_definer` (revision 4, D2) is **NOLOGIN** with `BYPASSRLS`. It owns only the SECURITY DEFINER functions in the inventory below. Nobody can log in as it, and `studyhub_app` is not a member of it. **No login role that can bypass RLS exists at runtime** (this replaces revision 3's `studyhub_platform` login role).
+  - `studyhub_app` owns no relations, has DML only (no TRUNCATE or DDL), and is a member of no other role. CI asserts this posture.
+- **SECURITY DEFINER inventory (revision 4, exhaustive):** every function is owned by `studyhub_rls_definer`, sets `search_path = pg_catalog, public`, returns minimal columns, has EXECUTE revoked from PUBLIC and granted only to `studyhub_app`. Cross-tenant work happens **only** through these functions:
+  - Routing: `resolve_tenant(host) → (tenant_id, status, primary_host)`; `resolve_payment_account(account_id) → (tenant_id, provider, status)`; `resolve_video_asset(provider, provider_video_id) → (tenant_id, asset_id)`.
+  - Work discovery for the **named system jobs** (`outbox.claim`, `payments.reconcile.sweep`, `orders.expire.sweep`, `attempts.deadline.sweep`, `enrollments.expire.sweep`, `ledger.release.sweep`, `ledger.reconcile.check`, `usage.meter.daily`, `tenants.purge`, `accounts.purge.sweep`, `housekeeping.cleanup`): each returns only `(id, tenant_id)`, and every item is then processed in its own tenant-context transaction as `studyhub_app`.
+  - Identity (M4): `auth_lookup(email)`, `my_memberships()`, `revoke_user_sessions_everywhere()`, `exchange_handoff(token_hash)`; each is limited to the caller's own `app.user_id` or the current tenant.
+  - Console (M9): usage and health aggregates without personal data, and support-grant metadata (who, school, scope, status, times).
+  Adding a function needs an ADR amendment, review, and an update to the CI inventory test.
+- **Webhooks** call the routing functions above, then continue under RLS; secrets and all other data are read in that tenant's context.
+- **Views** must be created `WITH (security_invoker = true)`; **foreign-key and unique checks bypass RLS in PostgreSQL**, which is why composite tenant FKs and tenant-scoped unique keys are mandatory (CI-checked).
 - **Policy pattern** (generated per table in migrations):
   ```sql
   ALTER TABLE course ENABLE ROW LEVEL SECURITY;
@@ -428,19 +429,27 @@ sequenceDiagram
   ```
 - **Composite FK pattern:** `UNIQUE (tenant_id, id)` on parents; children reference `(tenant_id, parent_id)`. Prisma supports composite relations.
 - **CI guard:** a test queries `information_schema` and `pg_policies`. It fails if any table with a `tenant_id` column lacks enabled and forced RLS and a `tenant_isolation` policy, or if any table outside the documented global allowlist lacks `tenant_id`.
-- **Global tables (no RLS):** `tenant`, `tenant_domain` (read through the platform client or the resolver's read-only function), `plan`, `platform_*`, `platform_setting`, pg-boss tables. The resolver uses a `SECURITY DEFINER` SQL function `resolve_tenant(host)` that returns only `(tenant_id, status)`, so the app role never reads the full domain table.
+- **Global tables:** `tenant`, `tenant_domain` (read through `resolve_tenant` only), `plan`, `platform_*`, `platform_setting`, pg-boss tables, `_prisma_migrations` (no RLS); and the **global identity tables** `user_account`, `credential`, `one_time_token`, `tenant_handoff`, which **do** have RLS with special policies (§17.5).
 
 ### 17.5 Identity realms (ADR-017)
 
 | Realm | Tables | Host | Cookie | Auth |
 |---|---|---|---|---|
-| Tenant | `user`, `credential`, `session`, `one_time_token`, `role_assignment` (all with `tenant_id`) | tenant hosts | `__Host-sh_session` | Email + password (per tenant); TOTP required for tenant owners and admins (SHOULD → MUST before the first external tenant) |
+| Tenant | global `user_account`, `credential`, `one_time_token`, `tenant_handoff`; tenant-owned `tenant_membership`, `membership_role`, `session`, `invitation` | tenant hosts | `__Host-sh_session` (host-only, so one per school) | One global email + password per person, used on any school host where they hold an ACTIVE membership; TOTP required for tenant owners and admins (SHOULD → MUST before the first external tenant) |
 | Platform | `platform_user`, `platform_credential`, `platform_session` | `console.` | `__Host-sh_console` | Email + password + **mandatory TOTP**; optional IP allowlist; sessions idle 30 min, absolute 12 h; re-authentication (TOTP) required for lifecycle, plan, staff and emergency-access actions |
 
-Tenant-scoped accounts (BR-43) are recommended over a global identity with memberships. They give stricter isolation, simpler data ownership, export and deletion per tenant, and per-tenant branding of every auth email. The trade-off is that a learner in two schools has two passwords (Q-TEN-1). If global identity is chosen instead, the change is **schema-shaping**, so it must be decided before M2 (tenancy kernel), and at the latest before M4 (identity).
+**Account model (CONFIRMED, D3):** one global account per person, explicit per-school memberships with per-school roles (BR-43, BR-65 to BR-71).
+
+- **RLS on global identity tables:** `user_account` rows are visible only as yourself (`id = app.user_id`) or as a member of the current school (an `EXISTS` on `tenant_membership`, itself under RLS); `credential`, `one_time_token` and `tenant_handoff` rows are visible only as yourself. Sign-in reads credentials only through `auth_lookup(email)`. A school admin therefore can't list platform users or see anyone's other schools.
+- **Sessions** are tenant-owned rows (`tenant_id`, `user_id`, `membership_id`) under RLS, so a session from school A is invisible, and therefore invalid, on school B's host.
+- **Sign-in** on a school host: `auth_lookup` + password check + ACTIVE membership in that school; all failures are generic (BR-65).
+- **Switching** (BR-68): `my_memberships()` lists the caller's own schools; choosing one creates a hashed, 60-second, single-use `tenant_handoff` bound to the target school; the browser POSTs it to the target host, which calls `exchange_handoff()` and re-checks the membership before creating a session.
+- **Revocation and global changes** (BR-69): revoking a membership deletes that school's sessions for the user in the same transaction; a password change or "sign out everywhere" calls `revoke_user_sessions_everywhere()`.
+- **Account deletion** runs as the named `accounts.purge.sweep` job: per-school anonymisation in tenant-context transactions, financial records retained (BR-27).
+- **Legal note (OPEN, D7 / Q-LEG-4):** with global identity the platform is likely a controller of the account record; schools remain controllers of their learning data.
 
 ### 17.6 Authorization
-`can(ctx, action, resource)` where `ctx = {realm, tenantId, actorId, roles, supportGrant?}`. A resource whose `tenant_id ≠ ctx.tenantId` is always **404**. Tenant roles: `TENANT_OWNER`, `TENANT_ADMIN`, `INSTRUCTOR`, `LEARNER`. Support sessions carry `SUPPORT_READ_ONLY` or `SUPPORT_READ_WRITE` with hard exclusions (BR-47). The authorization matrix gains the dimensions *other tenant* and *platform realm*.
+`can(ctx, action, resource)` where `ctx = {realm, tenantId, actorId, membershipId, roles, supportGrant?}`; `roles` come from the actor's membership in the current school only. A resource whose `tenant_id ≠ ctx.tenantId` is always **404**. Tenant roles: `TENANT_OWNER`, `TENANT_ADMIN`, `INSTRUCTOR`, `LEARNER`. Support sessions carry `SUPPORT_READ_ONLY` or `SUPPORT_READ_WRITE` with hard exclusions (BR-47). The authorization matrix gains the dimensions *other tenant* and *platform realm*.
 
 ### 17.7 Runtime theming (white-label)
 - `tenant_branding` (versioned) → **theme compiler** in `packages/ui` (shared by API and web):
@@ -475,14 +484,14 @@ Tenant-scoped accounts (BR-43) are recommended over a global identity with membe
 ### 17.10 Payments per tenant (ADR-019)
 - **Payment account:** `payment_account` rows per tenant hold provider credentials and the webhook secret using **envelope encryption**. A key-encryption key comes from the secret store (KMS later); each record has its own data key (AES-256-GCM). The record stores only a masked hint, and credentials are never returned by the API.
 - **Adapter resolution:** `PaymentProvider` adapters are instantiated per account, not globally.
-- **Webhooks:** `/api/v1/webhooks/payments/{provider}/{paymentAccountId}` on a shared webhook host. The handler calls `resolve_payment_account(id)` (SECURITY DEFINER, routing data only, §17.4), enters that tenant's context, decrypts *that* account's webhook secret under RLS, verifies the signature over the raw body, and processes **inside that tenant context**. It never uses the privileged client.
+- **Webhooks:** `/api/v1/webhooks/payments/{provider}/{paymentAccountId}` on a shared webhook host. The handler calls `resolve_payment_account(id)` (SECURITY DEFINER, routing data only, §17.4), enters that tenant's context, decrypts *that* account's webhook secret under RLS, verifies the signature over the raw body, and processes **inside that tenant context**. No RLS-bypassing database login is involved.
 - **Capability model (revision 3):** each adapter declares `capabilities` (methods and networks, card, refund API with full or partial support, status query, transaction-list or settlement API, disbursement API, webhook signing scheme, currencies). The connection test (F45) records which capabilities the account actually has (`payment_account.capabilities`). Tenant payment settings and the UI offer only those (BR-62). Missing optional capabilities have defined fallbacks: no refund API → manual recorded refunds; no list API → CSV settlement import; no disbursement API → manual payouts.
 - **Provider selection gate (revision 3, Q-PAY-3):** until a provider is approved by the client after validating its *current* capabilities (10 §11), only the **fake adapter** exists in code. No real credentials appear in code, seeds, CI or staging.
 - **Failure isolation:** reconciliation iterates per account. Circuit breakers are keyed by account, so one tenant's bad credentials don't block others.
 - **Marketplace tenant:** if the platform runs its own marketplace (Q-TEN-2), that tenant's account is the platform company's, and revision 1's ledger and payouts work unchanged inside it.
 
 ### 17.11 Jobs, caching, rate limits, email, observability
-- **Jobs:** every job payload type requires `tenantId`. The worker wraps the handler in that tenant's context. System-wide jobs (reconcile, expiry sweeps, usage metering) list work with the platform client, then process each item in its tenant context. Fairness: per-tenant concurrency caps on heavy queues (exports, imports, media) so one tenant can't starve others (NFR-ISO-2).
+- **Jobs:** every job payload type requires `tenantId`. The worker wraps the handler in that tenant's context. System-wide jobs (reconcile, expiry sweeps, usage metering) discover work through the definer functions in §17.4 (returning only `(id, tenant_id)`), then process each item in its tenant context. Fairness: per-tenant concurrency caps on heavy queues (exports, imports, media) so one tenant can't starve others (NFR-ISO-2).
 - **Caching:** ISR keyed by host (§6); in-process caches keyed `t:{tenantId}:…`; the CDN key includes the host by default.
 - **Rate limits:** buckets per IP, per account **and per tenant**.
 - **Email:** sender `"{Tenant name}" <no-reply@mail.<platform-domain>>`, reply-to the tenant's support email; templates take tenant branding; a bounce or complaint rate per tenant is monitored (a misbehaving tenant can be throttled).
@@ -501,6 +510,10 @@ Tenant-scoped accounts (BR-43) are recommended over a global identity with membe
 3. **API cross-tenant suite:** two seeded tenants with mirrored data (same slugs, same emails). For **every** endpoint, call it as each tenant-B role with tenant-A ids, slugs and hosts → expect 404 or empty, never A's data. Responses are scanned for tenant-A marker strings.
 4. **Cache isolation e2e:** render the same path on two tenant hosts and check that brand, content and cache headers never mix.
 5. **Console data-exposure test:** console response schemas contain no personal fields outside support-grant endpoints.
+6. **Role and function posture (revision 4):** `studyhub_app` is NOBYPASSRLS, owns nothing, belongs to no role and has no TRUNCATE or DDL; no LOGIN role other than the superuser has BYPASSRLS; every SECURITY DEFINER function is on the §17.4 inventory with a fixed `search_path`; every view is `security_invoker`.
+7. **Pool hygiene and statistics:** after a transaction for school A, the same pooled connection with no context sees 0 rows; `pg_stats` returns nothing for tenant tables (PostgreSQL 17 hides RLS tables, VERIFIED).
+8. **Identity isolation (M4):** a school admin can't list global users or see a member's other schools; a session from school A is invalid on school B; hand-off tokens are single-use, expire after 60 s and work only for the target school.
+Full test list: `docs/design/m2-tenancy-kernel.md` §6 in the code repository (T-ISO-01 to T-ISO-20, T-PERF-01).
 
 ### 17.14 Dedicated deployments (option, not launch scope)
 A tenant that contractually requires its own database or region gets a **dedicated deployment**: the same images and code running as a separate stack with one tenant. It needs no special code paths, just configuration (`DEPLOYMENT_MODE=dedicated`). This avoids building per-tenant database routing (Q-TEN-3).
