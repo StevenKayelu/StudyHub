@@ -2,7 +2,7 @@
 
 **Purpose:** a self-contained brief from which ChatGPT writes the implementation prompts that direct Claude to build StudyHub. It condenses documents 01–08 and 10. Where more detail is needed, it names the section to attach (e.g. "05 §8").
 
-**Revision 4 (2026-10-11):** the client approved D1-D6 (see 08 rev. 4): shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + audited function inventory); one global account per person with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go at 3 ms p95.
+**Revision 4 (2026-10-11):** the client approved D1-D6 (see 08 rev. 4): shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + audited function inventory); one global account per person with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go (D5 revised by the client after measurement: exactly one extra statement per transaction and <0.5 ms database time).
 
 **Revision 3 (2026-10-11):**
 - Milestone 1 is now a **decision-free engineering foundation**; the tenancy kernel is M2; milestones run M0–M11.
@@ -242,7 +242,7 @@ Total ≈24 effort-weeks (range 20–28, ASSUMED). M7 and M8 are interchangeable
 - Q-REPO-1 repository location [recommend `C:\dev\StudyHub`] — **the only input M1 needs**
 - Q-PAY-3 provider approval gate: no real provider until capabilities are validated (10 §11) and the client approves
 - ~~Q-TEN-1 identity model~~ **CONFIRMED (D3):** global account + per-school memberships
-- ~~Q-TEN-3 isolation~~ **CONFIRMED (D1, D2, D5):** shared schema + forced RLS; no RLS-bypassing login role; 3 ms p95 go/no-go
+- ~~Q-TEN-3 isolation~~ **CONFIRMED (D1, D2, D5):** shared schema + forced RLS; no RLS-bypassing login role; go/no-go: D5 revised by the client after measurement: exactly one extra statement per transaction and <0.5 ms database time
 - Q-TEN-6 platform brand and domain
 - Q-TEN-4/Q-BIZ-1/Q-PAY-1 money flow and aggregator [recommend tenant-owned merchant accounts]
 - Q-LEG-1/Q-LEG-4 jurisdiction and data-protection roles [recommend platform = processor; counsel to confirm]

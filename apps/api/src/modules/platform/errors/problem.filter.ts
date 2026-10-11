@@ -11,12 +11,41 @@ import type { Logger } from 'pino';
 
 import { AppError } from './app-error';
 
-interface ResolvedProblem {
-  code: ErrorCode;
-  status: number;
+export interface ProblemOptions {
+  status?: number;
   detail?: string;
   errors?: Problem['errors'];
   extensions?: Record<string, unknown>;
+}
+
+/** Builds an RFC 9457 body. Extension members can never overwrite the standard members. */
+export function buildProblem(code: ErrorCode, requestId: string, options: ProblemOptions = {}): Problem {
+  return {
+    ...options.extensions,
+    type: problemTypeFor(code),
+    title: ERROR_DEFINITIONS[code].title,
+    status: options.status ?? ERROR_DEFINITIONS[code].status,
+    code,
+    requestId,
+    ...(options.detail !== undefined && { detail: options.detail }),
+    ...(options.errors !== undefined && { errors: options.errors }),
+  };
+}
+
+/** Sends a problem response directly (used by hooks that run before Nest's exception filters). */
+export function sendProblem(
+  reply: FastifyReply,
+  requestId: string,
+  code: ErrorCode,
+  options: ProblemOptions = {},
+): FastifyReply {
+  const body = buildProblem(code, requestId, options);
+  return reply.status(body.status).header('Content-Type', PROBLEM_CONTENT_TYPE).send(body);
+}
+
+interface ResolvedProblem extends ProblemOptions {
+  code: ErrorCode;
+  status: number;
 }
 
 function statusOf(exception: unknown): number | undefined {
@@ -51,7 +80,7 @@ function resolve(exception: unknown): ResolvedProblem {
 
 /**
  * Renders every error as RFC 9457 problem+json with a stable `code` and the `requestId`.
- * Unexpected errors are logged with their stack; the client gets a generic message only.
+ * Server-side failures (5xx) are logged with their stack; the client gets a generic message only.
  */
 @Catch()
 export class ProblemFilter implements ExceptionFilter {
@@ -61,25 +90,14 @@ export class ProblemFilter implements ExceptionFilter {
     const http = host.switchToHttp();
     const request = http.getRequest<FastifyRequest>();
     const reply = http.getResponse<FastifyReply>();
-    const problem = resolve(exception);
+    const { code, ...options } = resolve(exception);
 
-    if (problem.status >= 500 && problem.code === 'INTERNAL') {
-      this.logger.error({ err: exception, requestId: request.id }, 'Unhandled error');
+    if (options.status >= 500 && code !== 'SERVICE_UNAVAILABLE') {
+      this.logger.error({ err: exception, requestId: request.id, code }, 'Unhandled error');
     } else {
-      this.logger.debug({ requestId: request.id, code: problem.code }, 'Request failed');
+      this.logger.debug({ requestId: request.id, code }, 'Request failed');
     }
 
-    const body: Problem = {
-      ...problem.extensions,
-      type: problemTypeFor(problem.code),
-      title: ERROR_DEFINITIONS[problem.code].title,
-      status: problem.status,
-      code: problem.code,
-      requestId: request.id,
-      ...(problem.detail !== undefined && { detail: problem.detail }),
-      ...(problem.errors !== undefined && { errors: problem.errors }),
-    };
-
-    void reply.status(problem.status).header('Content-Type', PROBLEM_CONTENT_TYPE).send(body);
+    void sendProblem(reply, request.id, code, options);
   }
 }

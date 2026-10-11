@@ -2,13 +2,12 @@
 
 StudyHub is a multi-tenant, white-label learning platform for schools, colleges, tutors and education businesses. The full product, architecture and design specification is in [`docs/blueprint/`](docs/blueprint/README.md).
 
-**Current state: Milestone 1, the engineering foundation.**
+**Current state: Milestone 2, the tenancy kernel** (on top of the M1 engineering foundation).
 
-- A TypeScript monorepo with an API, a background worker and a web skeleton.
-- Shared contracts and a PostgreSQL migration pipeline.
-- Automated quality gates.
+- A TypeScript monorepo with an API, a background worker and a web app; shared contracts; a PostgreSQL migration pipeline; automated quality gates (M1).
+- **Multi-school isolation enforced by the database** (M2): every school-owned table has forced row-level security; the school is resolved only from the request host; background jobs and the outbox run in their school's context; no database login can bypass RLS. Design: [`docs/design/m2-tenancy-kernel.md`](docs/design/m2-tenancy-kernel.md), ADR-0016 to ADR-0018.
 
-There is no tenancy, authentication or product feature yet; those arrive in later milestones (see `docs/blueprint/07-implementation-roadmap.md`).
+There are no user accounts, sign-in or product features yet; those arrive in later milestones (see `docs/blueprint/07-implementation-roadmap.md`).
 
 ## Repository layout
 
@@ -56,8 +55,13 @@ Copy-Item .env.example .env
 pnpm db:up
 pnpm build
 pnpm db:migrate
+pnpm db:seed
 pnpm --filter @studyhub/web exec playwright install --only-shell chromium
 ```
+
+- **Upgrading a database volume created before M2:** run `pnpm db:provision-roles` once (after `pnpm db:up`, before `pnpm db:migrate`). PostgreSQL only runs the role scripts when a volume is first created.
+- `pnpm db:seed` creates two demo schools: **Acme Academy** (`acme.localhost`) and **Beta College** (`beta.localhost`). It is idempotent.
+- Create another school: `pnpm tenant:create --slug demo --name "Demo School" --status ACTIVE` (host defaults to `demo.localhost`).
 
 - `.env` holds **local-only placeholder values**. It is git-ignored; never commit it.
 - `pnpm db:migrate` runs the compiled migration CLI, so build first.
@@ -69,12 +73,14 @@ pnpm --filter @studyhub/web exec playwright install --only-shell chromium
 pnpm dev
 ```
 
-| Service                  | URL                                          |
-| ------------------------ | -------------------------------------------- |
-| Web (status page)        | http://localhost:3000                        |
-| API liveness             | http://127.0.0.1:4000/healthz                |
-| API readiness (database) | http://127.0.0.1:4000/readyz                 |
-| Worker                   | runs alongside the API; logs a heartbeat job |
+| Service                  | URL                                                              |
+| ------------------------ | ---------------------------------------------------------------- |
+| Web (status page)        | http://localhost:3000                                            |
+| API liveness             | http://127.0.0.1:4000/healthz                                    |
+| API readiness (database) | http://127.0.0.1:4000/readyz                                     |
+| Worker                   | runs alongside the API; heartbeat jobs and the outbox dispatcher |
+| School site (demo)       | http://acme.localhost:3000 and http://beta.localhost:3000        |
+| School bootstrap API     | `GET /api/v1/tenant`, resolved from the host                     |
 
 ## Verify
 
@@ -82,7 +88,7 @@ pnpm dev
 pnpm verify
 ```
 
-`pnpm verify` runs every gate in order: lint, typecheck, boundaries, unit tests, integration tests, build, e2e, OpenAPI, secret scan. The database must be up and migrated for the e2e step. Individual gates:
+`pnpm verify` runs every gate in order: lint, typecheck, boundaries, unit tests, integration tests (including the tenant-isolation suite), build, migrate, seed, e2e, OpenAPI, secret scan. The database must be up (`pnpm db:up`). Individual gates:
 
 | Command             | What it checks                                                                |
 | ------------------- | ----------------------------------------------------------------------------- |

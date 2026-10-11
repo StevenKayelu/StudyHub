@@ -32,6 +32,12 @@ export function studyhubEslintConfig() {
         eqeqeq: ['error', 'always'],
         '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
         '@typescript-eslint/no-explicit-any': 'error',
+        // String-built SQL bypasses parameterisation (injection) and is never needed: use tagged $queryRaw.
+        'no-restricted-properties': [
+          'error',
+          { property: '$queryRawUnsafe', message: 'Use the tagged $queryRaw template (parameterised).' },
+          { property: '$executeRawUnsafe', message: 'Use the tagged $executeRaw template (parameterised).' },
+        ],
       },
     },
     {

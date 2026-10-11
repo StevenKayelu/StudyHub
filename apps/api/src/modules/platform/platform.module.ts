@@ -4,6 +4,7 @@ import type { Logger } from 'pino';
 import { API_ENV, ConfigService } from './config/config.service';
 import type { ApiEnv } from './config/env.schema';
 import { PrismaService } from './db/prisma.service';
+import { TenantDb } from './db/tenant-db';
 import { HealthController } from './health/health.controller';
 import { APP_LOGGER } from './logging/logger';
 
@@ -25,8 +26,9 @@ export class PlatformModule {
         { provide: APP_LOGGER, useValue: options.logger },
         ConfigService,
         PrismaService,
+        TenantDb,
       ],
-      exports: [ConfigService, PrismaService, APP_LOGGER],
+      exports: [ConfigService, PrismaService, TenantDb, APP_LOGGER],
     };
   }
 }

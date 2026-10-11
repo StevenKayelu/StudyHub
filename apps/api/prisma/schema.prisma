@@ -1,5 +1,6 @@
-// StudyHub database schema (blueprint 05). M1 contains a single global table to prove the
-// migration pipeline. Tenant-owned tables (with tenant_id and row-level security) start in M2.
+// StudyHub database schema (blueprint 05). Migrations are hand-reviewed SQL in prisma/migrations;
+// this schema must mirror them. Row-level security policies, CHECK constraints and SECURITY DEFINER
+// functions live only in the SQL migrations (Prisma cannot express them).
 
 generator client {
   provider     = "prisma-client"
@@ -18,4 +19,109 @@ model PlatformSetting {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("platform_setting")
+}
+
+enum TenantKind {
+  SCHOOL
+  COLLEGE
+  UNIVERSITY
+  TUTORING_BUSINESS
+  INDEPENDENT_TUTOR
+  MARKETPLACE
+  OTHER
+}
+
+enum TenantStatus {
+  PROVISIONING
+  ACTIVE
+  SUSPENDED
+  OFFBOARDING
+  DELETED
+}
+
+enum DomainType {
+  SUBDOMAIN
+  CUSTOM
+}
+
+enum DomainStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  FAILED
+  REDIRECT
+}
+
+/// A school (tenant). RLS: visible only inside its own tenant context (policy tenant_self).
+model Tenant {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String       @unique
+  name      String
+  kind      TenantKind
+  status    TenantStatus @default(PROVISIONING)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime     @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version   Int          @default(1)
+
+  domains   TenantDomain[]
+  auditLogs AuditLog[]
+  outbox    Outbox[]
+
+  @@map("tenant")
+}
+
+/// Hosts that resolve to a school. Runtime code never reads this table; it calls resolve_tenant().
+model TenantDomain {
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String       @map("tenant_id") @db.Uuid
+  hostname   String       @unique
+  type       DomainType   @default(SUBDOMAIN)
+  status     DomainStatus @default(ACTIVE)
+  isPrimary  Boolean      @default(false) @map("is_primary")
+  verifiedAt DateTime?    @map("verified_at") @db.Timestamptz(3)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status], map: "tenant_domain_tenant_id_idx")
+  @@map("tenant_domain")
+}
+
+/// Tenant audit trail (append-only for the runtime role). RLS: tenant_isolation.
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  tenantId   String   @map("tenant_id") @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  before     Json?
+  after      Json?
+  requestId  String?  @map("request_id")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt(sort: Desc)], map: "audit_log_tenant_created_idx")
+  @@index([tenantId, entityType, entityId], map: "audit_log_tenant_entity_idx")
+  @@map("audit_log")
+}
+
+/// Transactional outbox. RLS: tenant_isolation. Claimed across tenants only via claim_due_outbox().
+model Outbox {
+  id           BigInt    @id @default(autoincrement())
+  tenantId     String    @map("tenant_id") @db.Uuid
+  topic        String
+  payload      Json      @default("{}")
+  requestId    String?   @map("request_id")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  availableAt  DateTime  @default(now()) @map("available_at") @db.Timestamptz(3)
+  claimedUntil DateTime? @map("claimed_until") @db.Timestamptz(3)
+  dispatchedAt DateTime? @map("dispatched_at") @db.Timestamptz(3)
+  attempts     Int       @default(0)
+  lastError    String?   @map("last_error")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt], map: "outbox_tenant_created_idx")
+  @@map("outbox")
 }

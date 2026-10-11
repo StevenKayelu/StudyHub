@@ -1,6 +1,6 @@
 # 06 — UI/UX Design Blueprint: "Copperline"
 
-> **Revision 4 (2026-10-11):** client approved tenancy decisions D1-D6: shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + function inventory); global accounts with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go at 3 ms p95. D7 (legal controller role) remains open.
+> **Revision 4 (2026-10-11):** client approved tenancy decisions D1-D6: shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + function inventory); global accounts with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go (D5 revised by the client after measurement: exactly one extra statement per transaction and <0.5 ms database time). D7 (legal controller role) remains open.
 >
 > **Revision 3 (2026-10-11):** S-AD09 regrouped (course and material defaults, capability-limited payment settings, languages); new S-AD19 Domain, S-AD20 Payment reconciliation, S-AD21 Billing; learner language switcher; per-language texts in the branding editor; "Platform fee" renamed "Commission" in S-T07.
 >

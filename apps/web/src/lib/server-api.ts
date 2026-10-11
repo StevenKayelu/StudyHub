@@ -1,4 +1,9 @@
-import { problemSchema, readyzResponseSchema } from '@studyhub/contracts';
+import {
+  problemSchema,
+  readyzResponseSchema,
+  type TenantBootstrap,
+  tenantBootstrapSchema,
+} from '@studyhub/contracts';
 
 export interface SystemStatus {
   api: 'ok' | 'unreachable';
@@ -42,4 +47,28 @@ export async function getSystemStatus(): Promise<SystemStatus> {
     return { api: 'ok', database: 'unavailable', version: null, requestId };
   }
   return { api: 'ok', database: 'unknown', version: null, requestId };
+}
+
+const SCHOOL_HOST = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+/**
+ * Server-side only: the school for a host (validated), asked from the API with that host in
+ * X-Forwarded-Host. The host comes from the proxy rewrite, never from user-controlled input
+ * (direct requests to /_tenant/* are rejected in src/proxy.ts). Returns null for unknown hosts.
+ */
+export async function getTenantBootstrap(host: string): Promise<TenantBootstrap | null> {
+  if (!SCHOOL_HOST.test(host)) return null;
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl()}/api/v1/tenant`, {
+      cache: 'no-store',
+      headers: { accept: 'application/json', 'x-forwarded-host': host },
+      signal: AbortSignal.timeout(READINESS_FETCH_TIMEOUT_MS),
+    });
+  } catch {
+    throw new Error('The API is unreachable.');
+  }
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`The API returned ${response.status} for the school bootstrap.`);
+  return tenantBootstrapSchema.parse(await response.json());
 }

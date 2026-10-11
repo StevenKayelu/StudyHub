@@ -33,11 +33,23 @@ describe('database migrations and roles (PostgreSQL 17)', () => {
     await database?.stop();
   });
 
-  it('applies the initial migration to an empty database', async () => {
+  it('applies every migration, in order, to an empty database', async () => {
     const { rows } = await migrator.query<{ migration_name: string; finished: boolean }>(
       'SELECT migration_name, finished_at IS NOT NULL AS finished FROM _prisma_migrations ORDER BY migration_name',
     );
-    expect(rows).toEqual([{ migration_name: '0001_init', finished: true }]);
+    expect(rows).toEqual([
+      { migration_name: '0001_init', finished: true },
+      { migration_name: '0002_tenancy_kernel', finished: true },
+    ]);
+  });
+
+  it('closes new objects by default: tables created later grant nothing to the app role', async () => {
+    await migrator.query('CREATE TABLE iso_default_closed (id int PRIMARY KEY)');
+    try {
+      expect(await sqlStateOf(app.query('SELECT * FROM iso_default_closed'))).toBe(INSUFFICIENT_PRIVILEGE);
+    } finally {
+      await migrator.query('DROP TABLE iso_default_closed');
+    }
   });
 
   it('is idempotent when run again', async () => {

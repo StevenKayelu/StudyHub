@@ -3,7 +3,8 @@ import { Client } from 'pg';
 import type { Logger } from 'pino';
 
 import { handleHeartbeat, HEARTBEAT_JOB } from './heartbeat.job';
-import { createEnvelope, type JobEnvelope, jobEnvelopeSchema } from './job-envelope';
+import { runWithContext } from '../context/request-context';
+import { createEnvelope, type EnvelopeOptions, type JobEnvelope, jobEnvelopeSchema } from './job-envelope';
 
 /** pg-boss lives in its own schema, created and owned by the migrator role. */
 export const JOB_SCHEMA = 'pgboss';
@@ -78,14 +79,17 @@ export function createRuntimeBoss(connectionString: string, options: { supervise
   });
 }
 
-/** Validate and enqueue a job. Returns the job id. */
+/**
+ * Validate and enqueue a job. Tenant jobs take the tenant from the current context unless one is
+ * given explicitly; system jobs (`system.*`) never carry a tenant. Returns the job id.
+ */
 export async function enqueue(
   boss: PgBoss,
   type: string,
   payload: Record<string, unknown>,
-  requestId?: string,
+  options: EnvelopeOptions = {},
 ): Promise<string> {
-  const id = await boss.send(type, createEnvelope(type, payload, requestId));
+  const id = await boss.send(type, createEnvelope(type, payload, options));
   if (id === null) throw new Error(`Job ${type} was not enqueued`);
   return id;
 }
@@ -99,8 +103,10 @@ export interface StartWorkerOptions {
 
 /**
  * Starts the background worker as the runtime role. Each job's envelope is validated first:
- * a malformed job is dead-lettered immediately (never retried, never handed to the handler);
- * a handler error fails the job so pg-boss retries it up to the queue's retryLimit.
+ * a malformed job (including a tenant job without a tenantId) is dead-lettered immediately, never
+ * retried and never handed to the handler. Tenant jobs run inside their envelope's tenant context,
+ * so every tenant-scoped query the handler makes is limited by RLS to that tenant (threat T12).
+ * A handler error fails the job so pg-boss retries it up to the queue's retryLimit.
  */
 export async function startWorker(options: StartWorkerOptions): Promise<PgBoss> {
   const handlers = options.handlers ?? DEFAULT_JOB_HANDLERS;
@@ -125,11 +131,17 @@ export async function startWorker(options: StartWorkerOptions): Promise<PgBoss> 
             results.push({ id: job.id, status: 'deadletter', output: { error: 'MALFORMED_ENVELOPE' } });
             continue;
           }
+          const envelope = parsed.data;
+          const context =
+            envelope.tenantId === null
+              ? { requestId: envelope.requestId }
+              : { requestId: envelope.requestId, tenantId: envelope.tenantId };
+          const jobLogger = options.logger.child({
+            requestId: envelope.requestId,
+            ...(envelope.tenantId !== null && { tenantId: envelope.tenantId }),
+          });
           try {
-            const output = await handler(
-              parsed.data,
-              options.logger.child({ requestId: parsed.data.requestId }),
-            );
+            const output = await runWithContext(context, () => handler(envelope, jobLogger));
             results.push({ id: job.id, status: 'completed', output: output ?? null });
           } catch (error) {
             options.logger.error({ err: error, jobId: job.id, queue: type }, 'Job failed');

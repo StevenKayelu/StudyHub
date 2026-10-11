@@ -18,10 +18,13 @@
     "test:e2e": "pnpm --filter @studyhub/web test:e2e",
     "db:up": "docker compose --env-file .env -f infra/compose/docker-compose.dev.yml up -d --wait",
     "db:down": "docker compose --env-file .env -f infra/compose/docker-compose.dev.yml down",
+    "db:provision-roles": "node tools/db-provision-roles.mjs",
     "db:migrate": "pnpm --filter @studyhub/api db:migrate",
+    "db:seed": "pnpm --filter @studyhub/api db:seed",
+    "tenant:create": "pnpm --filter @studyhub/api tenant:create",
     "openapi": "pnpm --filter @studyhub/contracts build && pnpm --filter @studyhub/contracts openapi",
     "secrets:scan": "node tools/gitleaks.mjs",
-    "verify": "pnpm lint && pnpm typecheck && pnpm boundaries && pnpm test && pnpm test:int && pnpm build && pnpm test:e2e && pnpm openapi && pnpm secrets:scan"
+    "verify": "pnpm lint && pnpm typecheck && pnpm boundaries && pnpm test && pnpm test:int && pnpm build && pnpm db:migrate && pnpm db:seed && pnpm test:e2e && pnpm openapi && pnpm secrets:scan"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

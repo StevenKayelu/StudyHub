@@ -13,7 +13,7 @@ This document closes the planning phase. It records:
 
 **Nothing here is approved unless marked CONFIRMED.** No application code has been written, no credentials configured and nothing deployed.
 
-> **Status update (revision 4, 2026-10-11):** M1 is complete and committed locally (`4c52d4a`, not pushed). The client approved D1-D6 for M2 (shared schema + forced RLS, no RLS-bypassing login role, global accounts with per-school memberships, school-host sign-in with hand-off switching, 3 ms p95 go/no-go, these amendments). M2 implementation has **not** started and needs explicit approval. Staging remains pending until hosting provider, region, budget and domain are approved.
+> **Status update (revision 4, 2026-10-11):** M1 is complete and committed locally (`4c52d4a`, not pushed). The client approved D1-D6 for M2 (shared schema + forced RLS, no RLS-bypassing login role, global accounts with per-school memberships, school-host sign-in with hand-off switching, go/no-go: D5 revised by the client after measurement: exactly one extra statement per transaction and <0.5 ms database time, these amendments). M2 implementation has **not** started and needs explicit approval. Staging remains pending until hosting provider, region, budget and domain are approved.
 
 ---
 
@@ -143,7 +143,7 @@ Full register: 08. **Recommendations are not approvals.**
 | Decision | Recommended option | Blocks |
 |---|---|---|
 | **Q-REPO-1** Repository location | `C:\dev\StudyHub`, outside OneDrive | **M1** (the only input M1 needs) |
-| **Q-TEN-3** Isolation strategy | **CONFIRMED (D1, D2, D5):** shared schema + forced RLS; no RLS-bypassing login role; 3 ms p95 go/no-go | **M2** (answered) |
+| **Q-TEN-3** Isolation strategy | **CONFIRMED (D1, D2, D5):** shared schema + forced RLS; no RLS-bypassing login role; go/no-go: D5 revised by the client after measurement: exactly one extra statement per transaction and <0.5 ms database time | **M2** (answered) |
 | Q-TEN-6 / Q-BRAND-1 Platform name and domain | Short domain with wildcard DNS | End of M2 (staging); local work unaffected |
 | Q-OPS-2 Hosting region and budget | Latency test SA vs EU; ≤US$150/month + video (estimate) | End of M2 (staging) |
 | Q-TEN-1 Identity model | **CONFIRMED (D3, D4):** global account + per-school memberships; school-host sign-in; hand-off switching | M4 (answered) |

@@ -1,6 +1,6 @@
 # 07 — Implementation Roadmap
 
-> **Revision 4 (2026-10-11):** client approved tenancy decisions D1-D6: shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + function inventory); global accounts with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go at 3 ms p95. D7 (legal controller role) remains open.
+> **Revision 4 (2026-10-11):** client approved tenancy decisions D1-D6: shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + function inventory); global accounts with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go (D5 revised by the client after measurement: exactly one extra statement per transaction and <0.5 ms database time). D7 (legal controller role) remains open.
 >
 > **Revision 3 (2026-10-11).** Revision 2's M1 combined tooling with the tenancy kernel, so it depended on an unanswered critical decision (Q-TEN-3) and on staging decisions (Q-TEN-6, Q-OPS-2). It is now split:
 > - **M1 Engineering foundation:** needs no open decision except where the repository lives (Q-REPO-1).
@@ -102,7 +102,7 @@ M7 and M8 can run in either order after M6. Do M8 first if an approved provider 
   8. A job without `tenantId` is rejected.
   9. Cache keys are separated per host (Playwright).
   10. Benchmark report: RLS overhead p95 per query.
-- **DoD:** ADR-016, ADR-017 and ADR-018 written (accepted per D1-D4); the Prisma + RLS benchmark is recorded against the approved threshold of **3 ms p95** overhead, otherwise tenant data access moves to Kysely (D5, RW-03). Full test list: `docs/design/m2-tenancy-kernel.md` §6.
+- **DoD:** ADR-016, ADR-017 and ADR-018 written (accepted per D1-D4); the Prisma + RLS benchmark is recorded against the revised D5 criterion (exactly one extra statement per transaction and <0.5 ms database time; measured: 3 vs 4 statements, 0.015 ms) (RW-03). Full test list: `docs/design/m2-tenancy-kernel.md` §6.
 
 ### M3 — Design system, theming runtime and shells
 - **Scope:**

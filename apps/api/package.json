@@ -12,7 +12,9 @@
     "test": "vitest run --config vitest.config.mts",
     "test:int": "vitest run --config vitest.integration.config.mts",
     "db:generate": "prisma generate",
-    "db:migrate": "node --env-file-if-exists=../../.env dist/cli/migrate.js"
+    "db:migrate": "node --env-file-if-exists=../../.env dist/cli/migrate.js",
+    "db:seed": "node --env-file-if-exists=../../.env dist/cli/seed.js",
+    "tenant:create": "node --env-file-if-exists=../../.env dist/cli/tenant-create.js"
   },
   "devDependencies": {
     "@studyhub/config": "workspace:*",

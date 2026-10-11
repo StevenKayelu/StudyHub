@@ -15,8 +15,10 @@ import {
   loadApiEnv,
   PinoNestLogger,
   ProblemFilter,
+  registerRequestContextHook,
   registerRequestIdHook,
 } from './modules/platform';
+import { registerTenantContextHook, TenantResolver } from './modules/tenancy';
 
 /** JSON bodies above 1 MB are rejected; uploads never pass through the API (blueprint 04 §7.4). */
 const BODY_LIMIT_BYTES = 1_048_576;
@@ -35,7 +37,8 @@ export async function createApp(options: CreateAppOptions): Promise<NestFastifyA
     genReqId,
     logController: new LogController({ requestIdLogLabel: 'requestId' }),
     bodyLimit: BODY_LIMIT_BYTES,
-    trustProxy: false,
+    // X-Forwarded-* are honoured only from these addresses (reverse proxy, web server): threat T3.
+    trustProxy: options.env.TRUSTED_PROXIES,
   });
 
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -44,7 +47,10 @@ export async function createApp(options: CreateAppOptions): Promise<NestFastifyA
     { logger: new PinoNestLogger(logger), abortOnError: false },
   );
 
-  registerRequestIdHook(app.getHttpAdapter().getInstance());
+  const fastify = app.getHttpAdapter().getInstance();
+  registerRequestIdHook(fastify);
+  registerRequestContextHook(fastify);
+  registerTenantContextHook(fastify, app.get(TenantResolver));
   app.useGlobalFilters(new ProblemFilter(logger));
   app.enableShutdownHooks();
   await app.init();

@@ -55,8 +55,8 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Start PostgreSQL and migrate
-        run: pnpm db:up && pnpm db:migrate
+      - name: Start PostgreSQL, migrate and seed the demo schools
+        run: pnpm db:up && pnpm db:migrate && pnpm db:seed
 
       - name: Install Playwright browser
         run: pnpm --filter @studyhub/web exec playwright install --with-deps chromium

@@ -1,6 +1,6 @@
 # M2 design: tenancy kernel, isolation and account model
 
-- **Status:** **D1–D6 APPROVED by the client (2026-10-11)**; blueprint amended to revision 4 (03–10). D7 (legal controller role for global accounts) remains OPEN. M2 implementation has not started and needs explicit go-ahead. Hosting and domain are still undecided, so staging stays pending.
+- **Status:** **D1–D6 APPROVED by the client (2026-10-11); M2 IMPLEMENTED** (tests T-ISO-01 to T-ISO-20, T-PERF-01). **D5 revised by the client after measurement:** the tenant context must add exactly one statement per transaction and <0.5 ms of database time (measured: 3 → 4 statements; 0.015 ms); see ADR-0016. Deviation: the local Caddy reverse proxy is deferred to M4 (ADR-0018). D7 remains OPEN; staging stays pending.
 - **Date:** 2026-10-11
 - **Baseline:** M1 commit `4c52d4a`; blueprint `docs/blueprint/` (revision 3)
 - **Client direction received (2026-10-11):**
@@ -253,7 +253,7 @@ session (TENANT-OWNED, RLS)            role: LEARNER | INSTRUCTOR | TENANT_ADMIN
 | T-ISO-18  | The outbox claim returns mixed tenants; each dispatch runs in its own tenant context                                                                                                                                                 | Integration |
 | T-ISO-19  | Next.js: the same path on `acme.localhost` and `beta.localhost` renders different tenants; cache entries are separate                                                                                                                | E2E         |
 | T-ISO-20  | Cache-key helper refuses a missing tenant id                                                                                                                                                                                         | Unit        |
-| T-PERF-01 | Benchmark: p95 overhead of the context wrapper per transaction, reported. **Go/no-go: ≤3 ms p95 locally** (PROPOSED threshold), else switch the data layer to Kysely for tenant queries                                              | Bench       |
+| T-PERF-01 | Benchmark: p95 overhead of the context wrapper per transaction, reported. **Go/no-go (D5, revised): exactly one extra statement per transaction and <0.5 ms database time**, plus a timing sanity check                              | Bench       |
 
 (T-ISO-14, session replay across hosts, lands in M4 with sessions.)
 
@@ -306,7 +306,7 @@ session (TENANT-OWNED, RLS)            role: LEARNER | INSTRUCTOR | TENANT_ADMIN
 | D2  | Role model                                                       | migrator (owner, DDL) + app (NOBYPASSRLS, DML only) + NOLOGIN definer role; **no RLS-bypassing login role** (amends blueprint) | Start of M2                        |
 | D3  | Account model                                                    | Global account + explicit per-school memberships and roles (§4)                                                                | Design is fixed in M2; build in M4 |
 | D4  | Sign-in and switching UX                                         | Sign in on the school's host; switch via one-time hand-off; neutral account wording with privacy disclosure                    | M4                                 |
-| D5  | Performance threshold for Prisma + RLS                           | ≤3 ms p95 overhead, else Kysely for tenant data access                                                                         | End of M2                          |
+| D5  | Performance threshold for Prisma + RLS                           | Revised by the client: exactly one extra statement and <0.5 ms database time                                                   | End of M2                          |
 | D6  | Apply the blueprint amendments in §8                             | Yes, as listed                                                                                                                 | Before M2 code                     |
 | D7  | Legal check of the controller role for global accounts (Q-LEG-4) | Ask counsel; doesn't block M2 code                                                                                             | Before the first external school   |
 | —   | Hosting provider, region, budget, domain                         | **Not decided; staging stays pending**                                                                                         | End of M2 (staging only)           |

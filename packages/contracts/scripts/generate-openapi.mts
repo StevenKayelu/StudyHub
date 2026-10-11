@@ -12,6 +12,7 @@ import {
   problemSchema,
   readinessChecksSchema,
   readyzResponseSchema,
+  tenantBootstrapSchema,
 } from '../dist/index.js';
 
 type JsonObject = Record<string, unknown>;
@@ -31,9 +32,12 @@ const document = {
     title: 'StudyHub API',
     version: '0.1.0',
     description:
-      'M1 engineering foundation: operational endpoints only. Every error response is RFC 9457 problem+json.',
+      'Operational probes (root) and tenant-scoped endpoints (/api/v1). The school is resolved only from the request host. Every error response is RFC 9457 problem+json.',
   },
-  tags: [{ name: 'operations', description: 'Liveness and readiness probes' }],
+  tags: [
+    { name: 'operations', description: 'Liveness and readiness probes' },
+    { name: 'tenancy', description: 'School context resolved from the request host' },
+  ],
   paths: {
     '/healthz': {
       get: {
@@ -65,6 +69,24 @@ const document = {
         },
       },
     },
+    '/api/v1/tenant': {
+      get: {
+        operationId: 'getTenantBootstrap',
+        tags: ['tenancy'],
+        summary: 'The school resolved from the request host (never from a client-supplied id)',
+        responses: {
+          '200': {
+            description: 'The current school.',
+            content: { 'application/json': { schema: ref('TenantBootstrap') } },
+          },
+          '404': {
+            description:
+              'Unknown, unverified or deleted host. Generic: never names a school (TENANT_NOT_FOUND).',
+            content: { [PROBLEM_CONTENT_TYPE]: { schema: ref('Problem') } },
+          },
+        },
+      },
+    },
   },
   components: {
     schemas: {
@@ -72,6 +94,7 @@ const document = {
       Readyz: toSchema(readyzResponseSchema),
       ReadinessChecks: toSchema(readinessChecksSchema),
       Problem: toSchema(problemSchema),
+      TenantBootstrap: toSchema(tenantBootstrapSchema),
     },
   },
 };
@@ -85,7 +108,7 @@ for (const match of serialized.matchAll(/"#\/components\/schemas\/([^"]+)"/g)) {
     throw new Error(`OpenAPI self-check failed: unresolved $ref ${String(name)}`);
   }
 }
-for (const required of ['/healthz', '/readyz']) {
+for (const required of ['/healthz', '/readyz', '/api/v1/tenant']) {
   if (!(required in document.paths)) {
     throw new Error(`OpenAPI self-check failed: missing path ${required}`);
   }

@@ -1,6 +1,6 @@
 # 05 — Database and API Specification
 
-> **Revision 4 (2026-10-11):** client approved tenancy decisions D1-D6: shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + function inventory); global accounts with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go at 3 ms p95. D7 (legal controller role) remains open.
+> **Revision 4 (2026-10-11):** client approved tenancy decisions D1-D6: shared schema + forced RLS; no RLS-bypassing login role (NOLOGIN definer role + function inventory); global accounts with per-school memberships; sign-in on the school host and switching by one-time hand-off; Prisma + RLS go/no-go (D5 revised by the client after measurement: exactly one extra statement per transaction and <0.5 ms database time). D7 (legal controller role) remains open.
 >
 > **Revision 3 (2026-10-11):** ledger `platform_fee_minor` renamed `commission_minor` (instructor commission); plan pricing (`platformCommissionBps`); grouped tenant settings incl. languages, course and material defaults, payment settings; per-locale tenant texts; payment-account capabilities; new `domain_change_request`, `settlement_report`, `platform_statement`; endpoints for locales, domains, onboarding, capabilities, reconciliation, statements, video webhook.
 >

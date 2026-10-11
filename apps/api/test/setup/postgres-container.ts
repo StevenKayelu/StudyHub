@@ -11,8 +11,8 @@ export const POSTGRES_IMAGE = 'postgres:17';
 /** Vitest runs from apps/api (pnpm --filter / turbo). */
 export const API_ROOT = process.cwd();
 
-/** The same role script local development uses (infra/postgres/init/01-roles.sql). */
-const ROLES_SQL = path.resolve(API_ROOT, '..', '..', 'infra', 'postgres', 'init', '01-roles.sql');
+/** The same role scripts local development uses (infra/postgres/init/*.sql). */
+const INIT_DIR = path.resolve(API_ROOT, '..', '..', 'infra', 'postgres', 'init');
 
 export interface TestDatabase {
   container: StartedPostgreSqlContainer;
@@ -42,7 +42,7 @@ export async function startTestDatabase(options: { migrate?: boolean } = {}): Pr
       STUDYHUB_MIGRATOR_PASSWORD: passwords.migrator,
       STUDYHUB_APP_PASSWORD: passwords.app,
     })
-    .withCopyFilesToContainer([{ source: ROLES_SQL, target: '/docker-entrypoint-initdb.d/01-roles.sql' }])
+    .withCopyDirectoriesToContainer([{ source: INIT_DIR, target: '/docker-entrypoint-initdb.d' }])
     .start();
 
   const urlFor = (user: string, password: string): string =>

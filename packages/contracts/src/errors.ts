@@ -13,14 +13,16 @@ export const ERROR_DEFINITIONS = {
   SERVICE_UNAVAILABLE: { status: 503, title: 'Service temporarily unavailable', active: true },
   RATE_LIMITED: { status: 429, title: 'Too many requests', active: true },
 
+  // Active from M2 (tenancy kernel). TENANT_NOT_FOUND is deliberately generic: it never names a school.
+  TENANT_NOT_FOUND: { status: 404, title: 'Site not found', active: true },
+  TENANT_CONTEXT_MISSING: { status: 500, title: 'Something went wrong on our side', active: true },
+
   // Reserved for later milestones
   UNAUTHENTICATED: { status: 401, title: 'Sign-in required', active: false },
   FORBIDDEN: { status: 403, title: 'Not allowed', active: false },
   VERSION_CONFLICT: { status: 409, title: 'This item was changed elsewhere', active: false },
   FEATURE_NOT_ENABLED: { status: 403, title: 'This feature is not enabled', active: false },
   LIMIT_REACHED: { status: 409, title: 'Plan limit reached', active: false },
-  TENANT_NOT_FOUND: { status: 404, title: 'Site not found', active: false },
-  TENANT_CONTEXT_MISSING: { status: 500, title: 'Something went wrong on our side', active: false },
   SLUG_TAKEN: { status: 409, title: 'That address is already taken', active: false },
   SLUG_RESERVED: { status: 422, title: 'That address is reserved', active: false },
   ENROLMENT_INACTIVE: { status: 403, title: 'Your access to this course is not active', active: false },

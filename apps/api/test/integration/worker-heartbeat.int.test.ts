@@ -71,7 +71,7 @@ describe('background worker (pg-boss as the app role)', () => {
       producer,
       HEARTBEAT_JOB,
       { sentAt: new Date().toISOString() },
-      'req_heartbeat_test',
+      { requestId: 'req_heartbeat_test' },
     );
     const job = await waitForState(producer, id, ['completed', 'failed']);
     expect(job.state).toBe('completed');
