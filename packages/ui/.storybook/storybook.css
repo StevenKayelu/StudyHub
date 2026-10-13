@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+@import '../src/styles/index.css';
+/* Storybook loads the three font presets from @fontsource; the web app self-hosts the same files. */
+@import '@fontsource-variable/atkinson-hyperlegible-next/wght.css';
+@import '@fontsource-variable/literata/wght.css';
+@import '@fontsource-variable/source-sans-3/wght.css';
+@import '@fontsource-variable/source-serif-4/wght.css';
+@import '@fontsource-variable/plus-jakarta-sans/wght.css';
+
+@source '../src';
+
+:root {
+  --sh-font-copperline-ui: 'Atkinson Hyperlegible Next Variable';
+  --sh-font-copperline-reading: 'Literata Variable';
+  --sh-font-humanist-ui: 'Source Sans 3 Variable';
+  --sh-font-humanist-reading: 'Source Serif 4 Variable';
+  --sh-font-geometric-ui: 'Plus Jakarta Sans Variable';
+  --sh-font-geometric-reading: 'Literata Variable';
+}

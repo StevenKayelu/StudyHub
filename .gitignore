@@ -28,3 +28,6 @@ blob-report/
 Thumbs.db
 .idea/
 *.log
+
+# Storybook build
+storybook-static/

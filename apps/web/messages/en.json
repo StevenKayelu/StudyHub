@@ -1,0 +1,142 @@
+{
+  "terms": {
+    "instructor": "Tutor",
+    "instructors": "Tutors",
+    "course": "Course",
+    "courses": "Courses"
+  },
+  "common": {
+    "skipToContent": "Skip to content",
+    "close": "Close",
+    "menu": "Menu",
+    "breadcrumb": "Breadcrumb",
+    "mainNavigation": "Main",
+    "required": "required",
+    "dismiss": "Dismiss",
+    "notificationsRegion": "Notifications ({hotkey})",
+    "poweredBy": "Powered by StudyHub",
+    "signIn": "Sign in",
+    "createAccount": "Create account",
+    "goHome": "Go to home",
+    "tryAgain": "Try again",
+    "details": "Details",
+    "requestId": "Request ID {id}",
+    "account": "Account"
+  },
+  "public": {
+    "nav": {
+      "browse": "Browse",
+      "teach": "Become a {instructorLower}"
+    },
+    "home": {
+      "title": "What do you want to learn?",
+      "subtitle": "{courses} and practice from {school}.",
+      "emptyTitle": "No {coursesLower} yet",
+      "emptyMessage": "{school} is preparing its first {coursesLower}. Check back soon."
+    },
+    "footer": {
+      "help": "Help",
+      "terms": "Terms",
+      "privacy": "Privacy",
+      "refunds": "Refund policy"
+    }
+  },
+  "learn": {
+    "nav": {
+      "home": "Home",
+      "browse": "Browse",
+      "learning": "Learning",
+      "account": "Account"
+    },
+    "title": "My learning",
+    "emptyTitle": "You haven't enrolled in a {courseLower} yet",
+    "emptyMessage": "{courses} you enrol in appear here.",
+    "browse": "Browse {coursesLower}"
+  },
+  "studio": {
+    "navLabel": "Studio",
+    "nav": {
+      "courses": "{courses}",
+      "results": "Results",
+      "earnings": "Earnings",
+      "profile": "Profile"
+    },
+    "home": "Studio",
+    "title": "{courses}",
+    "newCourse": "New {courseLower}",
+    "emptyTitle": "No {coursesLower} yet",
+    "emptyMessage": "Start with an outline: sections first, lessons second."
+  },
+  "admin": {
+    "navLabel": "Administration",
+    "nav": {
+      "overview": "Overview",
+      "users": "Users",
+      "branding": "Branding",
+      "settings": "Settings"
+    },
+    "title": "Overview",
+    "queues": {
+      "applications": "{instructor} applications",
+      "reviews": "{course} reviews",
+      "payments": "Payment exceptions",
+      "none": "Nothing waiting"
+    },
+    "metricsEmpty": "Key metrics appear here once you have sales."
+  },
+  "console": {
+    "realm": "Platform console",
+    "navLabel": "Console",
+    "nav": {
+      "overview": "Overview",
+      "tenants": "Tenants",
+      "settings": "Settings"
+    },
+    "title": "Overview",
+    "emptyTitle": "Nothing needs attention",
+    "emptyMessage": "Tenant counts, provider health and alerts appear here."
+  },
+  "system": {
+    "notFound": {
+      "title": "We can't find that page",
+      "message": "Check the address, or go back to the home page."
+    },
+    "siteNotFound": {
+      "title": "Site not found",
+      "message": "Check the address and try again."
+    },
+    "error": {
+      "title": "Something went wrong on our side",
+      "message": "Try again in a moment. If it keeps happening, contact support."
+    },
+    "offline": {
+      "title": "You're offline",
+      "message": "This page will load when you're back online."
+    },
+    "maintenance": {
+      "title": "We're making improvements",
+      "message": "The site will be back shortly. Thank you for your patience."
+    },
+    "unavailable": {
+      "title": "This site is temporarily unavailable",
+      "message": "Please check back later."
+    },
+    "comingSoon": {
+      "title": "Coming soon",
+      "message": "{school} is getting ready.",
+      "ownerSignIn": "Invited owner? Sign in"
+    },
+    "permission": {
+      "title": "You don't have access to this page",
+      "message": "Ask your school administrator for access."
+    }
+  },
+  "status": {
+    "title": "StudyHub — system status",
+    "intro": "This page reports whether the services are running.",
+    "api": "API",
+    "database": "Database",
+    "version": "Version",
+    "unknown": "unknown"
+  }
+}

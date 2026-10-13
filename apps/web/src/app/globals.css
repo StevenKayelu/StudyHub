@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+@import '@studyhub/ui/styles.css';
+
+/* Scan the design-system components (compiled) and this app for utility classes. */
+@source '../../node_modules/@studyhub/ui/dist';
+@source '../';

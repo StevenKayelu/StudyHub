@@ -34,7 +34,18 @@ describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
       ],
       [
         'beta',
-        { slug: 'beta', name: 'Beta College', kind: 'COLLEGE', hostname: 'beta.localhost', status: 'ACTIVE' },
+        {
+          slug: 'beta',
+          name: 'Beta College',
+          kind: 'COLLEGE',
+          hostname: 'beta.localhost',
+          status: 'ACTIVE',
+          branding: {
+            accentHex: '#0B7285',
+            fontPreset: 'HUMANIST',
+            terminology: { instructor: { en: 'Lecturer' } },
+          },
+        },
       ],
       [
         'pending',
@@ -72,9 +83,27 @@ describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
       slug: 'acme',
       name: 'Acme Academy',
       status: 'ACTIVE',
+      // Provisioning publishes the Copperline defaults and the default language settings.
+      branding: {
+        version: 1,
+        displayName: 'Acme Academy',
+        accentHex: null,
+        fontPreset: 'COPPERLINE',
+        showPoweredBy: true,
+        terminology: {},
+      },
+      locales: { defaultLocale: 'en', enabledLocales: ['en'], timeZone: 'Africa/Lusaka' },
     });
-    const beta = await get('/api/v1/tenant', { host: 'beta.localhost' });
-    expect(tenantBootstrapSchema.parse(beta.json()).id).toBe(tenants.beta);
+    const beta = tenantBootstrapSchema.parse(
+      (await get('/api/v1/tenant', { host: 'beta.localhost' })).json(),
+    );
+    expect(beta.id).toBe(tenants.beta);
+    // Each school gets only its own branding (stored lowercase).
+    expect(beta.branding).toMatchObject({
+      accentHex: '#0b7285',
+      fontPreset: 'HUMANIST',
+      terminology: { instructor: { en: 'Lecturer' } },
+    });
   });
 
   it('T-ISO-10: normalises case, port and trailing dot', async () => {

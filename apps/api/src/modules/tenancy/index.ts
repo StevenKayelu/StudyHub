@@ -14,6 +14,8 @@ export {
   provisionTenant,
   type ProvisionTenantInput,
   TENANT_KINDS,
+  type TenantBrandingInput,
   type TenantKind,
+  writeTenantProfile,
 } from './infra/tenant-provisioning';
 export { TenancyModule } from './tenancy.module';

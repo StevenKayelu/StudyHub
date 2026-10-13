@@ -64,6 +64,27 @@ const FIXTURES: Readonly<
         JSON.stringify({ marker: tenantId }),
       ]),
   },
+  tenant_branding: {
+    granted: false, // read-only for the runtime role until the branding editor (F39); provisioning writes it
+    insert: (c, tenantId) =>
+      c.query(`INSERT INTO tenant_branding (tenant_id, display_name) VALUES ($1, 'Forged School')`, [
+        tenantId,
+      ]),
+  },
+  tenant_branding_version: {
+    granted: false,
+    insert: (c, tenantId) =>
+      c.query(`INSERT INTO tenant_branding_version (tenant_id, version, snapshot) VALUES ($1, 99, '{}')`, [
+        tenantId,
+      ]),
+  },
+  tenant_setting: {
+    granted: false, // read-only for the runtime role until the settings screens; provisioning writes defaults
+    insert: (c, tenantId) =>
+      c.query(`INSERT INTO tenant_setting (tenant_id, key, value) VALUES ($1, 'isoFixture', '1')`, [
+        tenantId,
+      ]),
+  },
   tenant_domain: {
     granted: false, // runtime code resolves hosts only through resolve_tenant()
     insert: (c, tenantId) =>

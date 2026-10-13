@@ -1,7 +1,7 @@
 {
   "name": "studyhub",
   "private": true,
-  "description": "StudyHub — multi-tenant learning platform (M1: engineering foundation)",
+  "description": "StudyHub — multi-tenant learning platform",
   "packageManager": "pnpm@12.11.2",
   "engines": {
     "node": ">=24.0.0 <25"
@@ -24,7 +24,9 @@
     "tenant:create": "pnpm --filter @studyhub/api tenant:create",
     "openapi": "pnpm --filter @studyhub/contracts build && pnpm --filter @studyhub/contracts openapi",
     "secrets:scan": "node tools/gitleaks.mjs",
-    "verify": "pnpm lint && pnpm typecheck && pnpm boundaries && pnpm test && pnpm test:int && pnpm build && pnpm db:migrate && pnpm db:seed && pnpm test:e2e && pnpm openapi && pnpm secrets:scan"
+    "verify": "pnpm lint && pnpm typecheck && pnpm boundaries && pnpm test && pnpm test:int && pnpm build && pnpm db:migrate && pnpm db:seed && pnpm test:e2e && pnpm test:stories && pnpm openapi && pnpm secrets:scan",
+    "storybook": "pnpm --filter @studyhub/ui storybook",
+    "test:stories": "pnpm --filter @studyhub/ui build-storybook && pnpm --filter @studyhub/ui test:stories"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

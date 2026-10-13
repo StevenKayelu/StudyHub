@@ -5,9 +5,13 @@ dist
 coverage
 playwright-report
 test-results
+storybook-static
 pnpm-lock.yaml
 apps/api/src/generated
 apps/api/prisma/migrations
 apps/api/openapi.json
 # The blueprint is an approved document set; it is copied verbatim and never reformatted.
 docs/blueprint
+
+# Generated from packages/ui/src/tokens/tokens.ts (drift-checked by a unit test).
+packages/ui/src/styles/tokens.css

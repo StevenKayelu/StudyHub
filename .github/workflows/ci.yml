@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify (lint, types, boundaries, tests, build, e2e, OpenAPI, secrets, audit)
+    name: Verify (lint, types, boundaries, tests, build, e2e, stories, OpenAPI, secrets, audit)
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -64,6 +64,11 @@ jobs:
       - name: E2E smoke tests
         run: pnpm test:e2e
 
+      - name: Design-system stories (axe in the default and 2 school themes)
+        # Visual-regression baselines are recorded on Windows only so far (docs/design/m3-design-system.md §6),
+        # so CI runs the accessibility half until Linux baselines are added.
+        run: pnpm --filter @studyhub/ui build-storybook && pnpm --filter @studyhub/ui exec playwright test --grep axe
+
       - name: OpenAPI document is generated and up to date
         run: pnpm openapi && git diff --exit-code -- apps/api/openapi.json
 
@@ -78,7 +83,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: apps/web/playwright-report
+          path: |
+            apps/web/playwright-report
+            packages/ui/playwright-report
           retention-days: 7
 
       - name: Stop PostgreSQL

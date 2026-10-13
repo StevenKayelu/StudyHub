@@ -2,10 +2,11 @@
 
 StudyHub is a multi-tenant, white-label learning platform for schools, colleges, tutors and education businesses. The full product, architecture and design specification is in [`docs/blueprint/`](docs/blueprint/README.md).
 
-**Current state: Milestone 2, the tenancy kernel** (on top of the M1 engineering foundation).
+**Current state: Milestone 3, design system, theming and shells** (on top of M1 and M2).
 
 - A TypeScript monorepo with an API, a background worker and a web app; shared contracts; a PostgreSQL migration pipeline; automated quality gates (M1).
 - **Multi-school isolation enforced by the database** (M2): every school-owned table has forced row-level security; the school is resolved only from the request host; background jobs and the outbox run in their school's context; no database login can bypass RLS. Design: [`docs/design/m2-tenancy-kernel.md`](docs/design/m2-tenancy-kernel.md), ADR-0016 to ADR-0018.
+- **Copperline design system and white-label theming** (M3): tokens, components and Storybook in `packages/ui`; each school's accent colour is compiled into an accessible light and dark theme (BR-51); 3 self-hosted font presets; per-school languages and terminology; Public, Learn, Studio, Admin and Console shells; system screens. Design: [`docs/design/m3-design-system.md`](docs/design/m3-design-system.md), ADR-0010.
 
 There are no user accounts, sign-in or product features yet; those arrive in later milestones (see `docs/blueprint/07-implementation-roadmap.md`).
 
@@ -14,10 +15,11 @@ There are no user accounts, sign-in or product features yet; those arrive in lat
 ```
 apps/
   api/            NestJS on Fastify: HTTP API (src/main.ts) and background worker (src/worker.ts)
-  web/            Next.js (App Router): system status page for now
+  web/            Next.js (App Router): school sites (shells, theming), console host, status page
 packages/
   config/         shared TypeScript and ESLint presets
-  contracts/      error codes, problem+json, health schemas, OpenAPI generation (Zod)
+  contracts/      error codes, problem+json, health, tenant and i18n schemas, OpenAPI generation (Zod)
+  ui/             Copperline tokens, theme compiler, React components, Storybook
 infra/
   compose/        local Docker Compose (PostgreSQL 17)
   postgres/init/  database roles (migrator, app)
@@ -60,7 +62,7 @@ pnpm --filter @studyhub/web exec playwright install --only-shell chromium
 ```
 
 - **Upgrading a database volume created before M2:** run `pnpm db:provision-roles` once (after `pnpm db:up`, before `pnpm db:migrate`). PostgreSQL only runs the role scripts when a volume is first created.
-- `pnpm db:seed` creates two demo schools: **Acme Academy** (`acme.localhost`) and **Beta College** (`beta.localhost`). It is idempotent.
+- `pnpm db:seed` creates three demo schools: **Acme Academy** (`acme.localhost`, Copperline default), **Beta College** (`beta.localhost`, teal accent, Humanist fonts, "Lecturer"/"Module") and **Gamma Tutors** (`gamma.localhost`, still provisioning: "Coming soon"). It is idempotent and refreshes the demo branding.
 - Create another school: `pnpm tenant:create --slug demo --name "Demo School" --status ACTIVE` (host defaults to `demo.localhost`).
 
 - `.env` holds **local-only placeholder values**. It is git-ignored; never commit it.
@@ -73,14 +75,16 @@ pnpm --filter @studyhub/web exec playwright install --only-shell chromium
 pnpm dev
 ```
 
-| Service                  | URL                                                              |
-| ------------------------ | ---------------------------------------------------------------- |
-| Web (status page)        | http://localhost:3000                                            |
-| API liveness             | http://127.0.0.1:4000/healthz                                    |
-| API readiness (database) | http://127.0.0.1:4000/readyz                                     |
-| Worker                   | runs alongside the API; heartbeat jobs and the outbox dispatcher |
-| School site (demo)       | http://acme.localhost:3000 and http://beta.localhost:3000        |
-| School bootstrap API     | `GET /api/v1/tenant`, resolved from the host                     |
+| Service                  | URL                                                                                            |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| Web (status page)        | http://localhost:3000                                                                          |
+| API liveness             | http://127.0.0.1:4000/healthz                                                                  |
+| API readiness (database) | http://127.0.0.1:4000/readyz                                                                   |
+| Worker                   | runs alongside the API; heartbeat jobs and the outbox dispatcher                               |
+| School site (demo)       | http://acme.localhost:3000 and http://beta.localhost:3000 (`/`, `/learn`, `/studio`, `/admin`) |
+| Platform console (shell) | http://console.localhost:3000                                                                  |
+| Storybook                | `pnpm storybook` → http://localhost:6006                                                       |
+| School bootstrap API     | `GET /api/v1/tenant`, resolved from the host                                                   |
 
 ## Verify
 
@@ -88,19 +92,20 @@ pnpm dev
 pnpm verify
 ```
 
-`pnpm verify` runs every gate in order: lint, typecheck, boundaries, unit tests, integration tests (including the tenant-isolation suite), build, migrate, seed, e2e, OpenAPI, secret scan. The database must be up (`pnpm db:up`). Individual gates:
+`pnpm verify` runs every gate in order: lint, typecheck, boundaries, unit tests, integration tests (including the tenant-isolation suite), build, migrate, seed, e2e (including the Lighthouse budget), story tests (axe and visual regression), OpenAPI, secret scan. The database must be up (`pnpm db:up`). Individual gates:
 
-| Command             | What it checks                                                                |
-| ------------------- | ----------------------------------------------------------------------------- |
-| `pnpm lint`         | ESLint (zero warnings) and Prettier formatting                                |
-| `pnpm typecheck`    | TypeScript strict mode across all packages                                    |
-| `pnpm boundaries`   | module-boundary rules, and proof that violations are detected                 |
-| `pnpm test`         | unit tests (Vitest)                                                           |
-| `pnpm test:int`     | integration tests against throwaway PostgreSQL 17 containers (Testcontainers) |
-| `pnpm build`        | production builds of contracts, API and web                                   |
-| `pnpm test:e2e`     | Playwright smoke test (starts the built API and web)                          |
-| `pnpm openapi`      | regenerates `apps/api/openapi.json` from the contracts                        |
-| `pnpm secrets:scan` | gitleaks secret scan of the working tree (via Docker)                         |
+| Command             | What it checks                                                                  |
+| ------------------- | ------------------------------------------------------------------------------- |
+| `pnpm lint`         | ESLint (zero warnings) and Prettier formatting                                  |
+| `pnpm typecheck`    | TypeScript strict mode across all packages                                      |
+| `pnpm boundaries`   | module-boundary rules, and proof that violations are detected                   |
+| `pnpm test`         | unit tests (Vitest)                                                             |
+| `pnpm test:int`     | integration tests against throwaway PostgreSQL 17 containers (Testcontainers)   |
+| `pnpm build`        | production builds of contracts, API and web                                     |
+| `pnpm test:e2e`     | Playwright e2e (starts the built API and web), then the Lighthouse budget       |
+| `pnpm test:stories` | builds Storybook; axe on every story in 3 themes, visual regression at 5 widths |
+| `pnpm openapi`      | regenerates `apps/api/openapi.json` from the contracts                          |
+| `pnpm secrets:scan` | gitleaks secret scan of the working tree (via Docker)                           |
 
 Stop the database with `pnpm db:down`. Data persists in a Docker volume; see the runbook to reset it.
 

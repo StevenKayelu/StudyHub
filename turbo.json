@@ -11,7 +11,7 @@
     "build": {
       "dependsOn": ["^build", "db:generate"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
-      "env": ["API_INTERNAL_URL"]
+      "env": ["API_INTERNAL_URL", "PLATFORM_HOSTS", "CONSOLE_HOSTS"]
     },
     "typecheck": {
       "dependsOn": ["^build", "db:generate"]

@@ -24,13 +24,63 @@ export interface ProvisionTenantInput {
   kind: TenantKind;
   hostname: string;
   status: ProvisionableStatus;
+  /** Initial branding; defaults to Copperline with the school name. */
+  branding?: TenantBrandingInput;
+}
+
+/** Branding written at provisioning (and by the demo seed). The editor (F39) replaces this later. */
+export interface TenantBrandingInput {
+  /** Lowercase #rrggbb that the theme compiler accepts, or null for the default copper. */
+  accentHex: string | null;
+  fontPreset: 'COPPERLINE' | 'HUMANIST' | 'GEOMETRIC';
+  terminology?: Record<string, Record<string, string>>;
+}
+
+const DEFAULT_SETTINGS: Readonly<Record<string, unknown>> = {
+  defaultLocale: 'en',
+  enabledLocales: ['en'],
+  timeZone: 'Africa/Lusaka',
+};
+
+/**
+ * Publishes branding (as version 1, or the next version) and fills missing default settings, in the
+ * caller's transaction. The caller must have set app.tenant_id to `tenantId` (FORCE RLS).
+ */
+export async function writeTenantProfile(
+  client: ClientBase,
+  tenantId: string,
+  displayName: string,
+  branding: TenantBrandingInput,
+): Promise<void> {
+  const accent = branding.accentHex === null ? null : branding.accentHex.toLowerCase();
+  await client.query(
+    `INSERT INTO tenant_branding (tenant_id, display_name, accent_hex, font_preset, terminology, status, published_at)
+     VALUES ($1, $2, $3, $4::"FontPreset", $5::jsonb, 'PUBLISHED', now())
+     ON CONFLICT (tenant_id) DO UPDATE
+        SET display_name = EXCLUDED.display_name, accent_hex = EXCLUDED.accent_hex,
+            font_preset = EXCLUDED.font_preset, terminology = EXCLUDED.terminology,
+            status = 'PUBLISHED', published_at = now(), updated_at = now(),
+            version = tenant_branding.version + 1
+      WHERE (tenant_branding.display_name, tenant_branding.accent_hex, tenant_branding.font_preset,
+             tenant_branding.terminology)
+            IS DISTINCT FROM (EXCLUDED.display_name, EXCLUDED.accent_hex, EXCLUDED.font_preset,
+             EXCLUDED.terminology)`,
+    [tenantId, displayName, accent, branding.fontPreset, JSON.stringify(branding.terminology ?? {})],
+  );
+  for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+    await client.query(
+      `INSERT INTO tenant_setting (tenant_id, key, value) VALUES ($1, $2, $3::jsonb)
+       ON CONFLICT (tenant_id, key) DO NOTHING`,
+      [tenantId, key, JSON.stringify(value)],
+    );
+  }
 }
 
 export type ProvisionResult =
   { outcome: 'created'; tenantId: string } | { outcome: 'exists'; reason: 'slug or hostname already taken' };
 
 /**
- * Creates a school, its primary host and an audit entry in ONE transaction, inside the new school's
+ * Creates a school, its primary host, default branding and settings, and an audit entry in ONE transaction, inside the new school's
  * tenant context (FORCE RLS applies to the caller too, so every row must belong to that tenant).
  * Used by the provisioning CLIs, which run as the migrator, until the platform console exists (M9).
  * Idempotent: an existing slug or hostname is reported, never overwritten.
@@ -58,6 +108,12 @@ export async function provisionTenant(
       `INSERT INTO tenant_domain (tenant_id, hostname, type, status, is_primary, verified_at)
        VALUES ($1, $2, 'SUBDOMAIN', 'ACTIVE', true, now())`,
       [tenantId, hostname],
+    );
+    await writeTenantProfile(
+      client,
+      tenantId,
+      name,
+      input.branding ?? { accentHex: null, fontPreset: 'COPPERLINE' },
     );
     await client.query(
       `INSERT INTO audit_log (tenant_id, action, entity_type, entity_id, after)

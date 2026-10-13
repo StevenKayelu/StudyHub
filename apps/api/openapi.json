@@ -293,13 +293,144 @@
               "OFFBOARDING",
               "DELETED"
             ]
+          },
+          "branding": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "displayName": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 120
+              },
+              "accentHex": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^#[0-9a-f]{6}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "fontPreset": {
+                "type": "string",
+                "enum": [
+                  "COPPERLINE",
+                  "HUMANIST",
+                  "GEOMETRIC"
+                ]
+              },
+              "showPoweredBy": {
+                "type": "boolean"
+              },
+              "terminology": {
+                "type": "object",
+                "properties": {
+                  "instructor": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "instructors": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "course": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "courses": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "version",
+              "displayName",
+              "accentHex",
+              "fontPreset",
+              "showPoweredBy",
+              "terminology"
+            ],
+            "additionalProperties": false
+          },
+          "locales": {
+            "type": "object",
+            "properties": {
+              "defaultLocale": {
+                "type": "string",
+                "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+              },
+              "enabledLocales": {
+                "minItems": 1,
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+                }
+              },
+              "timeZone": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "defaultLocale",
+              "enabledLocales",
+              "timeZone"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
           "id",
           "slug",
           "name",
-          "status"
+          "status",
+          "branding",
+          "locales"
         ],
         "additionalProperties": false
       }

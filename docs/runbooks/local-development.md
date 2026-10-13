@@ -27,7 +27,10 @@ Role scripts: `infra/postgres/init/01-roles.sql` (M1) and `02-tenancy-roles.sql`
 ## Schools (tenants) locally
 
 - Each school is reached through its own host. Browsers resolve `*.localhost` to your machine: `http://acme.localhost:3000`, `http://beta.localhost:3000`.
-- `http://localhost:3000` is the platform host and shows the system status page.
+- `http://localhost:3000` is the platform host and shows the system status page; `http://console.localhost:3000` is the platform console shell (`CONSOLE_HOSTS`).
+- A school's look comes from its published branding (`tenant_branding`) and its languages from `tenant_setting`; no row means the defaults. `pnpm db:seed` refreshes the demo schools' branding.
+- Maintenance page: set `MAINTENANCE_MODE=on` in `.env` and restart the web server; every page returns 503 with the maintenance screen (the API keeps running).
+- Visual-regression baselines live in `packages/ui/tests/stories.spec.ts-snapshots/`. After an intended visual change, review the diff and update them with `pnpm --filter @studyhub/ui exec playwright test --grep visual --update-snapshots`.
 - Create a school: `pnpm tenant:create --slug demo --name "Demo School" --status ACTIVE`.
 - Inspect a school's rows in psql: tenant tables return **nothing** until you set the context: `BEGIN; SELECT set_config('app.tenant_id', '<tenant uuid>', true); SELECT * FROM audit_log; COMMIT;`. This is row-level security working, not missing data.
 

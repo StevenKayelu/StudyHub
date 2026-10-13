@@ -62,9 +62,12 @@ model Tenant {
   updatedAt DateTime     @default(now()) @map("updated_at") @db.Timestamptz(3)
   version   Int          @default(1)
 
-  domains   TenantDomain[]
-  auditLogs AuditLog[]
-  outbox    Outbox[]
+  domains          TenantDomain[]
+  auditLogs        AuditLog[]
+  outbox           Outbox[]
+  branding         TenantBranding?
+  brandingVersions TenantBrandingVersion[]
+  settings         TenantSetting[]
 
   @@map("tenant")
 }
@@ -124,4 +127,73 @@ model Outbox {
 
   @@index([tenantId, createdAt], map: "outbox_tenant_created_idx")
   @@map("outbox")
+}
+
+enum FontPreset {
+  COPPERLINE
+  HUMANIST
+  GEOMETRIC
+}
+
+enum BrandingStatus {
+  DRAFT
+  PUBLISHED
+}
+
+/// A school's identity tokens (06 §10.1). No row = Copperline defaults. RLS: tenant_isolation.
+model TenantBranding {
+  tenantId        String         @id @map("tenant_id") @db.Uuid
+  version         Int            @default(1)
+  status          BrandingStatus @default(PUBLISHED)
+  displayName     String         @map("display_name")
+  logoAssetId     String?        @map("logo_asset_id") @db.Uuid
+  logoDarkAssetId String?        @map("logo_dark_asset_id") @db.Uuid
+  faviconAssetId  String?        @map("favicon_asset_id") @db.Uuid
+  appIconAssetId  String?        @map("app_icon_asset_id") @db.Uuid
+  accentHex       String?        @map("accent_hex")
+  derivedTokens   Json?          @map("derived_tokens")
+  fontPreset      FontPreset     @default(COPPERLINE) @map("font_preset")
+  homeLayout      Json           @default("{}") @map("home_layout")
+  footerLinks     Json           @default("[]") @map("footer_links")
+  supportEmail    String?        @map("support_email")
+  supportPhone    String?        @map("support_phone")
+  social          Json           @default("{}")
+  terminology     Json           @default("{}")
+  emailFromName   Json?          @map("email_from_name")
+  showPoweredBy   Boolean        @default(true) @map("show_powered_by")
+  publishedAt     DateTime?      @map("published_at") @db.Timestamptz(3)
+  publishedBy     String?        @map("published_by") @db.Uuid
+  updatedAt       DateTime       @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@map("tenant_branding")
+}
+
+/// Published branding snapshots for rollback. RLS: tenant_isolation.
+model TenantBrandingVersion {
+  tenantId    String   @map("tenant_id") @db.Uuid
+  version     Int
+  snapshot    Json
+  publishedBy String?  @map("published_by") @db.Uuid
+  publishedAt DateTime @default(now()) @map("published_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, version])
+  @@map("tenant_branding_version")
+}
+
+/// Typed per-school settings (keys validated by @studyhub/contracts). RLS: tenant_isolation.
+model TenantSetting {
+  tenantId  String   @map("tenant_id") @db.Uuid
+  key       String
+  value     Json
+  updatedBy String?  @map("updated_by") @db.Uuid
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, key])
+  @@map("tenant_setting")
 }

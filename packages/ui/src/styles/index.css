@@ -1,0 +1,150 @@
+/*
+ * Copperline for Tailwind 4 (blueprint 06 §2). The consuming app imports, in order:
+ *   @import 'tailwindcss';
+ *   @import '@studyhub/ui/styles.css';
+ *   @source '<path to @studyhub/ui>/dist';
+ *
+ * Tailwind's default palette and breakpoints are removed: components can only use semantic tokens.
+ */
+@import './tokens.css';
+
+@theme inline {
+  --color-*: initial;
+  --color-canvas: var(--sh-color-bg-canvas);
+  --color-surface: var(--sh-color-bg-surface);
+  --color-sunken: var(--sh-color-bg-sunken);
+  --color-ink: var(--sh-color-text-default);
+  --color-muted: var(--sh-color-text-muted);
+  --color-subtle: var(--sh-color-text-subtle);
+  --color-line: var(--sh-color-border-default);
+  --color-strong: var(--sh-color-border-strong);
+  --color-accent: var(--sh-color-accent);
+  --color-accent-hover: var(--sh-color-accent-hover);
+  --color-on-accent: var(--sh-color-on-accent);
+  --color-accent-soft: var(--sh-color-accent-soft);
+  --color-success: var(--sh-color-success);
+  --color-success-soft: var(--sh-color-success-soft);
+  --color-info: var(--sh-color-info);
+  --color-info-soft: var(--sh-color-info-soft);
+  --color-warning: var(--sh-color-warning);
+  --color-warning-soft: var(--sh-color-warning-soft);
+  --color-danger: var(--sh-color-danger);
+  --color-danger-soft: var(--sh-color-danger-soft);
+  --color-focus: var(--sh-color-focus-ring);
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-black: #000;
+
+  --breakpoint-*: initial;
+  --breakpoint-md: 37.5rem; /* 600 px: medium */
+  --breakpoint-lg: 64rem; /* 1024 px: expanded */
+  --breakpoint-xl: 90rem; /* 1440 px: wide */
+
+  --font-*: initial;
+  --font-ui: var(--sh-font-ui);
+  --font-reading: var(--sh-font-reading);
+  --font-mono: var(--sh-font-mono);
+
+  --text-*: initial;
+  --text-display: var(--sh-text-display-size);
+  --text-display--line-height: var(--sh-text-display-line);
+  --text-display--font-weight: var(--sh-text-display-weight);
+  --text-h1: var(--sh-text-h1-size);
+  --text-h1--line-height: var(--sh-text-h1-line);
+  --text-h1--font-weight: var(--sh-text-h1-weight);
+  --text-h2: var(--sh-text-h2-size);
+  --text-h2--line-height: var(--sh-text-h2-line);
+  --text-h2--font-weight: var(--sh-text-h2-weight);
+  --text-h3: var(--sh-text-h3-size);
+  --text-h3--line-height: var(--sh-text-h3-line);
+  --text-h3--font-weight: var(--sh-text-h3-weight);
+  --text-body-lg: var(--sh-text-body-lg-size);
+  --text-body-lg--line-height: var(--sh-text-body-lg-line);
+  --text-body: var(--sh-text-body-size);
+  --text-body--line-height: var(--sh-text-body-line);
+  --text-body-sm: var(--sh-text-body-sm-size);
+  --text-body-sm--line-height: var(--sh-text-body-sm-line);
+  --text-caption: var(--sh-text-caption-size);
+  --text-caption--line-height: var(--sh-text-caption-line);
+  --text-caption--font-weight: var(--sh-text-caption-weight);
+  --text-label: var(--sh-text-label-size);
+  --text-label--line-height: var(--sh-text-label-line);
+  --text-label--font-weight: var(--sh-text-label-weight);
+
+  --radius-*: initial;
+  --radius-sm: var(--sh-radius-sm);
+  --radius-md: var(--sh-radius-md);
+  --radius-lg: var(--sh-radius-lg);
+  --radius-full: var(--sh-radius-full);
+
+  --shadow-*: initial;
+  --shadow-1: var(--sh-elevation-1);
+  --shadow-2: var(--sh-elevation-2);
+
+  --ease-standard: var(--sh-easing-standard);
+  --container-reading: var(--sh-container-reading);
+  --container-app: var(--sh-container-app);
+}
+
+@layer base {
+  html {
+    background: var(--sh-color-bg-canvas);
+    color: var(--sh-color-text-default);
+    font-family: var(--sh-font-ui);
+    font-size: 100%;
+    line-height: var(--sh-text-body-line);
+    -webkit-text-size-adjust: 100%;
+    /* Sticky bars never hide the focused element (WCAG 2.4.11). */
+    scroll-padding-block: 5rem;
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--sh-color-bg-canvas);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--sh-color-focus-ring);
+    outline-offset: 2px;
+  }
+
+  a {
+    color: var(--sh-color-accent);
+    text-underline-offset: 0.2em;
+  }
+
+  ::placeholder {
+    color: var(--sh-color-text-subtle);
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility reading {
+  font-family: var(--sh-font-reading);
+  font-size: var(--sh-text-body-lg-size);
+  line-height: var(--sh-text-body-lg-line);
+  max-width: 68ch;
+}
+
+@utility duration-fast {
+  transition-duration: var(--sh-duration-fast);
+}
+
+@utility duration-medium {
+  transition-duration: var(--sh-duration-medium);
+}

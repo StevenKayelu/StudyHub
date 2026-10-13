@@ -26,6 +26,13 @@ export default defineConfig({
     {
       name: channel ? `chromium-${channel}` : 'chromium',
       use: { ...devices['Desktop Chrome'], ...(channel ? { channel } : {}) },
+      testIgnore: /lighthouse\.spec\.ts/,
+    },
+    {
+      // Runs after the functional tests, alone, so CPU contention can't distort its timings.
+      name: 'lighthouse',
+      testMatch: /lighthouse\.spec\.ts/,
+      dependencies: [channel ? `chromium-${channel}` : 'chromium'],
     },
   ],
   webServer: [
