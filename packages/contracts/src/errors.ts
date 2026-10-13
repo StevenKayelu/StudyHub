@@ -18,8 +18,16 @@ export const ERROR_DEFINITIONS = {
   TENANT_CONTEXT_MISSING: { status: 500, title: 'Something went wrong on our side', active: true },
 
   // Reserved for later milestones
-  UNAUTHENTICATED: { status: 401, title: 'Sign-in required', active: false },
-  FORBIDDEN: { status: 403, title: 'Not allowed', active: false },
+  UNAUTHENTICATED: { status: 401, title: 'Sign-in required', active: true },
+  FORBIDDEN: { status: 403, title: 'Not allowed', active: true },
+  // Identity (M4). Sign-in failures are always this one generic code (BR-65).
+  INVALID_CREDENTIALS: { status: 401, title: 'Email or password is incorrect', active: true },
+  TOKEN_INVALID: { status: 400, title: 'This link is invalid or has expired', active: true },
+  ORIGIN_REJECTED: { status: 403, title: 'Request origin not allowed', active: true },
+  REGISTRATION_CLOSED: { status: 403, title: 'This school does not accept new sign-ups', active: true },
+  LAST_OWNER: { status: 409, title: 'A school must keep at least one owner', active: true },
+  MFA_REQUIRED: { status: 401, title: 'Two-step verification required', active: true },
+  REAUTH_REQUIRED: { status: 403, title: 'Confirm it is you to continue', active: true },
   VERSION_CONFLICT: { status: 409, title: 'This item was changed elsewhere', active: false },
   FEATURE_NOT_ENABLED: { status: 403, title: 'This feature is not enabled', active: false },
   LIMIT_REACHED: { status: 409, title: 'Plan limit reached', active: false },

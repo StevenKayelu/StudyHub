@@ -21,7 +21,17 @@
     "tryAgain": "Try again",
     "details": "Details",
     "requestId": "Request ID {id}",
-    "account": "Account"
+    "account": "Account",
+    "signOut": "Sign out",
+    "saving": "Saving…",
+    "errorSummary": "There is a problem",
+    "showPassword": "Show password",
+    "continue": "Continue",
+    "cancel": "Cancel",
+    "email": "Email",
+    "password": "Password",
+    "name": "Full name",
+    "networkError": "We couldn't reach the server. Check your connection and try again."
   },
   "public": {
     "nav": {
@@ -73,7 +83,8 @@
       "overview": "Overview",
       "users": "Users",
       "branding": "Branding",
-      "settings": "Settings"
+      "settings": "Settings",
+      "team": "Team"
     },
     "title": "Overview",
     "queues": {
@@ -82,7 +93,25 @@
       "payments": "Payment exceptions",
       "none": "Nothing waiting"
     },
-    "metricsEmpty": "Key metrics appear here once you have sales."
+    "metricsEmpty": "Key metrics appear here once you have sales.",
+    "team": {
+      "title": "Team",
+      "members": "Members",
+      "invitations": "Pending invitations",
+      "invite": "Invite people",
+      "inviteSubmit": "Send invitation",
+      "inviteSubmitting": "Sending…",
+      "invited": "Invitation sent to {email}.",
+      "role": "Role",
+      "revoke": "Revoke",
+      "remove": "Remove",
+      "removeConfirm": "Remove {name} from this school? They lose access here. Their account and other schools are not affected.",
+      "changeRoles": "Roles",
+      "saveRoles": "Save roles",
+      "expires": "Expires {date}",
+      "none": "No pending invitations.",
+      "lastOwner": "A school must keep at least one owner."
+    }
   },
   "console": {
     "realm": "Platform console",
@@ -90,11 +119,56 @@
     "nav": {
       "overview": "Overview",
       "tenants": "Tenants",
-      "settings": "Settings"
+      "settings": "Settings",
+      "staff": "Staff"
     },
     "title": "Overview",
     "emptyTitle": "Nothing needs attention",
-    "emptyMessage": "Tenant counts, provider health and alerts appear here."
+    "emptyMessage": "Tenant counts, provider health and alerts appear here.",
+    "signIn": {
+      "title": "Platform console",
+      "helper": "Staff only. You will need your authenticator app.",
+      "submit": "Continue",
+      "submitting": "Checking…"
+    },
+    "verify": {
+      "title": "Two-step verification",
+      "body": "Enter the 6-digit code from your authenticator app, or a recovery code.",
+      "code": "Code",
+      "submit": "Verify",
+      "submitting": "Verifying…"
+    },
+    "enrol": {
+      "title": "Set up two-step verification",
+      "body": "Two-step verification is required for platform staff. Add this key to your authenticator app, then enter the 6-digit code it shows.",
+      "key": "Setup key",
+      "link": "Open in authenticator app",
+      "code": "6-digit code",
+      "submit": "Turn on",
+      "submitting": "Checking…",
+      "recoveryTitle": "Save your recovery codes",
+      "recoveryBody": "Each code works once if you lose your phone. Store them somewhere safe; they will not be shown again.",
+      "done": "I have saved them"
+    },
+    "staff": {
+      "title": "Staff",
+      "email": "Email",
+      "role": "Role",
+      "status": "Status",
+      "twoStep": "Two-step",
+      "disable": "Disable",
+      "disabled": "Disabled",
+      "active": "Active",
+      "reauthTitle": "Confirm it is you",
+      "reauthBody": "Enter a code from your authenticator app to continue.",
+      "on": "On",
+      "off": "Not set up",
+      "roles": {
+        "PLATFORM_OWNER": "Owner",
+        "PLATFORM_OPERATOR": "Operator",
+        "PLATFORM_SUPPORT": "Support"
+      }
+    }
   },
   "system": {
     "notFound": {
@@ -128,7 +202,8 @@
     },
     "permission": {
       "title": "You don't have access to this page",
-      "message": "Ask your school administrator for access."
+      "message": "Ask your school administrator for access.",
+      "signedInAs": "You are signed in as {name}."
     }
   },
   "status": {
@@ -138,5 +213,101 @@
     "database": "Database",
     "version": "Version",
     "unknown": "unknown"
+  },
+  "auth": {
+    "signIn": {
+      "title": "Sign in to {school}",
+      "helper": "Use your account email and password.",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "forgot": "Forgot password?",
+      "noAccount": "Don't have an account?",
+      "create": "Create one",
+      "joinTitle": "Join {school}?",
+      "joinBody": "You have an account, but you are not a member of {school} yet. Join to start learning here.",
+      "joinSubmit": "Join {school}",
+      "joinCancel": "Not now"
+    },
+    "signUp": {
+      "title": "Create your {school} account",
+      "submit": "Create account",
+      "submitting": "Creating…",
+      "terms": "I agree to the terms and the privacy notice",
+      "passwordHint": "At least 10 characters. Long phrases are easy to remember and hard to guess.",
+      "haveAccount": "Already have an account?",
+      "closed": "{school} does not accept new sign-ups. Ask the school for an invitation."
+    },
+    "checkEmail": {
+      "title": "Check your email",
+      "body": "If {email} can be used, we have sent it a link. Open it to confirm your email address. The link works for 24 hours.",
+      "bodyNoEmail": "We have sent you a link. Open it to confirm your email address."
+    },
+    "verify": {
+      "title": "Confirming your email…",
+      "done": "Your email is confirmed",
+      "doneSignedIn": "Your email is confirmed. Taking you to your learning…",
+      "failed": "This link is invalid or has expired",
+      "failedBody": "Sign in and ask for a new link from your account page."
+    },
+    "forgot": {
+      "title": "Forgot your password?",
+      "body": "Enter your account email. If it has an account, we'll send a link to choose a new password.",
+      "submit": "Send link",
+      "submitting": "Sending…",
+      "sent": "If that email has an account, a link is on its way. It works for 1 hour."
+    },
+    "reset": {
+      "title": "Choose a new password",
+      "submit": "Save password",
+      "submitting": "Saving…",
+      "done": "Your password is changed. You have been signed out everywhere.",
+      "newPassword": "New password"
+    },
+    "invitation": {
+      "title": "Join {school}",
+      "body": "You are invited as {role} with {email}.",
+      "existing": "Sign in with your existing password to accept.",
+      "newAccount": "Create your account to accept.",
+      "submit": "Accept invitation",
+      "submitting": "Accepting…",
+      "invalid": "This invitation is invalid, expired or already used."
+    },
+    "switching": {
+      "title": "Opening your school…",
+      "failed": "We couldn't open that school. Sign in there instead."
+    },
+    "roles": {
+      "LEARNER": "a learner",
+      "INSTRUCTOR": "an instructor",
+      "TENANT_ADMIN": "an administrator",
+      "TENANT_OWNER": "an owner"
+    },
+    "roleNames": {
+      "LEARNER": "Learner",
+      "INSTRUCTOR": "Instructor",
+      "TENANT_ADMIN": "Administrator",
+      "TENANT_OWNER": "Owner"
+    }
+  },
+  "account": {
+    "title": "Account",
+    "profile": "Profile",
+    "emailUnverified": "Not confirmed yet",
+    "resend": "Send a new link",
+    "resent": "A new link is on its way.",
+    "schools": "Your schools",
+    "current": "Current",
+    "switchTo": "Open {school}",
+    "sessions": "Signed-in devices",
+    "thisDevice": "This device",
+    "lastSeen": "Last active {time}",
+    "endSession": "Sign out this device",
+    "signOutEverywhere": "Sign out everywhere",
+    "signOutEverywhereHint": "Ends every session in every school, including this one.",
+    "password": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "passwordChanged": "Password changed. Your other devices have been signed out.",
+    "unknownDevice": "Unknown device"
   }
 }

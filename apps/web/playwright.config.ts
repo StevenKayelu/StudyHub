@@ -9,8 +9,8 @@ const isCI = Boolean(process.env.CI);
 const channel = process.env.PLAYWRIGHT_CHANNEL;
 
 /**
- * E2E smoke tests. Requires PostgreSQL running and migrated (`pnpm db:up && pnpm db:migrate`)
- * and built apps (`pnpm build`). Playwright starts the API and the web server itself.
+ * E2E tests. Require PostgreSQL and Mailpit running, migrated and seeded (`pnpm db:up && pnpm db:migrate &&
+ * pnpm db:seed`) and built apps (`pnpm build`). Playwright starts the API, the worker and the web server.
  */
 export default defineConfig({
   testDir: './tests/e2e',
@@ -40,6 +40,14 @@ export default defineConfig({
       command: 'pnpm --filter @studyhub/api start',
       cwd: '../..',
       url: 'http://127.0.0.1:4000/healthz',
+      reuseExistingServer: !isCI,
+      timeout: 60_000,
+    },
+    {
+      // Sends the emails the identity tests read back from Mailpit (pnpm db:up starts it).
+      command: 'pnpm --filter @studyhub/api start:worker',
+      cwd: '../..',
+      wait: { stdout: /Worker started/ },
       reuseExistingServer: !isCI,
       timeout: 60_000,
     },

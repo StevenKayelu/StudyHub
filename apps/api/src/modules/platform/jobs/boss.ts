@@ -2,6 +2,7 @@ import { type Job, type JobResult, PgBoss, type Queue } from 'pg-boss';
 import { Client } from 'pg';
 import type { Logger } from 'pino';
 
+import { EMAIL_SEND_JOB } from '../mail/email.job';
 import { handleHeartbeat, HEARTBEAT_JOB } from './heartbeat.job';
 import { runWithContext } from '../context/request-context';
 import { createEnvelope, type EnvelopeOptions, type JobEnvelope, jobEnvelopeSchema } from './job-envelope';
@@ -12,6 +13,14 @@ export const JOB_SCHEMA = 'pgboss';
 /** Every queue the system uses. Created by `pnpm db:migrate` (DDL), never by the worker. */
 export const QUEUE_DEFINITIONS: ReadonlyArray<Omit<Queue, 'name'> & { name: string }> = [
   { name: HEARTBEAT_JOB, retryLimit: 2, retryDelay: 1, retentionSeconds: 7 * 24 * 3600 },
+  // Emails: SMTP outages are retried with backoff for about an hour.
+  {
+    name: EMAIL_SEND_JOB,
+    retryLimit: 6,
+    retryDelay: 30,
+    retryBackoff: true,
+    retentionSeconds: 7 * 24 * 3600,
+  },
 ];
 
 export type JobHandler = (envelope: JobEnvelope, logger: Logger) => Promise<unknown>;

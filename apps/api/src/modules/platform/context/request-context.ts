@@ -11,6 +11,10 @@ import { AppError } from '../errors/app-error';
 export interface RequestContext {
   requestId: string;
   tenantId?: string;
+  /** The signed-in global account (tenant realm), set ONLY by the session hook from a valid session. */
+  userId?: string;
+  /** The signed-in staff member (console realm), set ONLY by the console session hook. */
+  platformUserId?: string;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

@@ -1,6 +1,8 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
 
+import { DEMO, signIn } from './helpers';
+
 // Requires `pnpm db:seed`: acme (Copperline default), beta (teal, Humanist, "Lecturer"/"Module"),
 // gamma (provisioning).
 const school = (host: string, path = '/') => `http://${host}:3000${path}`;
@@ -77,10 +79,10 @@ test.describe('school theming runtime (M3)', () => {
   });
 
   test('terminology substitution: each school sees its own words', async ({ page }) => {
-    await page.goto(school('beta.localhost', '/admin'));
+    await signIn(page, 'beta.localhost', DEMO.betaOwner, '/admin');
     await expect(page.getByText('Lecturer applications')).toBeVisible();
     await expect(page.getByText('Module reviews')).toBeVisible();
-    await page.goto(school('acme.localhost', '/admin'));
+    await signIn(page, 'acme.localhost', DEMO.acmeOwner, '/admin');
     await expect(page.getByText('Tutor applications')).toBeVisible();
     await expect(page.getByText('Course reviews')).toBeVisible();
   });
@@ -134,17 +136,22 @@ test.describe('school theming runtime (M3)', () => {
 });
 
 test.describe('shells and system screens (M3)', () => {
+  // Each space visited by someone allowed in (M4 guards the signed-in spaces).
   const shells = [
-    { path: '/', heading: 'Acme Academy' },
-    { path: '/learn', heading: 'My learning' },
-    { path: '/studio', heading: 'Courses' },
-    { path: '/admin', heading: 'Overview' },
-  ];
+    { path: '/', heading: 'Acme Academy', as: null },
+    { path: '/learn', heading: 'My learning', as: DEMO.learner },
+    { path: '/studio', heading: 'Courses', as: DEMO.acmeTutor },
+    { path: '/admin', heading: 'Overview', as: DEMO.acmeOwner },
+  ] as const;
 
   for (const host of ['acme.localhost', 'beta.localhost']) {
-    for (const { path } of shells) {
+    for (const { path, as } of shells) {
       test(`${host}${path} has no serious axe violations`, async ({ page }) => {
-        await page.goto(school(host, path));
+        // Beta has no instructor: its studio shows the permission page (S-X05), which is checked too.
+        const account =
+          as === null ? null : host === 'beta.localhost' && as !== DEMO.learner ? DEMO.betaOwner : as;
+        if (account !== null) await signIn(page, host, account, path);
+        else await page.goto(school(host, path));
         await expect(page.getByRole('main')).toBeVisible();
         await expectNoSeriousAxeViolations(page);
       });
@@ -152,8 +159,9 @@ test.describe('shells and system screens (M3)', () => {
   }
 
   test('each shell renders its landmark structure and one h1', async ({ page }) => {
-    for (const { path, heading } of shells) {
-      await page.goto(school('acme.localhost', path));
+    for (const { path, heading, as } of shells) {
+      if (as !== null) await signIn(page, 'acme.localhost', as, path);
+      else await page.goto(school('acme.localhost', path));
       await expect(page.getByRole('heading', { level: 1 }), path).toHaveText(heading);
       await expect(page.getByRole('link', { name: 'Skip to content' }), path).toBeAttached();
       await expect(page.getByRole('navigation').first(), path).toBeAttached();
@@ -162,7 +170,7 @@ test.describe('shells and system screens (M3)', () => {
 
   test('the learner shell switches to a bottom bar on compact screens', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 800 });
-    await page.goto(school('acme.localhost', '/learn'));
+    await signIn(page, 'acme.localhost', DEMO.learner);
     const bottomBar = page.locator('nav.fixed');
     await expect(bottomBar).toBeVisible();
     await expect(bottomBar.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
@@ -210,7 +218,9 @@ test.describe('shells and system screens (M3)', () => {
     page,
   }) => {
     await page.goto(school('console.localhost'));
-    await expect(page.getByText('Platform console', { exact: true })).toBeVisible();
+    // Signed out, the console opens on its own sign-in page (M4), still in the console theme.
+    await expect(page).toHaveURL(school('console.localhost', '/sign-in'));
+    await expect(page.getByText('Platform console', { exact: true }).first()).toBeVisible();
     expect(await cssVar(page, '--sh-color-accent')).toBe('#1d5da6');
     await expect(page.locator('body')).not.toContainText(/Acme|Beta/);
     await expectNoSeriousAxeViolations(page);

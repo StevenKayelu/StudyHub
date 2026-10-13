@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/** Public development-only key (base64 of a fixed 32-byte string). Refused in production. */
+export const DEV_IDENTITY_ENCRYPTION_KEY = Buffer.from('studyhub-local-development-key!!').toString('base64');
+
 /** Placeholder marker used in .env.example; real deployments must never run with it. */
 const PLACEHOLDER_MARKER = 'change-me';
 
@@ -54,8 +57,57 @@ export const apiEnvSchema = z
       )
       .pipe(z.array(z.string().regex(/^[0-9a-fA-F.:/]+$/, 'must be IP addresses or CIDR ranges')).min(1)),
     DATABASE_URL_APP: postgresUrl,
+    /**
+     * 32-byte key (base64) for secrets at rest: TOTP secrets and links in queued emails. Development
+     * uses a fixed, public key; production must set its own (a KMS-managed key later).
+     */
+    IDENTITY_ENCRYPTION_KEY: z
+      .string()
+      .default(DEV_IDENTITY_ENCRYPTION_KEY)
+      .refine((value) => Buffer.from(value, 'base64').length === 32, {
+        message: 'must be 32 bytes, base64-encoded',
+      }),
+    /** How emails link to a school host. `{host}` is replaced by the school's primary host. */
+    SCHOOL_URL_TEMPLATE: z
+      .string()
+      .default('http://{host}:3000')
+      .refine((value) => /^https?:\/\/\{host\}(:\d{1,5})?$/.test(value), {
+        message: 'must look like https://{host} (optionally with a port)',
+      }),
+    /** Hosts of the platform console; /api/console/* answers only on these (realm separation). */
+    CONSOLE_HOSTS: z
+      .string()
+      .default('console.localhost')
+      .transform((value) =>
+        value
+          .split(',')
+          .map((entry) => entry.trim().toLowerCase())
+          .filter((entry) => entry.length > 0),
+      )
+      .pipe(z.array(z.string().min(1)).min(1)),
+    /** Outgoing mail (local: Mailpit from docker compose). */
+    SMTP_URL: z.string().default('smtp://127.0.0.1:1025'),
+    MAIL_FROM_ADDRESS: z.email().default('no-reply@mail.studyhub.localhost'),
   })
-  .superRefine((env, context) => rejectPlaceholdersInProduction(env, context, ['DATABASE_URL_APP']));
+  .superRefine((env, context) => {
+    rejectPlaceholdersInProduction(env, context, ['DATABASE_URL_APP']);
+    if (env.NODE_ENV === 'production') {
+      if (env.IDENTITY_ENCRYPTION_KEY === DEV_IDENTITY_ENCRYPTION_KEY) {
+        context.addIssue({
+          code: 'custom',
+          path: ['IDENTITY_ENCRYPTION_KEY'],
+          message: 'is the public development key; set a real key for production',
+        });
+      }
+      if (!env.SCHOOL_URL_TEMPLATE.startsWith('https://')) {
+        context.addIssue({
+          code: 'custom',
+          path: ['SCHOOL_URL_TEMPLATE'],
+          message: 'must use https in production',
+        });
+      }
+    }
+  });
 
 /** Environment for the migration CLI (runs as the migrator role). */
 export const migratorEnvSchema = z

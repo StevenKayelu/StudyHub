@@ -98,6 +98,8 @@ export class ProblemFilter implements ExceptionFilter {
       this.logger.debug({ requestId: request.id, code }, 'Request failed');
     }
 
+    const retryAfter = options.extensions?.retryAfter;
+    if (typeof retryAfter === 'number') void reply.header('Retry-After', String(retryAfter));
     void sendProblem(reply, request.id, code, options);
   }
 }

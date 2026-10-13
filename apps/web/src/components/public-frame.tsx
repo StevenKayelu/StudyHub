@@ -6,7 +6,9 @@ import NextLink from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 
+import { getMe } from '../lib/session';
 import { getTerms } from '../lib/tenant';
+import { SignOutButton } from './sign-out-button';
 
 const brandOf = (tenant: TenantBootstrap) => ({ name: tenant.branding.displayName, href: '/' });
 
@@ -23,6 +25,7 @@ export async function PublicFrame({
   const locale = await getLocale();
   const t = await getTranslations();
   const terms = await getTerms(tenant, locale);
+  const me = await getMe();
   return (
     <PublicShell
       brand={brandOf(tenant)}
@@ -33,14 +36,23 @@ export async function PublicFrame({
         { href: '/teach', label: t('public.nav.teach', terms), current: current === 'teach' },
       ]}
       actions={
-        <>
-          <NextLink href="/sign-in" className={buttonClasses('ghost', 'sm')}>
-            {t('common.signIn')}
-          </NextLink>
-          <NextLink href="/sign-up" className={buttonClasses('primary', 'sm')}>
-            {t('common.createAccount')}
-          </NextLink>
-        </>
+        me === null ? (
+          <>
+            <NextLink href="/sign-in" className={buttonClasses('ghost', 'sm')}>
+              {t('common.signIn')}
+            </NextLink>
+            <NextLink href="/sign-up" className={buttonClasses('primary', 'sm')}>
+              {t('common.createAccount')}
+            </NextLink>
+          </>
+        ) : (
+          <>
+            <NextLink href="/learn" className={buttonClasses('secondary', 'sm')}>
+              {t('learn.title')}
+            </NextLink>
+            <SignOutButton label={t('common.signOut')} />
+          </>
+        )
       }
       footer={
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">

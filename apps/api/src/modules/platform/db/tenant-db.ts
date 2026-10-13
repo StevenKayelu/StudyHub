@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import type { Prisma, PrismaClient } from '../../../generated/prisma/client';
-import { requireTenantId } from '../context/request-context';
+import { currentContext, requireTenantId } from '../context/request-context';
 import { AppError } from '../errors/app-error';
 import { PrismaService } from './prisma.service';
 
@@ -19,13 +19,34 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  *
  * Keep external calls (payment, video, email providers) OUTSIDE `fn`.
  */
-export async function runInTenantTx<T>(prisma: PrismaClient, fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+export async function runInTenantTx<T>(
+  prisma: PrismaClient,
+  fn: (tx: TenantTx) => Promise<T>,
+  options: { userId?: string } = {},
+): Promise<T> {
   const tenantId = requireTenantId();
   if (!UUID.test(tenantId)) {
     throw new AppError('TENANT_CONTEXT_MISSING', { detail: 'Tenant context is malformed.' });
   }
+  // The signed-in account (or, while registering, the account being created) for the identity RLS
+  // policies. Still ONE statement, so the D5 budget (exactly one extra statement) holds.
+  const userId = options.userId ?? currentContext()?.userId ?? '';
+  if (userId !== '' && !UUID.test(userId)) {
+    throw new AppError('TENANT_CONTEXT_MISSING', { detail: 'User context is malformed.' });
+  }
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true), set_config('app.user_id', ${userId}, true)`;
+    return fn(tx);
+  });
+}
+
+/**
+ * Runs `fn` in ONE transaction of the platform (console) realm: `app.realm = 'platform'` makes the
+ * platform_* tables visible, and no tenant context is set, so every school-owned table stays empty.
+ */
+export async function runInPlatformTx<T>(prisma: PrismaClient, fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.realm', 'platform', true)`;
     return fn(tx);
   });
 }
@@ -37,5 +58,15 @@ export class TenantDb {
 
   run<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
     return runInTenantTx(this.prisma, fn);
+  }
+
+  /** As run(), acting as a specific account (sign-in, registration, token redemption). */
+  runAs<T>(userId: string, fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+    return runInTenantTx(this.prisma, fn, { userId });
+  }
+
+  /** A console-realm transaction (platform tables only). */
+  runPlatform<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+    return runInPlatformTx(this.prisma, fn);
   }
 }

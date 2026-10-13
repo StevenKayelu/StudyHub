@@ -32,6 +32,8 @@ export function proxy(request: NextRequest): NextResponse {
 
   const headers = new Headers(request.headers);
   headers.set('x-forwarded-host', rawHost);
+  // The original path (before rewrites), for "return to" after sign-in. Client values are overwritten.
+  headers.set('x-studyhub-path', `${pathname}${request.nextUrl.search}`.slice(0, 2048));
 
   if (process.env.MAINTENANCE_MODE === 'on' && !pathname.startsWith('/api/')) {
     const url = request.nextUrl.clone();

@@ -10,6 +10,29 @@ export const GLOBAL_TABLES: Readonly<Record<string, string>> = {
   _prisma_migrations: 'migration bookkeeping (migrator only)',
   platform_setting: 'global platform settings, no tenant data',
   tenant: 'school identity; RLS policy tenant_self limits it to its own context',
+  user_account: 'global account (D3); RLS account_self_or_member',
+  credential: 'global credential; RLS credential_self',
+  one_time_token: 'global single-use tokens; RLS one_time_token_self',
+  tenant_handoff: 'school switch (target_tenant_id); RLS tenant_handoff_self',
+  platform_user: 'console realm; RLS platform_realm',
+  platform_credential: 'console realm; RLS platform_realm',
+  platform_session: 'console realm; RLS platform_realm',
+  platform_audit_log: 'console realm; RLS platform_realm',
+};
+
+/**
+ * Global tables that hold personal or secret data: RLS must be enabled, forced and carry this policy
+ * (a policy that is not keyed on app.tenant_id, so the tenant rule above can't check it).
+ */
+export const GLOBAL_RLS_TABLES: Readonly<Record<string, string>> = {
+  user_account: 'account_self_or_member',
+  credential: 'credential_self',
+  one_time_token: 'one_time_token_self',
+  tenant_handoff: 'tenant_handoff_self',
+  platform_user: 'platform_realm',
+  platform_credential: 'platform_realm',
+  platform_session: 'platform_realm',
+  platform_audit_log: 'platform_realm',
 };
 
 /** Tables that carry RLS with a non-standard policy instead of tenant_isolation. */
@@ -18,7 +41,16 @@ export const SPECIAL_POLICY_TABLES: Readonly<Record<string, string>> = {
 };
 
 /** The complete SECURITY DEFINER inventory (blueprint 04 §17.4). */
-export const DEFINER_INVENTORY: ReadonlySet<string> = new Set(['resolve_tenant', 'claim_due_outbox']);
+export const DEFINER_INVENTORY: ReadonlySet<string> = new Set([
+  'resolve_tenant',
+  'claim_due_outbox',
+  // M4 identity (04 §17.5)
+  'auth_lookup',
+  'redeem_one_time_token',
+  'my_memberships',
+  'revoke_user_sessions_everywhere',
+  'exchange_handoff',
+]);
 
 /** Indexes on tenant tables that may not lead with tenant_id, and why. */
 export const INDEX_EXCEPTIONS: Readonly<Record<string, string>> = {
@@ -77,6 +109,28 @@ export async function findTenancyViolations(client: Client): Promise<string[]> {
     } else if (!(table.table_name in GLOBAL_TABLES)) {
       violations.push(`${table.table_name}: no tenant_id and not on the global-table allowlist`);
     }
+  }
+
+  // Global identity and console tables: forced RLS with their named policy.
+  const globalRls = await client.query<{
+    table_name: string;
+    rls: boolean;
+    forced: boolean;
+    policies: string[] | null;
+  }>(
+    `SELECT c.relname AS table_name, c.relrowsecurity AS rls, c.relforcerowsecurity AS forced,
+            (SELECT array_agg(p.policyname::text) FROM pg_policies p
+              WHERE p.schemaname = 'public' AND p.tablename = c.relname) AS policies
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname = ANY($1::text[])`,
+    [Object.keys(GLOBAL_RLS_TABLES)],
+  );
+  for (const table of globalRls.rows) {
+    if (!table.rls) violations.push(`${table.table_name}: row-level security is not enabled`);
+    if (!table.forced) violations.push(`${table.table_name}: row-level security is not forced`);
+    const expected = GLOBAL_RLS_TABLES[table.table_name]!;
+    if (!(table.policies ?? []).includes(expected))
+      violations.push(`${table.table_name}: missing ${expected} policy`);
   }
 
   // Views must use the caller's permissions; materialised views are not allowed.

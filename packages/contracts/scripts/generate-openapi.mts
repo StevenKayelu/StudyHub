@@ -14,6 +14,7 @@ import {
   readyzResponseSchema,
   tenantBootstrapSchema,
 } from '../dist/index.js';
+import { IDENTITY_SCHEMAS, IDENTITY_TAGS, identityPaths, SECURITY_SCHEMES } from './identity-openapi.mts';
 
 type JsonObject = Record<string, unknown>;
 
@@ -37,6 +38,7 @@ const document = {
   tags: [
     { name: 'operations', description: 'Liveness and readiness probes' },
     { name: 'tenancy', description: 'School context resolved from the request host' },
+    ...IDENTITY_TAGS,
   ],
   paths: {
     '/healthz': {
@@ -87,9 +89,14 @@ const document = {
         },
       },
     },
+    ...identityPaths(ref),
   },
   components: {
+    securitySchemes: SECURITY_SCHEMES,
     schemas: {
+      ...Object.fromEntries(
+        Object.entries(IDENTITY_SCHEMAS).map(([name, schema]) => [name, toSchema(schema)]),
+      ),
       Healthz: toSchema(healthzResponseSchema),
       Readyz: toSchema(readyzResponseSchema),
       ReadinessChecks: toSchema(readinessChecksSchema),

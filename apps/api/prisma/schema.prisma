@@ -68,6 +68,11 @@ model Tenant {
   branding         TenantBranding?
   brandingVersions TenantBrandingVersion[]
   settings         TenantSetting[]
+  memberships      TenantMembership[]
+  sessions         Session[]
+  invitations      Invitation[]
+  handoffs         TenantHandoff[]
+  oneTimeTokens    OneTimeToken[]
 
   @@map("tenant")
 }
@@ -196,4 +201,275 @@ model TenantSetting {
 
   @@id([tenantId, key])
   @@map("tenant_setting")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Identity (M4, migration 0004). Global identity tables are under self/member RLS; school-owned rows
+// under tenant_isolation; platform tables are visible only inside console transactions.
+// ---------------------------------------------------------------------------------------------
+
+enum AccountStatus {
+  ACTIVE
+  LOCKED
+  DELETION_REQUESTED
+  DELETED
+}
+
+enum TokenPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+  CHANGE_EMAIL
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum TenantRole {
+  LEARNER
+  INSTRUCTOR
+  TENANT_ADMIN
+  TENANT_OWNER
+}
+
+enum PlatformRole {
+  PLATFORM_OWNER
+  PLATFORM_OPERATOR
+  PLATFORM_SUPPORT
+}
+
+enum PlatformUserStatus {
+  ACTIVE
+  DISABLED
+}
+
+/// One global account per person (D3). RLS: yourself, or a member of the current school.
+model UserAccount {
+  id                  String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email               String        @unique
+  emailVerifiedAt     DateTime?     @map("email_verified_at") @db.Timestamptz(3)
+  displayName         String        @map("display_name")
+  defaultLocale       String        @default("en") @map("default_locale")
+  status              AccountStatus @default(ACTIVE)
+  deletionRequestedAt DateTime?     @map("deletion_requested_at") @db.Timestamptz(3)
+  anonymisedAt        DateTime?     @map("anonymised_at") @db.Timestamptz(3)
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime      @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version             Int           @default(1)
+
+  credential  Credential?
+  tokens      OneTimeToken[]
+  handoffs    TenantHandoff[]
+  memberships TenantMembership[]
+  sessions    Session[]
+
+  @@map("user_account")
+}
+
+/// Password hash, lockout and TOTP. RLS: yourself only.
+model Credential {
+  userId            String    @id @map("user_id") @db.Uuid
+  passwordHash      String    @map("password_hash")
+  passwordChangedAt DateTime  @default(now()) @map("password_changed_at") @db.Timestamptz(3)
+  failedCount       Int       @default(0) @map("failed_count")
+  lockedUntil       DateTime? @map("locked_until") @db.Timestamptz(3)
+  totpSecretEnc     Bytes?    @map("totp_secret_enc")
+  totpEnabledAt     DateTime? @map("totp_enabled_at") @db.Timestamptz(3)
+  recoveryCodesHash String[]  @default([]) @map("recovery_codes_hash")
+
+  user UserAccount @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("credential")
+}
+
+/// Hashed single-use tokens. RLS: yourself; redeemed via redeem_one_time_token().
+model OneTimeToken {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
+  purpose         TokenPurpose
+  tokenHash       Bytes        @unique @map("token_hash")
+  payload         Json         @default("{}")
+  contextTenantId String?      @map("context_tenant_id") @db.Uuid
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt       DateTime     @map("expires_at") @db.Timestamptz(3)
+  usedAt          DateTime?    @map("used_at") @db.Timestamptz(3)
+
+  user          UserAccount @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contextTenant Tenant?     @relation(fields: [contextTenantId], references: [id], onDelete: SetNull)
+
+  @@index([userId, purpose], map: "one_time_token_user_purpose_idx")
+  @@map("one_time_token")
+}
+
+/// One-time school switch (BR-68). RLS: yourself; redeemed via exchange_handoff().
+model TenantHandoff {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  targetTenantId String    @map("target_tenant_id") @db.Uuid
+  tokenHash      Bytes     @unique @map("token_hash")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt         DateTime? @map("used_at") @db.Timestamptz(3)
+
+  user         UserAccount @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetTenant Tenant      @relation(fields: [targetTenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "tenant_handoff_user_idx")
+  @@map("tenant_handoff")
+}
+
+/// A person's membership of one school (D3). RLS: tenant_isolation.
+model TenantMembership {
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String           @map("tenant_id") @db.Uuid
+  userId              String           @map("user_id") @db.Uuid
+  status              MembershipStatus @default(ACTIVE)
+  displayNameOverride String?          @map("display_name_override")
+  studentNumber       String?          @map("student_number")
+  joinedAt            DateTime?        @map("joined_at") @db.Timestamptz(3)
+  suspendedAt         DateTime?        @map("suspended_at") @db.Timestamptz(3)
+  revokedAt           DateTime?        @map("revoked_at") @db.Timestamptz(3)
+  revokedBy           String?          @map("revoked_by") @db.Uuid
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  version             Int              @default(1)
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user     UserAccount      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  roles    MembershipRole[]
+  sessions Session[]
+
+  @@unique([tenantId, userId], map: "tenant_membership_tenant_user_key")
+  @@unique([tenantId, id], map: "tenant_membership_tenant_id_id_key")
+  @@index([tenantId, status], map: "tenant_membership_tenant_status_idx")
+  @@map("tenant_membership")
+}
+
+/// Roles of a membership. RLS: tenant_isolation; composite FK to the membership.
+model MembershipRole {
+  tenantId     String     @map("tenant_id") @db.Uuid
+  membershipId String     @map("membership_id") @db.Uuid
+  role         TenantRole
+  grantedBy    String?    @map("granted_by") @db.Uuid
+  grantedAt    DateTime   @default(now()) @map("granted_at") @db.Timestamptz(3)
+
+  membership TenantMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, membershipId, role])
+  @@map("membership_role")
+}
+
+/// A signed-in browser on one school host (D4). RLS: tenant_isolation.
+model Session {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  membershipId      String   @map("membership_id") @db.Uuid
+  tokenHash         Bytes    @map("token_hash")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt        DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  idleExpiresAt     DateTime @map("idle_expires_at") @db.Timestamptz(3)
+  absoluteExpiresAt DateTime @map("absolute_expires_at") @db.Timestamptz(3)
+  ip                String?  @db.Inet
+  userAgent         String?  @map("user_agent")
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user       UserAccount      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  membership TenantMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, tokenHash], map: "session_tenant_token_key")
+  @@index([tenantId, userId], map: "session_tenant_user_idx")
+  @@map("session")
+}
+
+/// Invitation to join a school with a role (BR-67). RLS: tenant_isolation.
+model Invitation {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String     @map("tenant_id") @db.Uuid
+  email      String
+  role       TenantRole
+  tokenHash  Bytes      @map("token_hash")
+  invitedBy  String?    @map("invited_by") @db.Uuid
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt  DateTime   @map("expires_at") @db.Timestamptz(3)
+  acceptedAt DateTime?  @map("accepted_at") @db.Timestamptz(3)
+  revokedAt  DateTime?  @map("revoked_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, tokenHash], map: "invitation_tenant_token_key")
+  @@map("invitation")
+}
+
+/// Platform staff (console realm). RLS: platform_realm.
+model PlatformUser {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email       String             @unique
+  displayName String             @map("display_name")
+  role        PlatformRole
+  status      PlatformUserStatus @default(ACTIVE)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime           @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version     Int                @default(1)
+
+  credential PlatformCredential?
+  sessions   PlatformSession[]
+
+  @@map("platform_user")
+}
+
+/// Staff password and mandatory TOTP. RLS: platform_realm.
+model PlatformCredential {
+  userId            String    @id @map("user_id") @db.Uuid
+  passwordHash      String    @map("password_hash")
+  passwordChangedAt DateTime  @default(now()) @map("password_changed_at") @db.Timestamptz(3)
+  failedCount       Int       @default(0) @map("failed_count")
+  lockedUntil       DateTime? @map("locked_until") @db.Timestamptz(3)
+  totpSecretEnc     Bytes?    @map("totp_secret_enc")
+  totpEnabledAt     DateTime? @map("totp_enabled_at") @db.Timestamptz(3)
+  totpLastStep      BigInt?   @map("totp_last_step")
+  recoveryCodesHash String[]  @default([]) @map("recovery_codes_hash")
+
+  user PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("platform_credential")
+}
+
+/// Console session (idle 30 min, absolute 12 h). RLS: platform_realm.
+model PlatformSession {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  tokenHash         Bytes     @unique @map("token_hash")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt        DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  idleExpiresAt     DateTime  @map("idle_expires_at") @db.Timestamptz(3)
+  absoluteExpiresAt DateTime  @map("absolute_expires_at") @db.Timestamptz(3)
+  mfaVerifiedAt     DateTime? @map("mfa_verified_at") @db.Timestamptz(3)
+  reauthAt          DateTime? @map("reauth_at") @db.Timestamptz(3)
+  ip                String?   @db.Inet
+  userAgent         String?   @map("user_agent")
+
+  user PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "platform_session_user_idx")
+  @@map("platform_session")
+}
+
+/// Console audit trail (append-only for the runtime role). RLS: platform_realm.
+model PlatformAuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    String?  @map("actor_id") @db.Uuid
+  tenantRef  String?  @map("tenant_ref") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  before     Json?
+  after      Json?
+  requestId  String?  @map("request_id")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt(sort: Desc)], map: "platform_audit_log_created_idx")
+  @@map("platform_audit_log")
 }

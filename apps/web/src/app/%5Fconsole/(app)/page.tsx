@@ -1,7 +1,7 @@
 import { StatePanel } from '@studyhub/ui';
 import { getTranslations } from 'next-intl/server';
 
-import { ConsoleFrame } from '../../components/workspace-frames';
+import { ConsoleFrame } from '../../../components/workspace-frames';
 
 /** S-C02 Overview: the console shell. Data and access control arrive with the console milestones. */
 export default async function ConsoleOverviewPage() {

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import type { Client, QueryResult } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -44,6 +44,12 @@ async function outcome(run: () => Promise<QueryResult>): Promise<'denied' | numb
   }
 }
 
+/** One person (global account, D3) who is a member of both schools in the fixtures. */
+let personId = '';
+/** The fixture membership of each school, so dependent fixtures (and forgeries) can reference it. */
+const membershipOf: Record<string, string> = {};
+const fixtureHash = () => randomBytes(32);
+
 /** How to create one row of each tenant-owned table. A new tenant table MUST be added here (T-ISO-05). */
 const FIXTURES: Readonly<
   Record<string, { granted: boolean; insert: (c: Client, tenantId: string) => Promise<unknown> }>
@@ -63,6 +69,45 @@ const FIXTURES: Readonly<
         tenantId,
         JSON.stringify({ marker: tenantId }),
       ]),
+  },
+  // Insertion order matters: memberships first, then rows that reference them.
+  tenant_membership: {
+    granted: true,
+    insert: async (c, tenantId) => {
+      const result = await c.query<{ id: string }>(
+        `INSERT INTO tenant_membership (tenant_id, user_id, status) VALUES ($1, $2, 'ACTIVE')
+         ON CONFLICT (tenant_id, user_id) DO UPDATE SET status = EXCLUDED.status RETURNING id`,
+        [tenantId, personId],
+      );
+      membershipOf[tenantId] ??= result.rows[0]!.id;
+      return result;
+    },
+  },
+  membership_role: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(`INSERT INTO membership_role (tenant_id, membership_id, role) VALUES ($1, $2, 'LEARNER')`, [
+        tenantId,
+        membershipOf[tenantId] ?? randomUUID(),
+      ]),
+  },
+  session: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO session (tenant_id, user_id, membership_id, token_hash, idle_expires_at, absolute_expires_at)
+         VALUES ($1, $2, $3, $4, now() + interval '1 hour', now() + interval '1 day')`,
+        [tenantId, personId, membershipOf[tenantId] ?? randomUUID(), fixtureHash()],
+      ),
+  },
+  invitation: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO invitation (tenant_id, email, role, token_hash, expires_at)
+         VALUES ($1, $2, 'INSTRUCTOR', $3, now() + interval '1 day')`,
+        [tenantId, `invitee-${randomUUID().slice(0, 8)}@example.com`, fixtureHash()],
+      ),
   },
   tenant_branding: {
     granted: false, // read-only for the runtime role until the branding editor (F39); provisioning writes it
@@ -124,6 +169,16 @@ describe('tenant isolation in PostgreSQL (T-ISO-01..09, 15, 16)', () => {
     if (first.outcome !== 'created' || second.outcome !== 'created') throw new Error('provisioning failed');
     tenantA = first.tenantId;
     tenantB = second.tenantId;
+
+    // The fixture person: created as themselves (user_account's WITH CHECK is id = app.user_id).
+    personId = randomUUID();
+    await migrator.query('BEGIN');
+    await migrator.query(`SELECT set_config('app.user_id', $1, true)`, [personId]);
+    await migrator.query(
+      `INSERT INTO user_account (id, email, display_name) VALUES ($1, $2, 'Fixture Person')`,
+      [personId, `person-${personId.slice(0, 8)}@example.com`],
+    );
+    await migrator.query('COMMIT');
 
     for (const tenantId of [tenantA, tenantB]) {
       for (const fixture of Object.values(FIXTURES)) {

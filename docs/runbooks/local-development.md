@@ -36,6 +36,16 @@ Role scripts: `infra/postgres/init/01-roles.sql` (M1) and `02-tenancy-roles.sql`
 
 If you change the passwords in `.env` after the volume exists, the roles keep their old passwords. Reset the database (below) or change them with `ALTER ROLE` as `postgres`.
 
+## Accounts and email locally (M4)
+
+- `pnpm db:seed` creates demo accounts, all with the password `studyhub-demo-pass` (development only; the seed refuses production):
+  - `owner@acme.test` (Acme owner), `tutor@acme.test` (Acme instructor), `owner@beta.test` (Beta owner),
+  - `learner@example.test` (a learner at both Acme and Beta: one account, two schools),
+  - `staff@studyhub.test` (platform owner; sign in at http://console.localhost:3000).
+- The console requires two-step verification. At first sign-in you add the shown key to an authenticator app. Re-running `pnpm db:seed` resets the demo staff member's enrolment.
+- Every email (verification, password reset, invitations) is caught by **Mailpit**: http://127.0.0.1:8025. The worker sends them (`pnpm dev` starts it). Links point at the school host, e.g. `http://acme.localhost:3000/verify-email#token=…`.
+- Sessions are per school host: signing in at acme.localhost doesn't sign you in at beta.localhost. Use **Account → Your schools** to switch.
+
 ## Reset the local database (deletes all local data)
 
 ```powershell

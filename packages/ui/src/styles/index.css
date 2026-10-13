@@ -108,8 +108,11 @@
     outline-offset: 2px;
   }
 
+  /* Links are underlined: colour alone never marks a link (WCAG 1.4.1). Navigation and button-styled
+     links opt out with `no-underline`. */
   a {
     color: var(--sh-color-accent);
+    text-decoration-line: underline;
     text-underline-offset: 0.2em;
   }
 

@@ -2,13 +2,14 @@
 
 StudyHub is a multi-tenant, white-label learning platform for schools, colleges, tutors and education businesses. The full product, architecture and design specification is in [`docs/blueprint/`](docs/blueprint/README.md).
 
-**Current state: Milestone 3, design system, theming and shells** (on top of M1 and M2).
+**Current state: Milestone 4, identity realms and access control** (on top of M1–M3).
 
 - A TypeScript monorepo with an API, a background worker and a web app; shared contracts; a PostgreSQL migration pipeline; automated quality gates (M1).
 - **Multi-school isolation enforced by the database** (M2): every school-owned table has forced row-level security; the school is resolved only from the request host; background jobs and the outbox run in their school's context; no database login can bypass RLS. Design: [`docs/design/m2-tenancy-kernel.md`](docs/design/m2-tenancy-kernel.md), ADR-0016 to ADR-0018.
 - **Copperline design system and white-label theming** (M3): tokens, components and Storybook in `packages/ui`; each school's accent colour is compiled into an accessible light and dark theme (BR-51); 3 self-hosted font presets; per-school languages and terminology; Public, Learn, Studio, Admin and Console shells; system screens. Design: [`docs/design/m3-design-system.md`](docs/design/m3-design-system.md), ADR-0010.
+- **Accounts and access** (M4): one account per person with per-school memberships and roles; sign-in on each school's host, school switching by one-time hand-off, invitations, email verification and password reset; a separate platform console with mandatory two-step verification; a policy layer and an authorization matrix tested in CI. Design: [`docs/design/m4-identity-realms.md`](docs/design/m4-identity-realms.md); ASVS checklist: [`docs/security/asvs-v2-v3.md`](docs/security/asvs-v2-v3.md).
 
-There are no user accounts, sign-in or product features yet; those arrive in later milestones (see `docs/blueprint/07-implementation-roadmap.md`).
+There are no product features (courses, quizzes, payments) yet; those arrive in later milestones (see `docs/blueprint/07-implementation-roadmap.md`).
 
 ## Repository layout
 
@@ -62,7 +63,7 @@ pnpm --filter @studyhub/web exec playwright install --only-shell chromium
 ```
 
 - **Upgrading a database volume created before M2:** run `pnpm db:provision-roles` once (after `pnpm db:up`, before `pnpm db:migrate`). PostgreSQL only runs the role scripts when a volume is first created.
-- `pnpm db:seed` creates three demo schools: **Acme Academy** (`acme.localhost`, Copperline default), **Beta College** (`beta.localhost`, teal accent, Humanist fonts, "Lecturer"/"Module") and **Gamma Tutors** (`gamma.localhost`, still provisioning: "Coming soon"). It is idempotent and refreshes the demo branding.
+- `pnpm db:seed` creates three demo schools: **Acme Academy** (`acme.localhost`, Copperline default), **Beta College** (`beta.localhost`, teal accent, Humanist fonts, "Lecturer"/"Module") and **Gamma Tutors** (`gamma.localhost`, still provisioning: "Coming soon"). It is idempotent and refreshes the demo branding. It also creates demo accounts (password `studyhub-demo-pass`, development only): `owner@acme.test`, `tutor@acme.test`, `owner@beta.test`, `learner@example.test` (a member of both Acme and Beta) and the platform owner `staff@studyhub.test`. See the runbook.
 - Create another school: `pnpm tenant:create --slug demo --name "Demo School" --status ACTIVE` (host defaults to `demo.localhost`).
 
 - `.env` holds **local-only placeholder values**. It is git-ignored; never commit it.

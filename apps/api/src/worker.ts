@@ -1,9 +1,14 @@
 import {
   ConfigError,
+  createEmailHandler,
   createLogger,
+  createMailTransport,
+  DEFAULT_JOB_HANDLERS,
   dispatchDueOutbox,
+  EMAIL_SEND_JOB,
   loadApiEnv,
   PrismaService,
+  SecretBox,
   startWorker,
 } from './modules/platform';
 
@@ -13,7 +18,15 @@ const OUTBOX_INTERVAL_MS = 2000;
 async function main(): Promise<void> {
   const env = loadApiEnv();
   const logger = createLogger({ level: env.LOG_LEVEL }).child({ process: 'worker' });
-  const boss = await startWorker({ connectionString: env.DATABASE_URL_APP, logger });
+  const handlers = {
+    ...DEFAULT_JOB_HANDLERS,
+    [EMAIL_SEND_JOB]: createEmailHandler(
+      new SecretBox(env.IDENTITY_ENCRYPTION_KEY),
+      createMailTransport(env.SMTP_URL),
+      env.MAIL_FROM_ADDRESS,
+    ),
+  };
+  const boss = await startWorker({ connectionString: env.DATABASE_URL_APP, logger, handlers });
   // Runtime role (studyhub_app) under RLS; the outbox sweep uses only the claim_due_outbox() definer function.
   const prisma = new PrismaService(env, logger);
 

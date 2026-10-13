@@ -7,6 +7,7 @@ import { createApp } from '../../src/main';
 import { createLogger, loadApiEnv } from '../../src/modules/platform';
 import { provisionTenant } from '../../src/modules/tenancy';
 import { startTestDatabase, type TestDatabase } from '../setup/postgres-container';
+import { listRoutes } from '../setup/routes';
 
 const UNTRUSTED_ADDRESS = '203.0.113.9'; // TEST-NET-3, never a configured proxy
 
@@ -16,6 +17,38 @@ const UNTRUSTED_ADDRESS = '203.0.113.9'; // TEST-NET-3, never a configured proxy
  */
 const TENANT_ROUTES: ReadonlyArray<{ method: 'GET'; url: string }> = [
   { method: 'GET', url: '/api/v1/tenant' },
+];
+
+/**
+ * Identity routes (M4). They act on the caller's own account, session or school and are covered by
+ * identity.int.test.ts: cross-school replay (AC 2), "other school" rows of the authorization matrix
+ * (AC 5) and the per-flow tests. A new route must be added here AND to those tests.
+ */
+const IDENTITY_ROUTES: readonly string[] = [
+  'DELETE /api/v1/admin/invitations/:id',
+  'DELETE /api/v1/admin/members/:membershipId',
+  'DELETE /api/v1/me/sessions',
+  'DELETE /api/v1/me/sessions/:id',
+  'GET /api/v1/admin/team',
+  'GET /api/v1/invitations/preview',
+  'GET /api/v1/me',
+  'GET /api/v1/me/schools',
+  'GET /api/v1/me/sessions',
+  'POST /api/v1/admin/invitations',
+  'POST /api/v1/auth/handoff',
+  'POST /api/v1/auth/password/forgot',
+  'POST /api/v1/auth/password/reset',
+  'POST /api/v1/auth/register',
+  'POST /api/v1/auth/sign-in',
+  'POST /api/v1/auth/sign-out',
+  'POST /api/v1/auth/verify-email',
+  'POST /api/v1/auth/verify-email/resend',
+  'POST /api/v1/invitations/accept',
+  'POST /api/v1/me/password',
+  'POST /api/v1/me/schools/:tenantId/handoff',
+  'POST /api/v1/me/schools/current/join',
+  'POST /api/v1/me/schools/current/leave',
+  'PUT /api/v1/admin/members/:membershipId/roles',
 ];
 
 describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
@@ -156,16 +189,11 @@ describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
   });
 
   it('T-ISO-12: every /api/v1 route is in the cross-tenant harness', () => {
-    const printed = app.getHttpAdapter().getInstance().printRoutes({ commonPrefix: false });
-    const routes = [...printed.matchAll(/(\/api\/v1[^\s(]*)\s*\(([^)]*)\)/g)].flatMap(([, path, methods]) =>
-      (methods ?? '')
-        .split(',')
-        .map((method) => method.trim())
-        .filter((method) => method !== 'HEAD' && method !== 'OPTIONS')
-        .map((method) => `${method} ${path}`),
-    );
+    const routes = listRoutes(app).filter((route) => route.split(' ')[1]!.startsWith('/api/v1'));
     expect(routes.length).toBeGreaterThan(0);
-    expect(routes.sort()).toEqual(TENANT_ROUTES.map((route) => `${route.method} ${route.url}`).sort());
+    expect(routes).toEqual(
+      [...TENANT_ROUTES.map((route) => `${route.method} ${route.url}`), ...IDENTITY_ROUTES].sort(),
+    );
   });
 
   it('T-ISO-12: no school-scoped response on one host contains another school’s data', async () => {

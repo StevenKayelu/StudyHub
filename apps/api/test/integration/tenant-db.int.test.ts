@@ -133,7 +133,7 @@ describe('tenant-scoped transactions (runInTenantTx)', () => {
       const serverTimes: number[] = [];
       for (let i = 0; i < 21; i += 1) {
         const plan = await prisma.$queryRaw<Array<{ 'QUERY PLAN': string }>>`
-          EXPLAIN (ANALYZE, FORMAT TEXT) SELECT set_config('app.tenant_id', ${tenantA}::text, true)`;
+          EXPLAIN (ANALYZE, FORMAT TEXT) SELECT set_config('app.tenant_id', ${tenantA}::text, true), set_config('app.user_id', ''::text, true)`;
         const line =
           plan.map((row) => row['QUERY PLAN']).find((text) => text.startsWith('Execution Time')) ?? '';
         serverTimes.push(Number(/([\d.]+) ms/.exec(line)?.[1] ?? Number.NaN));

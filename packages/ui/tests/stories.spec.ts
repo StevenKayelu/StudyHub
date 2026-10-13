@@ -32,6 +32,10 @@ async function openStory(page: Page, id: string, theme: string, scheme: string):
   await page.goto(`/iframe.html?id=${id}&viewMode=story&globals=theme:${theme};scheme:${scheme}`);
   await page.locator('#storybook-root').waitFor({ state: 'attached' });
   await expect(page.locator('html')).toHaveAttribute('data-applied-theme', /.+/);
+  // The stylesheet must be applied too (a capture before it loads shows unstyled controls).
+  await page.waitForFunction(
+    () => getComputedStyle(document.documentElement).getPropertyValue('--sh-color-bg-canvas').trim() !== '',
+  );
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 
