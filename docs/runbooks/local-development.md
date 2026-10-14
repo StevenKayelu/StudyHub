@@ -3,10 +3,10 @@
 ## Start and stop
 
 ```powershell
-pnpm db:up        # PostgreSQL 17 on 127.0.0.1:5432 (waits until healthy)
+pnpm db:up        # PostgreSQL 17 (:5432), Mailpit (:8025) and SeaweedFS object storage (:8333); waits until healthy
 pnpm build        # needed once before db:migrate (the migration CLI is compiled)
 pnpm db:migrate   # Prisma migrations + job-queue schema, as studyhub_migrator
-pnpm db:seed      # demo schools acme.localhost and beta.localhost (idempotent)
+pnpm db:seed      # demo schools, accounts and Acme's demo catalogue (idempotent)
 pnpm dev          # API :4000, worker, web :3000
 pnpm db:down      # stop PostgreSQL (data is kept in the studyhub-pgdata volume)
 ```
@@ -46,6 +46,15 @@ If you change the passwords in `.env` after the volume exists, the roles keep th
 - Every email (verification, password reset, invitations) is caught by **Mailpit**: http://127.0.0.1:8025. The worker sends them (`pnpm dev` starts it). Links point at the school host, e.g. `http://acme.localhost:3000/verify-email#token=…`.
 - Sessions are per school host: signing in at acme.localhost doesn't sign you in at beta.localhost. Use **Account → Your schools** to switch.
 
+## Catalogue, Studio and uploads locally (M5)
+
+- `pnpm db:seed` gives Acme two categories, three subjects and two published free courses by `tutor@acme.test` ("Biology foundations", "Algebra essentials"). Seeded courses are never overwritten, so local edits survive a re-seed.
+- Studio: sign in at http://acme.localhost:3000 as `tutor@acme.test` and open **Studio**. Acme reviews new courses first: approve them as `owner@acme.test` under **Administration → Reviews**.
+- Uploads go from the browser straight to SeaweedFS (http://127.0.0.1:8333, bucket `studyhub-local`, created on first use). The **worker** checks and scans them, so keep it running (`pnpm dev` starts it); without it uploads stay at "Checking the file…".
+- Malware scanning is `eicar-only` locally: upload the EICAR test file to see a rejection. Video uses the development fake provider, which marks a video ready right after upload.
+- Instructor applications: schools add instructors by invitation by default. To try applications, store the setting `instructorOnboardingMode` = `"APPLICATION"` in `tenant_setting` for the school (with the tenant context set, as in "Schools locally"); `/teach` then shows **Apply to teach**.
+- Objects are kept in the `studyhub-objects` volume; `down -v` (below) deletes them too.
+
 ## Reset the local database (deletes all local data)
 
 ```powershell
@@ -76,6 +85,8 @@ docker compose --env-file .env -f infra/compose/docker-compose.dev.yml exec post
 | Playwright browser download times out                                 | Slow or filtered connection to the browser CDN  | `$env:PLAYWRIGHT_CHANNEL = 'msedge'` (uses the installed Edge), then rerun the e2e tests |
 | `pnpm db:migrate` fails: `Cannot find module …dist/cli/migrate.js`    | The API has not been built                      | `pnpm build`, then `pnpm db:migrate`                                                     |
 | `pnpm secrets:scan` cannot start                                      | Docker not running                              | Start Docker Desktop                                                                     |
+| An upload stays at "Checking the file…"                               | The worker isn't running                        | `pnpm dev` (or `pnpm --filter @studyhub/api start:worker`)                               |
+| An upload fails at once in the browser                                | Object store not running                        | `pnpm db:up` (starts SeaweedFS on port 8333)                                             |
 
 ## Security notes
 

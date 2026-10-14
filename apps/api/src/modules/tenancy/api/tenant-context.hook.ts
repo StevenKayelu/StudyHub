@@ -6,7 +6,11 @@ import type { TenantResolver } from '../application/tenant-resolver';
 /** Every route under this prefix is school-scoped and requires a resolved tenant. */
 export const TENANT_SCOPED_PREFIX = '/api/v1';
 
+/** Provider webhooks arrive on a shared host; their handlers resolve the school themselves (04 §17.9). */
+export const WEBHOOK_PREFIX = '/api/v1/webhooks/';
+
 function isTenantScoped(url: string): boolean {
+  if (url.startsWith(WEBHOOK_PREFIX)) return false;
   return (
     url === TENANT_SCOPED_PREFIX ||
     url.startsWith(`${TENANT_SCOPED_PREFIX}/`) ||

@@ -2,7 +2,9 @@ import { type DynamicModule, Module, type Type } from '@nestjs/common';
 
 import { AuditModule } from './modules/audit';
 import { ConsoleModule } from './modules/console';
+import { CoursesModule } from './modules/courses';
 import { IdentityModule } from './modules/identity';
+import { MediaModule } from './modules/media';
 import { PlatformModule, type PlatformModuleOptions } from './modules/platform';
 import { TenancyModule } from './modules/tenancy';
 
@@ -23,6 +25,8 @@ export class AppModule {
         AuditModule,
         IdentityModule,
         ConsoleModule,
+        MediaModule,
+        CoursesModule,
         ...(options.imports ?? []),
       ],
     };

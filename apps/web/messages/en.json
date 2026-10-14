@@ -31,7 +31,22 @@
     "email": "Email",
     "password": "Password",
     "name": "Full name",
-    "networkError": "We couldn't reach the server. Check your connection and try again."
+    "networkError": "We couldn't reach the server. Check your connection and try again.",
+    "free": "Free",
+    "save": "Save",
+    "saved": "Saved",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "remove": "Remove",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "loadMore": "Load more",
+    "search": "Search",
+    "back": "Back",
+    "minutes": "{count, plural, one {# min} other {# min}}",
+    "hoursMinutes": "{hours} h {minutes} min",
+    "lessons": "{count, plural, one {# lesson} other {# lessons}}"
   },
   "public": {
     "nav": {
@@ -42,7 +57,11 @@
       "title": "What do you want to learn?",
       "subtitle": "{courses} and practice from {school}.",
       "emptyTitle": "No {coursesLower} yet",
-      "emptyMessage": "{school} is preparing its first {coursesLower}. Check back soon."
+      "emptyMessage": "{school} is preparing its first {coursesLower}. Check back soon.",
+      "searchLabel": "What do you want to learn?",
+      "searchPlaceholder": "Search {coursesLower}",
+      "newest": "New {coursesLower}",
+      "browseAll": "Browse all {coursesLower}"
     },
     "footer": {
       "help": "Help",
@@ -75,7 +94,126 @@
     "title": "{courses}",
     "newCourse": "New {courseLower}",
     "emptyTitle": "No {coursesLower} yet",
-    "emptyMessage": "Start with an outline: sections first, lessons second."
+    "emptyMessage": "Start with an outline: sections first, lessons second.",
+    "newCourseTitle": "New {courseLower}",
+    "courseTitle": "Title",
+    "create": "Create",
+    "creating": "Creating…",
+    "statuses": {
+      "DRAFT": "Draft",
+      "IN_REVIEW": "In review",
+      "CHANGES_REQUESTED": "Changes requested",
+      "PUBLISHED": "Published",
+      "UNPUBLISHED": "Unpublished",
+      "ARCHIVED": "Archived"
+    },
+    "updated": "Updated {date}",
+    "tabs": {
+      "outline": "Outline",
+      "details": "Details",
+      "pricing": "Pricing",
+      "publish": "Publish"
+    },
+    "outline": {
+      "addSection": "Add section",
+      "sectionTitle": "Section title",
+      "addLesson": "Add lesson",
+      "lessonTitle": "Lesson title",
+      "lessonType": "Type",
+      "emptyTitle": "Start with a section",
+      "emptyMessage": "Sections group your lessons, for example “Week 1” or “Cells”.",
+      "noLessons": "No lessons in this section yet.",
+      "renameSection": "Rename",
+      "deleteSection": "Delete section",
+      "deleteSectionConfirm": "Delete the section “{title}” and its lessons?",
+      "moveToPrevious": "Move to previous section",
+      "moveToNext": "Move to next section",
+      "ready": "Ready",
+      "needsContent": "Needs content",
+      "preview": "Preview",
+      "conflict": "This {courseLower} was changed in another window. We reloaded the latest version."
+    },
+    "details": {
+      "subtitle": "Subtitle",
+      "description": "Description",
+      "descriptionHint": "At least 200 characters. Say who it is for and what they will be able to do.",
+      "outcomes": "What learners will learn",
+      "outcomesHint": "One per line (up to 12)",
+      "requirements": "Requirements",
+      "requirementsHint": "One per line (optional)",
+      "level": "Level",
+      "subject": "Subject",
+      "chooseSubject": "Choose a subject",
+      "tags": "Tags",
+      "tagsHint": "Up to 5, separated by commas",
+      "cover": "Cover image",
+      "coverHint": "JPEG, PNG or WebP, up to 5 MB. Shown at 16:9.",
+      "uploadCover": "Upload cover"
+    },
+    "pricing": {
+      "title": "Pricing and access",
+      "free": "Free",
+      "paid": "Paid",
+      "price": "Price (K)",
+      "paidSoon": "Paid {coursesLower} need the school’s payment account and your payout method. They become available soon; until then you can prepare the price.",
+      "access": "Access",
+      "lifetime": "Lifetime access",
+      "days": "Access for a number of days",
+      "accessDays": "Days"
+    },
+    "publish": {
+      "title": "Publish",
+      "checklist": "Before you publish",
+      "fix": "Fix",
+      "submit": "Submit for review",
+      "publishNow": "Publish",
+      "submitting": "Submitting…",
+      "reviewNotice": "The school reviews new {coursesLower} before they appear in the catalogue.",
+      "inReview": "Your {courseLower} is being reviewed. You will be able to edit it again after the decision.",
+      "published": "Your {courseLower} is published.",
+      "view": "View in catalogue",
+      "unpublish": "Unpublish",
+      "republish": "Publish again",
+      "archive": "Archive",
+      "changesRequested": "Changes requested: {note}"
+    },
+    "lesson": {
+      "title": "Lesson",
+      "content": "Content",
+      "isPreview": "Free preview",
+      "isPreviewHint": "Visitors can open this lesson before enrolling.",
+      "isRequired": "Required for completion",
+      "downloadable": "Learners can download files",
+      "video": "Video",
+      "uploadVideo": "Upload video",
+      "videoHint": "MP4, WebM or MOV.",
+      "files": "Files",
+      "uploadFile": "Upload file",
+      "filesHint": "PDF, Word, PowerPoint, Excel or ZIP.",
+      "quizSoon": "Quiz lessons arrive with quizzes.",
+      "deleteLesson": "Delete lesson",
+      "deleteLessonConfirm": "Delete the lesson “{title}”?",
+      "backToOutline": "Back to outline"
+    },
+    "upload": {
+      "uploading": "Uploading…",
+      "checking": "Checking the file…",
+      "ready": "Ready",
+      "rejected": "Not accepted: {reason}",
+      "failed": "The upload failed. Try again."
+    },
+    "editor": {
+      "toolbar": "Formatting",
+      "bold": "Bold",
+      "italic": "Italic",
+      "heading": "Heading",
+      "bulletList": "Bulleted list",
+      "orderedList": "Numbered list",
+      "quote": "Quote",
+      "code": "Code block",
+      "link": "Link",
+      "linkPrompt": "Link address (https://…)"
+    }
   },
   "admin": {
     "navLabel": "Administration",
@@ -84,7 +222,11 @@
       "users": "Users",
       "branding": "Branding",
       "settings": "Settings",
-      "team": "Team"
+      "team": "Team",
+      "reviews": "Reviews",
+      "courses": "{courses}",
+      "categories": "Categories",
+      "instructors": "{instructors}"
     },
     "title": "Overview",
     "queues": {
@@ -111,6 +253,42 @@
       "expires": "Expires {date}",
       "none": "No pending invitations.",
       "lastOwner": "A school must keep at least one owner."
+    },
+    "reviews": {
+      "title": "{course} reviews",
+      "empty": "No {coursesLower} waiting for review.",
+      "submitted": "Submitted {date} by {name}",
+      "approve": "Approve and publish",
+      "requestChanges": "Request changes",
+      "notes": "What needs to change",
+      "checklistAtSubmit": "Checklist when submitted"
+    },
+    "categories": {
+      "title": "Categories",
+      "addCategory": "Add category",
+      "categoryName": "Category name",
+      "addSubject": "Add subject",
+      "subjectName": "Subject name",
+      "archive": "Archive",
+      "restore": "Restore",
+      "archived": "Archived",
+      "empty": "No categories yet. Add one to organise the catalogue."
+    },
+    "instructors": {
+      "title": "{instructors}",
+      "applications": "Applications",
+      "empty": "No applications waiting.",
+      "approve": "Approve",
+      "requestChanges": "Request changes",
+      "reject": "Reject",
+      "note": "Reason (shown to the applicant)"
+    },
+    "courseList": {
+      "title": "{courses}",
+      "unpublish": "Unpublish",
+      "reason": "Reason",
+      "by": "by {name}",
+      "empty": "No {coursesLower} yet."
     }
   },
   "console": {
@@ -309,5 +487,92 @@
     "newPassword": "New password",
     "passwordChanged": "Password changed. Your other devices have been signed out.",
     "unknownDevice": "Unknown device"
+  },
+  "catalogue": {
+    "title": "Browse {coursesLower}",
+    "results": "{count, plural, =0 {No results} one {# result} other {# results}}",
+    "filters": "Filters",
+    "subject": "Subject",
+    "anySubject": "Any subject",
+    "level": "Level",
+    "anyLevel": "Any level",
+    "price": "Price",
+    "anyPrice": "Free or paid",
+    "priceFree": "Free",
+    "pricePaid": "Paid",
+    "sort": "Sort by",
+    "sortRelevance": "Best match",
+    "sortNewest": "Newest",
+    "sortPopular": "Most popular",
+    "apply": "Show results",
+    "clear": "Clear filters",
+    "noResultsTitle": "Nothing matches yet",
+    "noResultsMessage": "Try another word, check the spelling, or remove a filter.",
+    "emptyTitle": "No {coursesLower} yet",
+    "emptyMessage": "{school} is preparing its first {coursesLower}. Check back soon.",
+    "levels": {
+      "BEGINNER": "Beginner",
+      "INTERMEDIATE": "Intermediate",
+      "ADVANCED": "Advanced",
+      "ALL_LEVELS": "All levels"
+    },
+    "noCover": "No cover image",
+    "by": "by {name}"
+  },
+  "course": {
+    "whatYouLearn": "What you’ll learn",
+    "outline": "{course} outline",
+    "requirements": "Requirements",
+    "description": "About this {courseLower}",
+    "aboutInstructor": "About the {instructorLower}",
+    "includes": "This {courseLower} includes",
+    "preview": "Preview",
+    "enrolSoon": "Enrolment opens soon",
+    "enrolSoonHint": "Sign-up for {coursesLower} arrives in the next update.",
+    "lessonTypes": {
+      "TEXT": "Reading",
+      "VIDEO": "Video",
+      "FILE": "Files",
+      "QUIZ": "Quiz"
+    },
+    "section": "Section {number}: {title}",
+    "coursesBy": "{courses} by {name}"
+  },
+  "teach": {
+    "title": "Become a {instructorLower}",
+    "intro": "Share what you know with learners at {school}.",
+    "steps": "How it works",
+    "step1": "Apply with a short profile.",
+    "step2": "The school reviews your application.",
+    "step3": "Build your {courseLower} in Studio.",
+    "step4": "Publish it for learners.",
+    "inviteOnly": "{school} adds {instructorsLower} by invitation. Ask the school if you would like to teach here.",
+    "apply": "Apply to teach",
+    "signInToApply": "Sign in to apply",
+    "goToStudio": "Go to Studio"
+  },
+  "instructor": {
+    "applicationTitle": "Apply to teach",
+    "profileTitle": "Your {instructorLower} profile",
+    "displayName": "Name shown to learners",
+    "headline": "Headline",
+    "headlineHint": "One line, for example “Chemistry teacher, 10 years”",
+    "bio": "About you",
+    "subjects": "Subjects you teach",
+    "subjectsHint": "Separate with commas",
+    "qualifications": "Qualifications and experience",
+    "saveDraft": "Save draft",
+    "submit": "Submit application",
+    "submitting": "Submitting…",
+    "status": {
+      "DRAFT": "Draft: not submitted yet",
+      "SUBMITTED": "Submitted: the school is reviewing your application",
+      "CHANGES_REQUESTED": "Changes requested",
+      "APPROVED": "Approved",
+      "REJECTED": "Not approved",
+      "SUSPENDED": "Suspended"
+    },
+    "reapplyAfter": "You can apply again from {date}.",
+    "approvedSignIn": "Approved: sign out and back in to open Studio."
   }
 }

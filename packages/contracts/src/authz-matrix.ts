@@ -73,6 +73,69 @@ export const TENANT_AUTHZ_MATRIX: readonly MatrixRow<TenantMatrixActor>[] = [
     body: { roles: ['LEARNER'] },
     expect: adminOnly(404),
   },
+  // M5: Studio is for instructors (an administrator is not automatically an instructor).
+  {
+    method: 'GET',
+    path: '/api/v1/studio/courses',
+    expect: {
+      anonymous: 401,
+      learner: 403,
+      instructor: 200,
+      admin: 403,
+      owner: 403,
+      otherSchool: 401,
+      staff: 401,
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/studio/courses/{missing}',
+    expect: {
+      anonymous: 401,
+      learner: 404,
+      instructor: 404,
+      admin: 404,
+      owner: 404,
+      otherSchool: 401,
+      staff: 401,
+    },
+  },
+  { method: 'GET', path: '/api/v1/admin/course-reviews', expect: adminOnly(200) },
+  { method: 'GET', path: '/api/v1/admin/instructor-applications', expect: adminOnly(200) },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/categories',
+    body: { name: 'Matrix category' },
+    expect: adminOnly(201),
+  },
+  // The public catalogue answers everyone on a PUBLIC school (cookies from elsewhere are simply ignored).
+  {
+    method: 'GET',
+    path: '/api/v1/courses',
+    expect: {
+      anonymous: 200,
+      learner: 200,
+      instructor: 200,
+      admin: 200,
+      owner: 200,
+      otherSchool: 200,
+      staff: 200,
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/uploads',
+    body: { purpose: 'LESSON_FILE', fileName: 'm.pdf', mime: 'application/pdf', sizeBytes: 100 },
+    expect: {
+      anonymous: 401,
+      learner: 403,
+      instructor: 201,
+      admin: 403,
+      owner: 403,
+      otherSchool: 401,
+      staff: 401,
+    },
+  },
 ];
 
 export const CONSOLE_AUTHZ_MATRIX: readonly MatrixRow<ConsoleMatrixActor>[] = [

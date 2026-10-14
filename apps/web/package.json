@@ -23,6 +23,9 @@
   "dependencies": {
     "@studyhub/contracts": "workspace:*",
     "@studyhub/ui": "workspace:*",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/react": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
     "lucide-react": "1.55.0",
     "next": "16.4.0",
     "next-intl": "4.14.9",

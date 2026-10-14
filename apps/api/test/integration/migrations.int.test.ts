@@ -42,6 +42,7 @@ describe('database migrations and roles (PostgreSQL 17)', () => {
       { migration_name: '0002_tenancy_kernel', finished: true },
       { migration_name: '0003_tenant_branding_settings', finished: true },
       { migration_name: '0004_identity_realms', finished: true },
+      { migration_name: '0005_catalogue_authoring', finished: true },
     ]);
   });
 

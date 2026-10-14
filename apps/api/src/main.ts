@@ -46,10 +46,17 @@ export async function createApp(options: CreateAppOptions): Promise<NestFastifyA
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.register({ env: options.env, logger, ...(options.imports && { imports: options.imports }) }),
     adapter,
-    { logger: new PinoNestLogger(logger), abortOnError: false },
+    // rawBody: provider webhooks verify signatures over the exact bytes received.
+    { logger: new PinoNestLogger(logger), abortOnError: false, rawBody: true },
   );
 
   const fastify = app.getHttpAdapter().getInstance();
+  // Video bytes (the fake provider's development upload) are drained, never buffered in memory.
+  fastify.addContentTypeParser(/^video\//, (_request, payload, done) => {
+    payload.on('error', done);
+    payload.on('end', () => done(null, undefined));
+    payload.resume();
+  });
   registerRequestIdHook(fastify);
   registerRequestContextHook(fastify);
   // Order matters: CSRF origin check, then the school (from the host), then who is signed in.

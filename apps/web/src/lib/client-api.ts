@@ -17,7 +17,7 @@ export type ApiResult<T> =
   { ok: true; status: number; data: T } | { ok: false; status: number; problem: Problem };
 
 export async function callApi<T = unknown>(
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<ApiResult<T>> {

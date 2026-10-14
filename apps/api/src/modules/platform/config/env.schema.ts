@@ -3,6 +3,9 @@ import { z } from 'zod';
 /** Public development-only key (base64 of a fixed 32-byte string). Refused in production. */
 export const DEV_IDENTITY_ENCRYPTION_KEY = Buffer.from('studyhub-local-development-key!!').toString('base64');
 
+/** The local object store's access key (infra/seaweedfs/s3.json). Refused in production. */
+export const DEV_S3_ACCESS_KEY = 'studyhub-local';
+
 /** Placeholder marker used in .env.example; real deployments must never run with it. */
 const PLACEHOLDER_MARKER = 'change-me';
 
@@ -88,10 +91,37 @@ export const apiEnvSchema = z
     /** Outgoing mail (local: Mailpit from docker compose). */
     SMTP_URL: z.string().default('smtp://127.0.0.1:1025'),
     MAIL_FROM_ADDRESS: z.email().default('no-reply@mail.studyhub.localhost'),
+    /** Object storage (S3 API; production: Cloudflare R2). Local: SeaweedFS from docker compose. */
+    S3_ENDPOINT: z.url().optional().default('http://127.0.0.1:8333'),
+    S3_REGION: z.string().min(1).default('us-east-1'),
+    S3_BUCKET: z.string().min(3).default('studyhub-local'),
+    S3_ACCESS_KEY_ID: z.string().min(1).default(DEV_S3_ACCESS_KEY),
+    S3_SECRET_ACCESS_KEY: z.string().min(1).default('studyhub-local-object-store'),
+    S3_FORCE_PATH_STYLE: z.stringbool().default(true),
+    /** Development only: create the bucket on first use. */
+    S3_CREATE_BUCKET: z.stringbool().default(true),
+    /** clamd (production) or eicar-only (development and tests: flags only the EICAR test file). */
+    MALWARE_SCANNER: z.enum(['clamd', 'eicar-only']).default('eicar-only'),
+    CLAMD_HOST: z.string().default('127.0.0.1'),
+    CLAMD_PORT: z.coerce.number().int().min(1).max(65535).default(3310),
+    /** Managed video provider. Only the fake exists until a provider is approved (as for payments). */
+    VIDEO_PROVIDER: z.enum(['fake']).default('fake'),
+    FAKE_VIDEO_SECRET: z.string().min(16).default('studyhub-local-fake-video-secret'),
+    /** Storage per school until plans exist (M9): BR-49 limits apply against this. */
+    DEFAULT_STORAGE_QUOTA_MB: z.coerce.number().int().min(1).default(10_240),
   })
   .superRefine((env, context) => {
     rejectPlaceholdersInProduction(env, context, ['DATABASE_URL_APP']);
     if (env.NODE_ENV === 'production') {
+      const refuse = (path: string, message: string) =>
+        context.addIssue({ code: 'custom', path: [path], message });
+      if (env.MALWARE_SCANNER !== 'clamd') refuse('MALWARE_SCANNER', 'must be clamd in production');
+      if (env.VIDEO_PROVIDER === 'fake')
+        refuse('VIDEO_PROVIDER', 'the fake provider is for development only');
+      if (env.S3_ACCESS_KEY_ID === DEV_S3_ACCESS_KEY)
+        refuse('S3_ACCESS_KEY_ID', 'is the local development key');
+      if (env.S3_CREATE_BUCKET)
+        refuse('S3_CREATE_BUCKET', 'buckets are provisioned, never created by the API');
       if (env.IDENTITY_ENCRYPTION_KEY === DEV_IDENTITY_ENCRYPTION_KEY) {
         context.addIssue({
           code: 'custom',

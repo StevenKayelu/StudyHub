@@ -181,6 +181,156 @@ async function seedAccounts(
   });
 }
 
+const doc = (...paragraphs: string[]) => ({
+  type: 'doc',
+  content: paragraphs.map((text) => ({ type: 'paragraph', content: [{ type: 'text', text }] })),
+});
+
+/** Demo catalogue for Acme: categories, the tutor's approved profile and two published free courses. */
+const DEMO_CATALOGUE = {
+  categories: [
+    {
+      id: '0d6c2b1e-0000-4000-8000-0000000ca001',
+      slug: 'sciences',
+      name: 'Sciences',
+      subjects: [
+        { id: '0d6c2b1e-0000-4000-8000-0000000cb001', slug: 'biology', name: 'Biology' },
+        { id: '0d6c2b1e-0000-4000-8000-0000000cb002', slug: 'chemistry', name: 'Chemistry' },
+      ],
+    },
+    {
+      id: '0d6c2b1e-0000-4000-8000-0000000ca002',
+      slug: 'mathematics',
+      name: 'Mathematics',
+      subjects: [{ id: '0d6c2b1e-0000-4000-8000-0000000cb003', slug: 'algebra', name: 'Algebra' }],
+    },
+  ],
+  courses: [
+    {
+      id: '0d6c2b1e-0000-4000-8000-0000000cc001',
+      slug: 'biology-foundations',
+      title: 'Biology foundations',
+      subtitle: 'Cells, genetics and ecosystems for Grade 10 to 12',
+      subjectId: '0d6c2b1e-0000-4000-8000-0000000cb001',
+      level: 'BEGINNER',
+      tags: ['cells', 'genetics', 'exam prep'],
+      outcomes: ['Describe the parts of a cell', 'Explain how traits are inherited', 'Read a food web'],
+      description: doc(
+        'A clear, exam-focused introduction to biology. Each section starts from everyday examples and ' +
+          'builds up to the vocabulary and diagrams examiners expect.',
+        'Short readings, worked examples and practice questions help you check your understanding as ' +
+          'you go. No previous biology is assumed.',
+      ),
+      sections: [
+        {
+          title: 'Cells',
+          lessons: ['What is a cell?', 'Plant and animal cells', 'Cell division'],
+        },
+        { title: 'Genetics', lessons: ['Genes and chromosomes', 'Inheritance'] },
+      ],
+    },
+    {
+      id: '0d6c2b1e-0000-4000-8000-0000000cc002',
+      slug: 'algebra-essentials',
+      title: 'Algebra essentials',
+      subtitle: 'Expressions, equations and graphs step by step',
+      subjectId: '0d6c2b1e-0000-4000-8000-0000000cb003',
+      level: 'ALL_LEVELS',
+      tags: ['equations', 'graphs'],
+      outcomes: ['Simplify expressions', 'Solve linear equations', 'Plot straight-line graphs'],
+      description: doc(
+        'Algebra is a language for patterns. This course takes you from simplifying expressions to ' +
+          'solving equations and drawing graphs, one small step at a time.',
+        'Every lesson ends with a few questions so you know when you are ready to move on.',
+      ),
+      sections: [{ title: 'Expressions', lessons: ['Like terms', 'Brackets'] }],
+    },
+  ],
+} as const;
+
+async function seedCatalogue(client: Client, tenantId: string): Promise<void> {
+  await withContext(client, { 'app.tenant_id': tenantId }, async () => {
+    const tutor = DEMO_ACCOUNTS.find((account) => account.email === 'tutor@acme.test')!;
+    const { rows } = await client.query<{ id: string }>(
+      'SELECT id FROM tenant_membership WHERE tenant_id = $1 AND user_id = $2',
+      [tenantId, tutor.id],
+    );
+    const membershipId = rows[0]?.id;
+    if (membershipId === undefined) return;
+    await client.query(
+      `INSERT INTO instructor_profile (membership_id, tenant_id, slug, display_name, headline, bio, subjects, status, decided_at)
+       VALUES ($1, $2, 'tiko-phiri', $3, 'Science and maths teacher, 10 years', $4, $5, 'APPROVED', now())
+       ON CONFLICT (membership_id) DO NOTHING`,
+      [
+        membershipId,
+        tenantId,
+        tutor.name,
+        'I teach biology and mathematics to secondary-school learners and adults returning to study.',
+        ['Biology', 'Mathematics'],
+      ],
+    );
+    for (const [index, category] of DEMO_CATALOGUE.categories.entries()) {
+      await client.query(
+        `INSERT INTO category (id, tenant_id, slug, name, position) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT DO NOTHING`,
+        [category.id, tenantId, category.slug, category.name, index],
+      );
+      for (const [position, subject] of category.subjects.entries()) {
+        await client.query(
+          `INSERT INTO subject (id, tenant_id, category_id, slug, name, position) VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT DO NOTHING`,
+          [subject.id, tenantId, category.id, subject.slug, subject.name, position],
+        );
+      }
+    }
+    for (const course of DEMO_CATALOGUE.courses) {
+      const inserted = await client.query(
+        `INSERT INTO course (id, tenant_id, owner_membership_id, subject_id, slug, title, subtitle, description_json,
+           description_text, outcomes, level, tags, status, first_published_at, published_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::"CourseLevel", $12, 'PUBLISHED', now(), now())
+         ON CONFLICT DO NOTHING`,
+        [
+          course.id,
+          tenantId,
+          membershipId,
+          course.subjectId,
+          course.slug,
+          course.title,
+          course.subtitle,
+          JSON.stringify(course.description),
+          course.description.content.map((paragraph) => paragraph.content[0]?.text ?? '').join(' '),
+          course.outcomes,
+          course.level,
+          course.tags,
+        ],
+      );
+      if (inserted.rowCount === 0) continue; // already seeded: leave any local edits alone
+      for (const [sectionIndex, section] of course.sections.entries()) {
+        const created = await client.query<{ id: string }>(
+          'INSERT INTO section (tenant_id, course_id, title, position) VALUES ($1, $2, $3, $4) RETURNING id',
+          [tenantId, course.id, section.title, sectionIndex],
+        );
+        for (const [lessonIndex, title] of section.lessons.entries()) {
+          await client.query(
+            `INSERT INTO lesson (tenant_id, course_id, section_id, title, type, position, content_json, is_preview,
+               duration_seconds)
+             VALUES ($1, $2, $3, $4, 'TEXT', $5, $6, $7, 300)`,
+            [
+              tenantId,
+              course.id,
+              created.rows[0]!.id,
+              title,
+              lessonIndex,
+              JSON.stringify(doc(`${title}: demo reading. Replace this text in Studio.`)),
+              sectionIndex === 0 && lessonIndex === 0,
+            ],
+          );
+        }
+      }
+    }
+  });
+}
+
 async function main(): Promise<void> {
   const env = loadMigratorEnv();
   if (env.NODE_ENV === 'production') throw new Error('Refusing to seed demo schools in production.');
@@ -211,6 +361,10 @@ async function main(): Promise<void> {
       console.log(`${tenant.hostname}: already present (branding refreshed)`);
     }
     await seedAccounts(client, tenantIds);
+    if (tenantIds.acme !== undefined) {
+      await seedCatalogue(client, tenantIds.acme);
+      console.log('acme.localhost: demo catalogue present');
+    }
     console.log(
       `demo accounts: ${[...DEMO_ACCOUNTS.map((a) => a.email), DEMO_STAFF.email].join(', ')} (password: ${DEMO_PASSWORD})`,
     );

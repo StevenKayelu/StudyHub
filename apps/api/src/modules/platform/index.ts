@@ -42,6 +42,24 @@ export {
 export { addToOutbox, dispatchDueOutbox } from './jobs/outbox';
 export { APP_LOGGER, createLogger, PinoNestLogger } from './logging/logger';
 export {
+  createMediaPorts,
+  FAKE_VIDEO_UPLOAD_PATH,
+  MALWARE_SCANNER,
+  type MediaPorts,
+  OBJECT_STORAGE,
+  VIDEO_PROVIDER,
+} from './media/media-ports';
+export { type ObjectStorage, S3ObjectStorage } from './media/object-storage';
+export { ClamdScanner, EicarOnlyScanner, type MalwareScanner } from './media/scanner';
+export { matchesDeclaredType, sniffType } from './media/sniff';
+export {
+  FAKE_VIDEO_SIGNATURE_HEADER,
+  FakeVideoProvider,
+  type VideoEvent,
+  type VideoProvider,
+  type VideoUpload,
+} from './media/video-provider';
+export {
   createEmailHandler,
   createMailTransport,
   EMAIL_SEND_JOB,

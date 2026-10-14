@@ -50,12 +50,17 @@ export const DEFINER_INVENTORY: ReadonlySet<string> = new Set([
   'my_memberships',
   'revoke_user_sessions_everywhere',
   'exchange_handoff',
+  // M5 media (04 §17.9)
+  'resolve_video_asset',
 ]);
 
 /** Indexes on tenant tables that may not lead with tenant_id, and why. */
 export const INDEX_EXCEPTIONS: Readonly<Record<string, string>> = {
   tenant_domain_hostname_key: 'a host maps to exactly one school platform-wide',
   outbox_due_idx: 'cross-tenant claim sweep via claim_due_outbox()',
+  asset_provider_video_key: 'video webhooks route by provider id via resolve_video_asset()',
+  course_search_idx: 'GIN full-text index; every query is limited to one school by RLS',
+  course_title_trgm_idx: 'GIN trigram index; every query is limited to one school by RLS',
 };
 
 export const DEFINER_OWNER = 'studyhub_rls_definer';

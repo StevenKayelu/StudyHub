@@ -81,6 +81,8 @@ export function registerOriginCheckHook(instance: FastifyInstance): void {
     if (!UNSAFE.has(request.method)) return undefined;
     if (!request.url.startsWith(TENANT_API_PREFIX) && !request.url.startsWith(CONSOLE_API_PREFIX))
       return undefined;
+    // Provider webhooks are server-to-server and authenticated by their signature instead.
+    if (request.url.startsWith('/api/v1/webhooks/')) return undefined;
     const origin = request.headers.origin;
     if (typeof origin === 'string' && origin !== 'null') {
       let originHost: string | null;

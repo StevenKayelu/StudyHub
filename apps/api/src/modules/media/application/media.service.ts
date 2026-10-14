@@ -1,0 +1,311 @@
+import { Inject, Injectable } from '@nestjs/common';
+
+import { can, type TenantActor } from '../../identity';
+import {
+  addToOutbox,
+  AppError,
+  ConfigService,
+  OBJECT_STORAGE,
+  type ObjectStorage,
+  requireTenantId,
+  TenantDb,
+  type TenantTx,
+  VIDEO_PROVIDER,
+  type VideoEvent,
+  type VideoProvider,
+} from '../../platform';
+import { readContentSettings } from '../../tenancy';
+import { type AssetPurpose, cleanFileName, uploadProblem, uploadRule } from '../domain/upload-policy';
+import { adjustUsage } from './usage';
+
+/** Queue that verifies, scans and finishes an uploaded file (fed by the outbox). */
+export const MEDIA_PROCESS_JOB = 'media.process';
+
+/** Upload slots expire after this long if the browser never finishes (F11). */
+const SLOT_TTL_MS = 60 * 60_000;
+const PRESIGN_SECONDS = 15 * 60;
+const DOWNLOAD_SECONDS = 10 * 60;
+
+export interface UploadSlot {
+  assetId: string;
+  uploadUrl: string;
+  /** Headers the browser must send with its PUT (the URL is signed for them). */
+  headers: Record<string, string>;
+  expiresAt: string;
+}
+
+export interface AssetStatusView {
+  id: string;
+  kind: string;
+  purpose: string;
+  status: string;
+  originalName: string;
+  mime: string;
+  sizeBytes: number;
+  rejectReason: string | null;
+  width: number | null;
+  height: number | null;
+  durationSeconds: number | null;
+}
+
+/** Who may upload for which purpose: course media is for instructors; avatars for any member. */
+function mayUpload(actor: TenantActor, purpose: AssetPurpose): boolean {
+  return purpose === 'AVATAR' ? can(actor, 'learn.access') : can(actor, 'studio.access');
+}
+
+/**
+ * Uploads and videos (F11, ADR-008/009). Files go straight from the browser to object storage under
+ * t/{tenantId}/; the API only issues presigned URLs and records state. Storage is reserved when a slot
+ * is created (BR-49) and settled when the asset is READY or rejected.
+ */
+@Injectable()
+export class MediaService {
+  constructor(
+    private readonly db: TenantDb,
+    private readonly config: ConfigService,
+    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
+    @Inject(VIDEO_PROVIDER) private readonly video: VideoProvider,
+  ) {}
+
+  async createUpload(
+    actor: TenantActor,
+    input: { purpose: AssetPurpose; fileName: string; mime: string; sizeBytes: number },
+  ): Promise<UploadSlot> {
+    if (input.purpose === 'LESSON_VIDEO') {
+      throw new AppError('VALIDATION_FAILED', {
+        errors: [{ field: 'purpose', code: 'use_videos', message: 'Videos are uploaded with POST /videos' }],
+      });
+    }
+    if (!mayUpload(actor, input.purpose)) throw new AppError('FORBIDDEN');
+    const tenantId = requireTenantId();
+    const { assetId, key } = await this.db.run(async (tx) => {
+      const rule = uploadRule(input.purpose, await readContentSettings(tx));
+      this.assertAllowed(rule, input.mime, input.sizeBytes);
+      await this.reserve(tx, input.sizeBytes);
+      const asset = await tx.asset.create({
+        data: {
+          tenantId,
+          ownerMembershipId: actor.membershipId,
+          kind: rule.kind,
+          purpose: input.purpose,
+          originalName: cleanFileName(input.fileName),
+          mime: input.mime,
+          sizeBytes: BigInt(input.sizeBytes),
+          expiresAt: new Date(Date.now() + SLOT_TTL_MS),
+        },
+        select: { id: true },
+      });
+      const key = `t/${tenantId}/${input.purpose.toLowerCase()}/${asset.id}`;
+      await tx.asset.update({ where: { id: asset.id }, data: { storageKey: key } });
+      return { assetId: asset.id, key };
+    });
+    const uploadUrl = await this.storage.presignPut(key, {
+      contentType: input.mime,
+      contentLength: input.sizeBytes,
+      expiresSeconds: PRESIGN_SECONDS,
+    });
+    return {
+      assetId,
+      uploadUrl,
+      headers: { 'content-type': input.mime },
+      expiresAt: new Date(Date.now() + PRESIGN_SECONDS * 1000).toISOString(),
+    };
+  }
+
+  /** The browser finished its PUT: queue verification and scanning. Idempotent. */
+  async completeUpload(actor: TenantActor, assetId: string): Promise<AssetStatusView> {
+    return this.db.run(async (tx) => {
+      const asset = await this.ownAsset(tx, actor, assetId);
+      if (asset.status === 'PENDING_UPLOAD') {
+        await tx.asset.update({
+          where: { id: assetId },
+          data: { status: 'UPLOADED', expiresAt: null, updatedAt: new Date() },
+        });
+        await addToOutbox(tx, MEDIA_PROCESS_JOB, { assetId });
+      }
+      return this.view(await tx.asset.findUniqueOrThrow({ where: { id: assetId } }));
+    });
+  }
+
+  /** A video slot at the provider (direct upload); finished by the provider's webhook. */
+  async createVideo(
+    actor: TenantActor,
+    input: { fileName: string; mime: string; sizeBytes: number },
+  ): Promise<UploadSlot> {
+    if (!mayUpload(actor, 'LESSON_VIDEO')) throw new AppError('FORBIDDEN');
+    const tenantId = requireTenantId();
+    return this.db.run(async (tx) => {
+      const rule = uploadRule('LESSON_VIDEO', await readContentSettings(tx));
+      this.assertAllowed(rule, input.mime, input.sizeBytes);
+      await this.reserve(tx, input.sizeBytes);
+      const asset = await tx.asset.create({
+        data: {
+          tenantId,
+          ownerMembershipId: actor.membershipId,
+          kind: 'VIDEO',
+          purpose: 'LESSON_VIDEO',
+          provider: this.video.name,
+          originalName: cleanFileName(input.fileName),
+          mime: input.mime,
+          sizeBytes: BigInt(input.sizeBytes),
+          expiresAt: new Date(Date.now() + 24 * SLOT_TTL_MS),
+        },
+        select: { id: true },
+      });
+      const upload = await this.video.createUpload({
+        tenantId,
+        assetId: asset.id,
+        maxBytes: input.sizeBytes,
+      });
+      await tx.asset.update({ where: { id: asset.id }, data: { providerVideoId: upload.providerVideoId } });
+      return {
+        assetId: asset.id,
+        uploadUrl: upload.uploadUrl,
+        headers: { 'content-type': input.mime },
+        expiresAt: new Date(Date.now() + 24 * SLOT_TTL_MS).toISOString(),
+      };
+    });
+  }
+
+  async status(actor: TenantActor, assetId: string): Promise<AssetStatusView> {
+    return this.db.run(async (tx) => this.view(await this.visibleAsset(tx, actor, assetId)));
+  }
+
+  /** A short-lived download URL for a READY file the actor may see (owner or administrator). */
+  async downloadUrl(actor: TenantActor, assetId: string): Promise<{ url: string; expiresAt: string }> {
+    const asset = await this.db.run((tx) => this.visibleAsset(tx, actor, assetId));
+    if (asset.status !== 'READY' || asset.storageKey === null) throw new AppError('INVALID_STATE');
+    const url = await this.storage.presignGet(asset.storageKey, {
+      expiresSeconds: DOWNLOAD_SECONDS,
+      downloadName: asset.originalName,
+    });
+    return { url, expiresAt: new Date(Date.now() + DOWNLOAD_SECONDS * 1000).toISOString() };
+  }
+
+  /**
+   * Applies a verified provider event inside the asset's school (the caller resolved it through
+   * resolve_video_asset and set the tenant context). Idempotent: a finished asset isn't changed again.
+   */
+  async applyVideoEvent(assetId: string, event: VideoEvent): Promise<void> {
+    await this.db.run(async (tx) => {
+      const asset = await tx.asset.findUnique({ where: { id: assetId } });
+      if (asset === null || asset.status === 'READY' || asset.status === 'REJECTED') return;
+      const size = Number(asset.sizeBytes);
+      if (event.status === 'READY') {
+        await tx.asset.update({
+          where: { id: assetId },
+          data: {
+            status: 'READY',
+            durationSeconds: event.durationSeconds ?? null,
+            expiresAt: null,
+            updatedAt: new Date(),
+          },
+        });
+        await adjustUsage(tx, { reserved: -size, storage: size });
+      } else {
+        await tx.asset.update({
+          where: { id: assetId },
+          data: {
+            status: 'REJECTED',
+            rejectReason: event.reason ?? 'Processing failed',
+            expiresAt: null,
+            updatedAt: new Date(),
+          },
+        });
+        await adjustUsage(tx, { reserved: -size });
+      }
+    });
+  }
+
+  // ----------------------------------------------------------------------------------------------
+
+  private assertAllowed(rule: ReturnType<typeof uploadRule>, mime: string, sizeBytes: number): void {
+    const problem = uploadProblem(rule, mime, sizeBytes);
+    if (problem === 'TYPE_NOT_ALLOWED') throw new AppError('UPLOAD_TYPE_NOT_ALLOWED');
+    if (problem === 'TOO_LARGE') {
+      throw new AppError('UPLOAD_TOO_LARGE', {
+        detail: `The largest file allowed here is ${Math.floor(rule.maxBytes / (1024 * 1024))} MB.`,
+        extensions: { maxBytes: rule.maxBytes },
+      });
+    }
+  }
+
+  /**
+   * Reserves storage for a new slot (BR-49): the school's usage row is locked, expired slots are
+   * released first, and the slot is refused if READY + reserved + this file would exceed the quota.
+   */
+  private async reserve(tx: TenantTx, sizeBytes: number): Promise<void> {
+    const tenantId = requireTenantId();
+    await tx.$executeRaw`INSERT INTO tenant_usage (tenant_id) VALUES (${tenantId}::uuid) ON CONFLICT (tenant_id) DO NOTHING`;
+    const [usage] = await tx.$queryRaw<{ storage_bytes: bigint; reserved_bytes: bigint }[]>`
+      SELECT storage_bytes, reserved_bytes FROM tenant_usage WHERE tenant_id = ${tenantId}::uuid FOR UPDATE`;
+    const expired = await tx.asset.findMany({
+      where: { status: 'PENDING_UPLOAD', expiresAt: { lt: new Date() } },
+      select: { id: true, sizeBytes: true },
+    });
+    let reserved = Number(usage?.reserved_bytes ?? 0);
+    if (expired.length > 0) {
+      const released = expired.reduce((total, a) => total + Number(a.sizeBytes), 0);
+      await tx.asset.updateMany({
+        where: { id: { in: expired.map((a) => a.id) } },
+        data: { status: 'REJECTED', rejectReason: 'Upload not completed in time', expiresAt: null },
+      });
+      reserved = Math.max(0, reserved - released);
+    }
+    const quota = this.config.get('DEFAULT_STORAGE_QUOTA_MB') * 1024 * 1024;
+    const used = Number(usage?.storage_bytes ?? 0);
+    if (used + reserved + sizeBytes > quota) {
+      throw new AppError('LIMIT_REACHED', {
+        detail: "This school's storage is full. Remove unused files or ask about a larger plan.",
+        extensions: { limit: 'storage', quotaBytes: quota, usedBytes: used },
+      });
+    }
+    await tx.tenantUsage.update({
+      where: { tenantId },
+      data: { reservedBytes: BigInt(reserved + sizeBytes), updatedAt: new Date() },
+    });
+  }
+
+  private async ownAsset(tx: TenantTx, actor: TenantActor, assetId: string) {
+    const asset = await tx.asset.findFirst({ where: { id: assetId, ownerMembershipId: actor.membershipId } });
+    if (asset === null) throw new AppError('NOT_FOUND');
+    return asset;
+  }
+
+  /** Owner, or a school administrator; anything else is not found (another school's: RLS). */
+  private async visibleAsset(tx: TenantTx, actor: TenantActor, assetId: string) {
+    const asset = await tx.asset.findFirst({ where: { id: assetId } });
+    if (asset === null || (asset.ownerMembershipId !== actor.membershipId && !can(actor, 'admin.access'))) {
+      throw new AppError('NOT_FOUND');
+    }
+    return asset;
+  }
+
+  private view(asset: {
+    id: string;
+    kind: string;
+    purpose: string;
+    status: string;
+    originalName: string;
+    mime: string;
+    sizeBytes: bigint;
+    rejectReason: string | null;
+    width: number | null;
+    height: number | null;
+    durationSeconds: number | null;
+  }): AssetStatusView {
+    return {
+      id: asset.id,
+      kind: asset.kind,
+      purpose: asset.purpose,
+      status: asset.status,
+      originalName: asset.originalName,
+      mime: asset.mime,
+      sizeBytes: Number(asset.sizeBytes),
+      rejectReason: asset.rejectReason,
+      width: asset.width,
+      height: asset.height,
+      durationSeconds: asset.durationSeconds,
+    };
+  }
+}

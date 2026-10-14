@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "studyhub-local",
+      "credentials": [{ "accessKey": "studyhub-local", "secretKey": "studyhub-local-object-store" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

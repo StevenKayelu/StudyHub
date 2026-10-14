@@ -1,6 +1,7 @@
 import type { TenantBootstrap } from '@studyhub/contracts';
 import { buttonClasses, StatePanel } from '@studyhub/ui';
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import NextLink from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
@@ -28,7 +29,11 @@ async function tenantFor(params: TenantLayoutProps['params']): Promise<TenantBoo
 export async function generateMetadata({ params }: Pick<TenantLayoutProps, 'params'>): Promise<Metadata> {
   const tenant = await tenantFor(params);
   const name = tenant.branding.displayName;
+  // Absolute URLs for sharing previews: this school's own host (validated by src/proxy.ts).
+  const host = (await headers()).get('host') ?? 'localhost';
+  const scheme = process.env.NODE_ENV === 'production' ? 'https' : 'http';
   return {
+    metadataBase: new URL(`${scheme}://${host}`),
     title: { default: name, template: `%s · ${name}` },
     applicationName: name,
     manifest: '/manifest.webmanifest',

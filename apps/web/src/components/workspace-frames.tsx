@@ -3,11 +3,15 @@ import 'server-only';
 import type { TenantBootstrap } from '@studyhub/contracts';
 import { WorkspaceShell, type WorkspaceShellProps } from '@studyhub/ui';
 import {
+  BookCheck,
   Building2,
   ChartColumn,
   CreditCard,
+  FolderTree,
+  GraduationCap,
   LayoutDashboard,
   Library,
+  ListChecks,
   Palette,
   Settings,
   UserRound,
@@ -99,6 +103,7 @@ export async function StudioFrame({ tenant, current, ...props }: FrameProps & { 
 /** Tenant administration (06 §1.4, §10.2). */
 export async function AdminFrame({ tenant, current, ...props }: FrameProps & { tenant: TenantBootstrap }) {
   const t = await getTranslations();
+  const terms = await getTerms(tenant, await getLocale());
   return (
     <WorkspaceShell
       variant="admin"
@@ -115,6 +120,26 @@ export async function AdminFrame({ tenant, current, ...props }: FrameProps & { t
             href: '/admin',
             label: t('admin.nav.overview'),
             icon: <LayoutDashboard aria-hidden="true" className={icon} />,
+          },
+          {
+            href: '/admin/reviews',
+            label: t('admin.nav.reviews'),
+            icon: <ListChecks aria-hidden="true" className={icon} />,
+          },
+          {
+            href: '/admin/courses',
+            label: t('admin.nav.courses', terms),
+            icon: <BookCheck aria-hidden="true" className={icon} />,
+          },
+          {
+            href: '/admin/categories',
+            label: t('admin.nav.categories'),
+            icon: <FolderTree aria-hidden="true" className={icon} />,
+          },
+          {
+            href: '/admin/instructors',
+            label: t('admin.nav.instructors', terms),
+            icon: <GraduationCap aria-hidden="true" className={icon} />,
           },
           {
             href: '/admin/users',

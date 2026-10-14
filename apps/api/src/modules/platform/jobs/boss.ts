@@ -21,6 +21,14 @@ export const QUEUE_DEFINITIONS: ReadonlyArray<Omit<Queue, 'name'> & { name: stri
     retryBackoff: true,
     retentionSeconds: 7 * 24 * 3600,
   },
+  // Uploads: verify, scan, derive (the media module's MEDIA_PROCESS_JOB).
+  {
+    name: 'media.process',
+    retryLimit: 5,
+    retryDelay: 10,
+    retryBackoff: true,
+    retentionSeconds: 7 * 24 * 3600,
+  },
 ];
 
 export type JobHandler = (envelope: JobEnvelope, logger: Logger) => Promise<unknown>;

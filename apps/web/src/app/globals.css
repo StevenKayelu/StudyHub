@@ -4,3 +4,34 @@
 /* Scan the design-system components (compiled) and this app for utility classes. */
 @source '../../node_modules/@studyhub/ui/dist';
 @source '../';
+
+/* Rich-text editing surface (Studio): the same look as the rendered content. */
+.prose-studyhub ul {
+  list-style: disc;
+  padding-inline-start: 1.5rem;
+}
+.prose-studyhub ol {
+  list-style: decimal;
+  padding-inline-start: 1.5rem;
+}
+.prose-studyhub h2 {
+  font-size: var(--text-h2);
+  font-weight: 600;
+}
+.prose-studyhub h3,
+.prose-studyhub h4 {
+  font-size: var(--text-h3);
+  font-weight: 600;
+}
+.prose-studyhub blockquote {
+  border-inline-start: 3px solid var(--color-line);
+  padding-inline-start: 1rem;
+  color: var(--color-muted);
+}
+.prose-studyhub pre {
+  background: var(--color-sunken);
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  font-family: var(--font-mono, monospace);
+  overflow-x: auto;
+}

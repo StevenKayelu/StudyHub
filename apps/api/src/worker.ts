@@ -3,6 +3,7 @@ import {
   createEmailHandler,
   createLogger,
   createMailTransport,
+  createMediaPorts,
   DEFAULT_JOB_HANDLERS,
   dispatchDueOutbox,
   EMAIL_SEND_JOB,
@@ -11,6 +12,7 @@ import {
   SecretBox,
   startWorker,
 } from './modules/platform';
+import { createProcessAssetHandler, MEDIA_PROCESS_JOB } from './modules/media';
 
 const OUTBOX_INTERVAL_MS = 2000;
 
@@ -18,6 +20,9 @@ const OUTBOX_INTERVAL_MS = 2000;
 async function main(): Promise<void> {
   const env = loadApiEnv();
   const logger = createLogger({ level: env.LOG_LEVEL }).child({ process: 'worker' });
+  // Runtime role (studyhub_app) under RLS; the outbox sweep uses only the claim_due_outbox() definer function.
+  const prisma = new PrismaService(env, logger);
+  const media = createMediaPorts(env);
   const handlers = {
     ...DEFAULT_JOB_HANDLERS,
     [EMAIL_SEND_JOB]: createEmailHandler(
@@ -25,10 +30,13 @@ async function main(): Promise<void> {
       createMailTransport(env.SMTP_URL),
       env.MAIL_FROM_ADDRESS,
     ),
+    [MEDIA_PROCESS_JOB]: createProcessAssetHandler({
+      prisma,
+      storage: media.storage,
+      scanner: media.scanner,
+    }),
   };
   const boss = await startWorker({ connectionString: env.DATABASE_URL_APP, logger, handlers });
-  // Runtime role (studyhub_app) under RLS; the outbox sweep uses only the claim_due_outbox() definer function.
-  const prisma = new PrismaService(env, logger);
 
   let sweeping = false;
   const outboxTimer = setInterval(() => {

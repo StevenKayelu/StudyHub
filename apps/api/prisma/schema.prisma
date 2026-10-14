@@ -473,3 +473,280 @@ model PlatformAuditLog {
   @@index([createdAt(sort: Desc)], map: "platform_audit_log_created_idx")
   @@map("platform_audit_log")
 }
+
+// ---------------------------------------------------------------------------------------------
+// Catalogue and authoring (M5, migration 0005). All school-owned (tenant_isolation).
+// ---------------------------------------------------------------------------------------------
+
+enum InstructorStatus {
+  DRAFT
+  SUBMITTED
+  CHANGES_REQUESTED
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum CourseStatus {
+  DRAFT
+  IN_REVIEW
+  CHANGES_REQUESTED
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  ALL_LEVELS
+}
+
+enum LessonType {
+  TEXT
+  VIDEO
+  FILE
+  QUIZ
+}
+
+enum SubmissionDecision {
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+enum AssetKind {
+  IMAGE
+  DOCUMENT
+  VIDEO
+}
+
+enum AssetPurpose {
+  COURSE_COVER
+  AVATAR
+  LESSON_FILE
+  LESSON_IMAGE
+  LESSON_VIDEO
+}
+
+enum AssetStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  SCANNING
+  PROCESSING
+  READY
+  REJECTED
+}
+
+model Category {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  slug       String
+  name       String
+  position   Int       @default(0)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  subjects Subject[]
+
+  @@unique([tenantId, slug], map: "category_tenant_slug_key")
+  @@unique([tenantId, id], map: "category_tenant_id_id_key")
+  @@map("category")
+}
+
+model Subject {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  categoryId String    @map("category_id") @db.Uuid
+  slug       String
+  name       String
+  position   Int       @default(0)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  category Category @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  courses  Course[]
+
+  @@unique([tenantId, slug], map: "subject_tenant_slug_key")
+  @@unique([tenantId, id], map: "subject_tenant_id_id_key")
+  @@index([tenantId, categoryId, position], map: "subject_tenant_category_idx")
+  @@map("subject")
+}
+
+model Asset {
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String       @map("tenant_id") @db.Uuid
+  ownerMembershipId String       @map("owner_membership_id") @db.Uuid
+  kind              AssetKind
+  purpose           AssetPurpose
+  storageKey        String?      @map("storage_key")
+  derivativeKey     String?      @map("derivative_key")
+  provider          String?
+  providerVideoId   String?      @map("provider_video_id")
+  originalName      String       @map("original_name")
+  mime              String
+  sizeBytes         BigInt       @map("size_bytes")
+  checksumSha256    String?      @map("checksum_sha256")
+  status            AssetStatus  @default(PENDING_UPLOAD)
+  rejectReason      String?      @map("reject_reason")
+  width             Int?
+  height            Int?
+  durationSeconds   Int?         @map("duration_seconds")
+  expiresAt         DateTime?    @map("expires_at") @db.Timestamptz(3)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime     @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, id], map: "asset_tenant_id_id_key")
+  @@index([tenantId, ownerMembershipId, status], map: "asset_tenant_owner_status_idx")
+  @@index([tenantId, status, createdAt], map: "asset_tenant_status_created_idx")
+  @@map("asset")
+}
+
+model TenantUsage {
+  tenantId      String   @id @map("tenant_id") @db.Uuid
+  storageBytes  BigInt   @default(0) @map("storage_bytes")
+  reservedBytes BigInt   @default(0) @map("reserved_bytes")
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@map("tenant_usage")
+}
+
+model InstructorProfile {
+  membershipId   String           @id @map("membership_id") @db.Uuid
+  tenantId       String           @map("tenant_id") @db.Uuid
+  slug           String
+  displayName    String           @map("display_name")
+  headline       String?
+  bio            String?
+  subjects       String[]         @default([])
+  qualifications String?
+  avatarAssetId  String?          @map("avatar_asset_id") @db.Uuid
+  status         InstructorStatus @default(DRAFT)
+  submittedAt    DateTime?        @map("submitted_at") @db.Timestamptz(3)
+  decidedBy      String?          @map("decided_by") @db.Uuid
+  decidedAt      DateTime?        @map("decided_at") @db.Timestamptz(3)
+  decisionNote   String?          @map("decision_note")
+  reapplyAfter   DateTime?        @map("reapply_after") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version        Int              @default(1)
+
+  @@unique([tenantId, slug], map: "instructor_profile_tenant_slug_key")
+  @@unique([tenantId, membershipId], map: "instructor_profile_tenant_membership_key")
+  @@index([tenantId, status, submittedAt], map: "instructor_profile_tenant_status_idx")
+  @@map("instructor_profile")
+}
+
+model Course {
+  id                String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String                   @map("tenant_id") @db.Uuid
+  ownerMembershipId String                   @map("owner_membership_id") @db.Uuid
+  subjectId         String?                  @map("subject_id") @db.Uuid
+  slug              String
+  title             String
+  subtitle          String?
+  descriptionJson   Json?                    @map("description_json")
+  descriptionText   String                   @default("") @map("description_text")
+  outcomes          String[]                 @default([])
+  requirements      String[]                 @default([])
+  level             CourseLevel              @default(ALL_LEVELS)
+  language          String                   @default("en")
+  tags              String[]                 @default([])
+  coverAssetId      String?                  @map("cover_asset_id") @db.Uuid
+  priceMinor        BigInt                   @default(0) @map("price_minor")
+  currency          String                   @default("ZMW") @db.Char(3)
+  accessDays        Int?                     @map("access_days")
+  status            CourseStatus             @default(DRAFT)
+  firstPublishedAt  DateTime?                @map("first_published_at") @db.Timestamptz(3)
+  publishedAt       DateTime?                @map("published_at") @db.Timestamptz(3)
+  archivedAt        DateTime?                @map("archived_at") @db.Timestamptz(3)
+  enrollmentCount   Int                      @default(0) @map("enrollment_count")
+  createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version           Int                      @default(1)
+  searchVector      Unsupported("tsvector")? @map("search_vector")
+
+  subject     Subject?           @relation(fields: [tenantId, subjectId], references: [tenantId, id], onDelete: Restrict)
+  sections    Section[]
+  lessons     Lesson[]
+  submissions CourseSubmission[]
+
+  @@unique([tenantId, slug], map: "course_tenant_slug_key")
+  @@unique([tenantId, id], map: "course_tenant_id_id_key")
+  @@index([tenantId, ownerMembershipId, status], map: "course_tenant_owner_status_idx")
+  @@map("course")
+}
+
+model CourseSubmission {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String              @map("tenant_id") @db.Uuid
+  courseId          String              @map("course_id") @db.Uuid
+  submittedBy       String              @map("submitted_by") @db.Uuid
+  submittedAt       DateTime            @default(now()) @map("submitted_at") @db.Timestamptz(3)
+  checklistSnapshot Json                @map("checklist_snapshot")
+  decision          SubmissionDecision?
+  decidedBy         String?             @map("decided_by") @db.Uuid
+  decidedAt         DateTime?           @map("decided_at") @db.Timestamptz(3)
+  notes             String?
+
+  course Course @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, courseId, submittedAt(sort: Desc)], map: "course_submission_tenant_course_idx")
+  @@map("course_submission")
+}
+
+model Section {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  courseId String @map("course_id") @db.Uuid
+  title    String
+  position Int
+
+  course  Course   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@unique([tenantId, id], map: "section_tenant_id_id_key")
+  @@unique([tenantId, courseId, position], map: "section_course_position_key")
+  @@map("section")
+}
+
+model Lesson {
+  id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String     @map("tenant_id") @db.Uuid
+  courseId        String     @map("course_id") @db.Uuid
+  sectionId       String     @map("section_id") @db.Uuid
+  title           String
+  type            LessonType
+  position        Int
+  contentJson     Json?      @map("content_json")
+  videoAssetId    String?    @map("video_asset_id") @db.Uuid
+  quizId          String?    @map("quiz_id") @db.Uuid
+  isPreview       Boolean    @default(false) @map("is_preview")
+  isRequired      Boolean    @default(true) @map("is_required")
+  downloadable    Boolean    @default(false)
+  durationSeconds Int?       @map("duration_seconds")
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime   @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version         Int        @default(1)
+
+  course      Course             @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Cascade)
+  section     Section            @relation(fields: [tenantId, sectionId], references: [tenantId, id], onDelete: Cascade)
+  attachments LessonAttachment[]
+
+  @@unique([tenantId, id], map: "lesson_tenant_id_id_key")
+  @@unique([tenantId, sectionId, position], map: "lesson_section_position_key")
+  @@index([tenantId, courseId], map: "lesson_tenant_course_idx")
+  @@map("lesson")
+}
+
+model LessonAttachment {
+  tenantId String @map("tenant_id") @db.Uuid
+  lessonId String @map("lesson_id") @db.Uuid
+  assetId  String @map("asset_id") @db.Uuid
+  position Int    @default(0)
+
+  lesson Lesson @relation(fields: [tenantId, lessonId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, lessonId, assetId])
+  @@map("lesson_attachment")
+}

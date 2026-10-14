@@ -51,6 +51,57 @@ const IDENTITY_ROUTES: readonly string[] = [
   'PUT /api/v1/admin/members/:membershipId/roles',
 ];
 
+/**
+ * Catalogue, authoring and media routes (M5). Covered by catalogue.int.test.ts (school isolation of the
+ * catalogue, slugs, uploads, webhooks, AC 2–5) and by the M5 rows of the authorization matrix.
+ * Webhooks are not school-scoped by host: they resolve the school through resolve_video_asset().
+ */
+const CONTENT_ROUTES: readonly string[] = [
+  'DELETE /api/v1/studio/courses/:id/lessons/:lessonId',
+  'DELETE /api/v1/studio/courses/:id/sections/:sectionId',
+  'GET /api/v1/admin/categories',
+  'GET /api/v1/admin/course-reviews',
+  'GET /api/v1/admin/courses',
+  'GET /api/v1/admin/instructor-applications',
+  'GET /api/v1/assets/:id',
+  'GET /api/v1/assets/:id/download',
+  'GET /api/v1/categories',
+  'GET /api/v1/courses',
+  'GET /api/v1/courses/:slug',
+  'GET /api/v1/instructors/:slug',
+  'GET /api/v1/me/instructor',
+  'GET /api/v1/studio/courses',
+  'GET /api/v1/studio/courses/:id',
+  'GET /api/v1/studio/courses/:id/lessons/:lessonId',
+  'GET /api/v1/studio/courses/:id/outline',
+  'GET /api/v1/studio/courses/:id/publish-checklist',
+  'PATCH /api/v1/admin/categories/:id',
+  'PATCH /api/v1/admin/subjects/:id',
+  'PATCH /api/v1/studio/courses/:id',
+  'PATCH /api/v1/studio/courses/:id/lessons/:lessonId',
+  'PATCH /api/v1/studio/courses/:id/sections/:sectionId',
+  'POST /api/v1/admin/categories',
+  'POST /api/v1/admin/courses/:id/review',
+  'POST /api/v1/admin/courses/:id/unpublish',
+  'POST /api/v1/admin/instructors/:membershipId/decision',
+  'POST /api/v1/admin/subjects',
+  'POST /api/v1/me/instructor/submit',
+  'POST /api/v1/studio/courses',
+  'POST /api/v1/studio/courses/:id/archive',
+  'POST /api/v1/studio/courses/:id/lessons',
+  'POST /api/v1/studio/courses/:id/publish',
+  'POST /api/v1/studio/courses/:id/sections',
+  'POST /api/v1/studio/courses/:id/submit',
+  'POST /api/v1/studio/courses/:id/unpublish',
+  'POST /api/v1/uploads',
+  'POST /api/v1/uploads/:id/complete',
+  'POST /api/v1/videos',
+  'POST /api/v1/webhooks/video/:provider',
+  'PUT /api/v1/dev/fake-video/:providerVideoId',
+  'PUT /api/v1/me/instructor',
+  'PUT /api/v1/studio/courses/:id/outline/order',
+];
+
 describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
   let database: TestDatabase;
   let migrator: Client;
@@ -192,7 +243,11 @@ describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
     const routes = listRoutes(app).filter((route) => route.split(' ')[1]!.startsWith('/api/v1'));
     expect(routes.length).toBeGreaterThan(0);
     expect(routes).toEqual(
-      [...TENANT_ROUTES.map((route) => `${route.method} ${route.url}`), ...IDENTITY_ROUTES].sort(),
+      [
+        ...TENANT_ROUTES.map((route) => `${route.method} ${route.url}`),
+        ...IDENTITY_ROUTES,
+        ...CONTENT_ROUTES,
+      ].sort(),
     );
   });
 

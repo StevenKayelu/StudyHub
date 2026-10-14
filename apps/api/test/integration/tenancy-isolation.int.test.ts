@@ -49,6 +49,13 @@ let personId = '';
 /** The fixture membership of each school, so dependent fixtures (and forgeries) can reference it. */
 const membershipOf: Record<string, string> = {};
 const fixtureHash = () => randomBytes(32);
+/** Ids of fixture rows per table and school, for fixtures (and forgeries) that reference them. */
+const idOf: Record<string, Record<string, string>> = {};
+const remember = (table: string, tenantId: string, result: QueryResult<{ id: string }>) => {
+  (idOf[table] ??= {})[tenantId] ??= result.rows[0]!.id;
+  return result;
+};
+const ref = (table: string, tenantId: string) => idOf[table]?.[tenantId] ?? randomUUID();
 
 /** How to create one row of each tenant-owned table. A new tenant table MUST be added here (T-ISO-05). */
 const FIXTURES: Readonly<
@@ -107,6 +114,115 @@ const FIXTURES: Readonly<
         `INSERT INTO invitation (tenant_id, email, role, token_hash, expires_at)
          VALUES ($1, $2, 'INSTRUCTOR', $3, now() + interval '1 day')`,
         [tenantId, `invitee-${randomUUID().slice(0, 8)}@example.com`, fixtureHash()],
+      ),
+  },
+  category: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'category',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO category (tenant_id, slug, name) VALUES ($1, $2, 'Fixture') RETURNING id`,
+          [tenantId, `fixture-${randomUUID().slice(0, 8)}`],
+        ),
+      ),
+  },
+  subject: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'subject',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO subject (tenant_id, category_id, slug, name) VALUES ($1, $2, $3, 'Fixture') RETURNING id`,
+          [tenantId, ref('category', tenantId), `fixture-${randomUUID().slice(0, 8)}`],
+        ),
+      ),
+  },
+  asset: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'asset',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO asset (tenant_id, owner_membership_id, kind, purpose, original_name, mime, size_bytes, storage_key)
+         VALUES ($1, $2, 'DOCUMENT', 'LESSON_FILE', 'fixture.pdf', 'application/pdf', 10, $3) RETURNING id`,
+          [tenantId, membershipOf[tenantId] ?? randomUUID(), `t/${tenantId}/fixture/${randomUUID()}`],
+        ),
+      ),
+  },
+  tenant_usage: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO tenant_usage (tenant_id, storage_bytes) VALUES ($1, 1)
+         ON CONFLICT (tenant_id) DO UPDATE SET storage_bytes = tenant_usage.storage_bytes`,
+        [tenantId],
+      ),
+  },
+  instructor_profile: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO instructor_profile (membership_id, tenant_id, slug, display_name) VALUES ($1, $2, $3, 'Fixture')
+         ON CONFLICT (membership_id) DO NOTHING`,
+        [membershipOf[tenantId] ?? randomUUID(), tenantId, `fixture-${randomUUID().slice(0, 8)}`],
+      ),
+  },
+  course: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'course',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO course (tenant_id, owner_membership_id, slug, title) VALUES ($1, $2, $3, 'Fixture course') RETURNING id`,
+          [tenantId, membershipOf[tenantId] ?? randomUUID(), `fixture-${randomUUID().slice(0, 8)}`],
+        ),
+      ),
+  },
+  course_submission: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO course_submission (tenant_id, course_id, submitted_by, checklist_snapshot) VALUES ($1, $2, $3, '[]')`,
+        [tenantId, ref('course', tenantId), personId],
+      ),
+  },
+  section: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'section',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO section (tenant_id, course_id, title, position)
+         VALUES ($1, $2, 'Fixture', (SELECT coalesce(max(position) + 1, 0) FROM section WHERE course_id = $2)) RETURNING id`,
+          [tenantId, ref('course', tenantId)],
+        ),
+      ),
+  },
+  lesson: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'lesson',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO lesson (tenant_id, course_id, section_id, title, type, position)
+         VALUES ($1, $2, $3, 'Fixture', 'TEXT', (SELECT coalesce(max(position) + 1, 0) FROM lesson WHERE section_id = $3)) RETURNING id`,
+          [tenantId, ref('course', tenantId), ref('section', tenantId)],
+        ),
+      ),
+  },
+  lesson_attachment: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO lesson_attachment (tenant_id, lesson_id, asset_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [tenantId, ref('lesson', tenantId), ref('asset', tenantId)],
       ),
   },
   tenant_branding: {

@@ -1,5 +1,5 @@
 // Public surface of the tenancy module (enforced by dependency-cruiser).
-export { registerTenantContextHook, TENANT_SCOPED_PREFIX } from './api/tenant-context.hook';
+export { registerTenantContextHook, TENANT_SCOPED_PREFIX, WEBHOOK_PREFIX } from './api/tenant-context.hook';
 export {
   type ResolvedTenant,
   type ResolvedTenantStatus,
@@ -18,4 +18,5 @@ export {
   type TenantKind,
   writeTenantProfile,
 } from './infra/tenant-provisioning';
+export { readContentSettings } from './infra/content-settings';
 export { TenancyModule } from './tenancy.module';
