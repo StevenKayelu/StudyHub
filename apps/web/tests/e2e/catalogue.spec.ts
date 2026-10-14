@@ -41,13 +41,13 @@ test.describe('catalogue (M5)', () => {
     await expect(page.getByText('Nothing matches yet')).toBeVisible();
   });
 
-  test('course landing: outline, instructor, price and no enrolment yet', async ({ page }) => {
+  test('course landing: outline, instructor, price and the enrol action', async ({ page }) => {
     await page.goto(school(ACME, '/c/biology-foundations'));
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Biology foundations');
     await expect(page).toHaveTitle(/Biology foundations/);
     await expect(page.getByRole('heading', { name: 'Section 1: Cells' })).toBeVisible();
     await expect(page.getByTestId('course-price')).toHaveText('Free');
-    await expect(page.getByText('Enrolment opens soon')).toBeVisible();
+    await expect(page.getByTestId('course-cta')).toHaveText('Sign in to enrol');
     await expectNoSeriousAxeViolations(page);
 
     await page.getByRole('link', { name: 'Tiko Phiri' }).first().click();

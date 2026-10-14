@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { CatalogueResponse, CourseCard, CourseLanding, InstructorPage } from '@studyhub/contracts';
 
 import type { TenantActor } from '../../identity';
+import { EnrollmentsService } from '../../learning';
 import { AppError, TenantDb, type TenantTx } from '../../platform';
 import { readContentSettings } from '../../tenancy';
 import { StudioService } from './studio.service';
@@ -35,6 +36,7 @@ export class CatalogueService {
   constructor(
     private readonly db: TenantDb,
     private readonly studio: StudioService,
+    private readonly enrollments: EnrollmentsService,
   ) {}
 
   async search(
@@ -110,7 +112,7 @@ export class CatalogueService {
               title: true,
               lessons: {
                 orderBy: { position: 'asc' },
-                select: { title: true, type: true, durationSeconds: true, isPreview: true },
+                select: { id: true, title: true, type: true, durationSeconds: true, isPreview: true },
               },
             },
           },
@@ -126,7 +128,13 @@ export class CatalogueService {
     const { course, profile } = data;
     const lessons = course.sections.flatMap((s) => s.lessons);
     const covers = await this.studio.coverUrls([course.coverAssetId]);
+    const viewer = await this.enrollments.viewer(actor, {
+      id: course.id,
+      ownerMembershipId: course.ownerMembershipId,
+      priceMinor: Number(course.priceMinor),
+    });
     return {
+      id: course.id,
       slug: course.slug,
       title: course.title,
       subtitle: course.subtitle,
@@ -148,6 +156,7 @@ export class CatalogueService {
         profile === null
           ? null
           : { name: profile.displayName, slug: profile.slug, headline: profile.headline, bio: profile.bio },
+      viewer,
     };
   }
 

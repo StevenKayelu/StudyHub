@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Typed school settings used from M5 (blueprint 05 §8.2 tenant_setting; BR-56, BR-57, BR-64). Each key
+ * Typed school settings used from M5 and M6 (blueprint 05 §8.2 tenant_setting; BR-56, BR-57, BR-64). Each key
  * is stored as its own tenant_setting row; missing keys take these defaults. The settings screen
  * (S-AD09) arrives with tenant administration; until then the defaults (or seeded values) apply.
  */
@@ -28,6 +28,10 @@ export const contentSettingsSchema = z.object({
   maxDocumentMb: z.number().int().min(1).max(500).default(50),
   maxVideoGb: z.number().min(0.1).max(20).default(4),
   downloadsAllowedDefault: z.boolean().default(false),
+  /** BR-64 / M6: a video lesson completes at this share of its duration. */
+  videoCompletionThresholdPct: z.number().int().min(50).max(100).default(90),
+  /** BR-12: access length for courses that don't set their own (null: lifetime). */
+  defaultAccessDays: z.number().int().min(1).max(3650).nullable().default(null),
   /** Commerce (BR-04): minimum price of a paid course, in minor units. */
   minPaidPriceMinor: z.number().int().min(0).default(1000),
 });

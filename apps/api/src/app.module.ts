@@ -4,6 +4,7 @@ import { AuditModule } from './modules/audit';
 import { ConsoleModule } from './modules/console';
 import { CoursesModule } from './modules/courses';
 import { IdentityModule } from './modules/identity';
+import { LearningModule } from './modules/learning';
 import { MediaModule } from './modules/media';
 import { PlatformModule, type PlatformModuleOptions } from './modules/platform';
 import { TenancyModule } from './modules/tenancy';
@@ -27,6 +28,7 @@ export class AppModule {
         ConsoleModule,
         MediaModule,
         CoursesModule,
+        LearningModule,
         ...(options.imports ?? []),
       ],
     };

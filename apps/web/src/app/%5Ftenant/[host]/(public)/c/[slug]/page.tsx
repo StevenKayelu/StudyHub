@@ -1,5 +1,5 @@
 import { courseLandingSchema, richTextToPlain } from '@studyhub/contracts';
-import { Alert, Card } from '@studyhub/ui';
+import { Card } from '@studyhub/ui';
 import { CircleCheck, FileText, ListChecks, PlayCircle } from 'lucide-react';
 import type { Metadata } from 'next';
 import NextLink from 'next/link';
@@ -7,10 +7,12 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { cache } from 'react';
 
+import { CourseAction } from '../../../../../../components/course-action';
 import { durationFormatter, formatPrice } from '../../../../../../components/course-card';
 import { PublicFrame } from '../../../../../../components/public-frame';
 import { RichText } from '../../../../../../components/rich-text';
 import { fetchContent } from '../../../../../../lib/content-api';
+import { learnTexts } from '../../../../../../lib/learn-texts';
 import { currentTenant, getTerms } from '../../../../../../lib/tenant';
 
 type Params = Promise<{ slug: string }>;
@@ -39,7 +41,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   };
 }
 
-/** S-P03 Course landing: what it is, who teaches it, the outline. Enrolment arrives with M6. */
+/** S-P03 Course landing: what it is, who teaches it, the outline, and enrolment (F14). */
 export default async function CourseLandingPage({ params }: { params: Params }) {
   const tenant = await currentTenant();
   if (tenant === null) return null;
@@ -123,7 +125,17 @@ export default async function CourseLandingPage({ params }: { params: Params }) 
                             className="flex items-center gap-3 px-4 py-2"
                           >
                             <Icon aria-hidden="true" className="size-4 shrink-0 text-muted" />
-                            <span className="flex-1">{lesson.title}</span>
+                            {lesson.isPreview ? (
+                              <NextLink
+                                href={`/c/${course.slug}/preview/${lesson.id}`}
+                                className="flex-1"
+                                aria-label={t('course.previewLink', { title: lesson.title })}
+                              >
+                                {lesson.title}
+                              </NextLink>
+                            ) : (
+                              <span className="flex-1">{lesson.title}</span>
+                            )}
                             <span className="sr-only">{t(`course.lessonTypes.${lesson.type}`)}</span>
                             {lesson.isPreview ? (
                               <span className="text-caption text-accent">{t('course.preview')}</span>
@@ -190,9 +202,11 @@ export default async function CourseLandingPage({ params }: { params: Params }) 
             <p className="tabular text-h2" data-testid="course-price">
               {await formatPrice(course.priceMinor, course.currency)}
             </p>
-            <Alert tone="info" title={t('course.enrolSoon')}>
-              {t('course.enrolSoonHint', terms)}
-            </Alert>
+            <CourseAction
+              course={{ id: course.id, slug: course.slug, priceMinor: course.priceMinor }}
+              viewer={course.viewer}
+              texts={await learnTexts(terms)}
+            />
           </Card>
         </aside>
       </article>

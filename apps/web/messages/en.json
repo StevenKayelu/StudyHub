@@ -80,7 +80,79 @@
     "title": "My learning",
     "emptyTitle": "You haven't enrolled in a {courseLower} yet",
     "emptyMessage": "{courses} you enrol in appear here.",
-    "browse": "Browse {coursesLower}"
+    "browse": "Browse {coursesLower}",
+    "continueTitle": "Continue learning",
+    "resume": "Resume",
+    "resumeAt": "at {time}",
+    "start": "Start",
+    "myCourses": "My {coursesLower}",
+    "seeAll": "See all",
+    "allTitle": "Learning",
+    "filter": {
+      "label": "Show",
+      "all": "All",
+      "inProgress": "In progress",
+      "completed": "Completed"
+    },
+    "progress": "{percent}% complete",
+    "completed": "Completed",
+    "accessUntil": "Access until {date}",
+    "noneInFilter": "Nothing here yet.",
+    "popularFree": "Popular free {coursesLower}",
+    "comingNext": "Open quizzes and recent results appear here once quizzes arrive.",
+    "player": {
+      "backToCourse": "Back to {courseLower}",
+      "outline": "Outline",
+      "openOutline": "Outline",
+      "lessonOf": "Lesson {number} of {total}",
+      "progressLabel": "{done} of {total} required lessons complete",
+      "markComplete": "Mark complete",
+      "marking": "Saving…",
+      "completed": "Completed",
+      "autoComplete": "Completes when you’ve watched {percent}%",
+      "next": "Next: {title}",
+      "previous": "Previous",
+      "finish": "Finish {courseLower}",
+      "readOnly": "This school is read-only for now. You can read everything, but your progress isn’t saved.",
+      "unpublished": "This {courseLower} is no longer in the catalogue. You keep your access.",
+      "ownerPreview": "You’re previewing as the {instructorLower}. Progress isn’t recorded.",
+      "adminPreview": "You’re viewing as an administrator. Progress isn’t recorded.",
+      "lessonComplete": "Lesson complete",
+      "attachments": "Files",
+      "download": "Download",
+      "downloadFailed": "The file couldn’t be prepared. Try again.",
+      "videoProcessing": "This video is still being processed.",
+      "videoUnavailable": "This video can’t be played right now.",
+      "saveFailed": "Your progress couldn’t be saved. Check your connection.",
+      "quizSoon": "Quizzes arrive in a coming update.",
+      "noContent": "This lesson has no content yet.",
+      "states": {
+        "COMPLETED": "Completed",
+        "IN_PROGRESS": "In progress",
+        "NOT_STARTED": "Not started",
+        "CURRENT": "Current lesson"
+      },
+      "keyboardHint": "Tip: use the ← and → keys for the previous and next lesson.",
+      "downloadName": "Download {name}"
+    },
+    "video": {
+      "simulated": "Practice video",
+      "simulatedHint": "No video service is connected yet, so this plays a timer as long as the video.",
+      "play": "Play",
+      "pause": "Pause",
+      "position": "Position",
+      "back": "Back 10 seconds",
+      "forward": "Forward 10 seconds",
+      "time": "{current} of {total}"
+    },
+    "complete": {
+      "title": "You’ve completed {course}",
+      "message": "Well done. Everything you finished stays here for you to review.",
+      "lessons": "{count, plural, one {# lesson} other {# lessons}} completed",
+      "review": "Review {courseLower}",
+      "browse": "Browse more {coursesLower}",
+      "certificateSoon": "Completion certificates arrive in a later update."
+    }
   },
   "studio": {
     "navLabel": "Studio",
@@ -112,7 +184,8 @@
       "outline": "Outline",
       "details": "Details",
       "pricing": "Pricing",
-      "publish": "Publish"
+      "publish": "Publish",
+      "learners": "Learners"
     },
     "outline": {
       "addSection": "Add section",
@@ -213,7 +286,19 @@
       "code": "Code block",
       "link": "Link",
       "linkPrompt": "Link address (https://…)"
-    }
+    },
+    "learners": {
+      "title": "Learners",
+      "empty": "No learners yet",
+      "emptyMessage": "Learners appear here when they enrol.",
+      "name": "Learner",
+      "enrolled": "Enrolled",
+      "progress": "Progress",
+      "lastActive": "Last active",
+      "never": "Not started",
+      "completed": "Completed"
+    },
+    "previewAsLearner": "Preview as learner"
   },
   "admin": {
     "navLabel": "Administration",
@@ -288,7 +373,33 @@
       "unpublish": "Unpublish",
       "reason": "Reason",
       "by": "by {name}",
-      "empty": "No {coursesLower} yet."
+      "empty": "No {coursesLower} yet.",
+      "access": "Access"
+    },
+    "enrollments": {
+      "title": "Access to {course}",
+      "grantTitle": "Give access",
+      "grantHint": "For a member of this school, for example a scholarship. Paid {coursesLower} too.",
+      "email": "Member’s email",
+      "reason": "Reason",
+      "grant": "Give access",
+      "revoke": "Revoke",
+      "revokeReason": "Reason for revoking",
+      "confirmRevoke": "Revoke access",
+      "empty": "No one has access yet.",
+      "learner": "Learner",
+      "progress": "{percent}%",
+      "started": "Since {date}",
+      "statuses": {
+        "ACTIVE": "Active",
+        "EXPIRED": "Expired",
+        "REVOKED": "Revoked"
+      },
+      "sources": {
+        "FREE": "Free enrolment",
+        "PURCHASE": "Purchase",
+        "ADMIN_GRANT": "Given by an administrator"
+      }
     }
   },
   "console": {
@@ -371,7 +482,9 @@
     },
     "unavailable": {
       "title": "This site is temporarily unavailable",
-      "message": "Please check back later."
+      "message": "Please check back later.",
+      "myLearning": "Go to my learning",
+      "learnerSignIn": "Sign in to continue learning"
     },
     "comingSoon": {
       "title": "Coming soon",
@@ -527,8 +640,6 @@
     "aboutInstructor": "About the {instructorLower}",
     "includes": "This {courseLower} includes",
     "preview": "Preview",
-    "enrolSoon": "Enrolment opens soon",
-    "enrolSoonHint": "Sign-up for {coursesLower} arrives in the next update.",
     "lessonTypes": {
       "TEXT": "Reading",
       "VIDEO": "Video",
@@ -536,7 +647,25 @@
       "QUIZ": "Quiz"
     },
     "section": "Section {number}: {title}",
-    "coursesBy": "{courses} by {name}"
+    "coursesBy": "{courses} by {name}",
+    "cta": {
+      "enrolFree": "Enrol for free",
+      "enrolling": "Enrolling…",
+      "signInToEnrol": "Sign in to enrol",
+      "start": "Start learning",
+      "continue": "Continue: {lesson}",
+      "review": "Review {courseLower}",
+      "openAsOwner": "Preview as learner",
+      "openAsAdmin": "Open {courseLower}",
+      "enrolled": "You’re enrolled",
+      "progress": "{percent}% complete",
+      "completed": "Completed",
+      "paidSoon": "Buying {coursesLower} opens soon",
+      "paidSoonHint": "Payments arrive in a coming update. Ask the school if you need access sooner."
+    },
+    "previewTitle": "Preview: {title}",
+    "previewLink": "Preview {title}",
+    "previewCta": "Enrol to open every lesson"
   },
   "teach": {
     "title": "Become a {instructorLower}",

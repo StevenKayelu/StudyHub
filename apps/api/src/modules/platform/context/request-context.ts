@@ -11,6 +11,8 @@ import { AppError } from '../errors/app-error';
 export interface RequestContext {
   requestId: string;
   tenantId?: string;
+  /** The school's lifecycle status, from the same host resolution (BR-52 read-only mode). */
+  tenantStatus?: 'PROVISIONING' | 'ACTIVE' | 'SUSPENDED' | 'OFFBOARDING';
   /** The signed-in global account (tenant realm), set ONLY by the session hook from a valid session. */
   userId?: string;
   /** The signed-in staff member (console realm), set ONLY by the console session hook. */
@@ -35,6 +37,15 @@ export function requireTenantId(): string {
     throw new AppError('TENANT_CONTEXT_MISSING');
   }
   return tenantId;
+}
+
+/**
+ * Whether the current school is read-only (BR-52, BR-53): SUSPENDED or OFFBOARDING. Content stays
+ * readable; the tenant-context hook refuses writes, and services report it to clients.
+ */
+export function isSchoolReadOnly(): boolean {
+  const status = storage.getStore()?.tenantStatus;
+  return status === 'SUSPENDED' || status === 'OFFBOARDING';
 }
 
 /** Opens a context for every HTTP request; later hooks (tenant resolution) fill it in. */

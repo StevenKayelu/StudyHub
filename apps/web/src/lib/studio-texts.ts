@@ -7,7 +7,7 @@ import type { Terms } from './tenant';
 import { fill } from './fill';
 
 /** Fills the school's terms ({courseLower}, …) into every string, leaving other placeholders. */
-function withTerms<T>(value: T, terms: Terms): T {
+export function withTerms<T>(value: T, terms: Terms): T {
   if (typeof value === 'string') return fill(value, terms) as T;
   if (Array.isArray(value)) return value.map((item: unknown) => withTerms(item, terms)) as T;
   if (typeof value === 'object' && value !== null) {

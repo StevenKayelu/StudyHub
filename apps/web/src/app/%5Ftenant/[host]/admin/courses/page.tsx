@@ -60,6 +60,11 @@ export default async function AdminCoursesPage() {
               <StatusBadge status={COURSE_BADGES[course.status]}>
                 {t(`studio.statuses.${course.status}`)}
               </StatusBadge>
+              {course.status !== 'DRAFT' && course.status !== 'IN_REVIEW' ? (
+                <NextLink href={`/admin/courses/${course.id}/access`} className="text-label">
+                  {t('admin.courseList.access')}
+                </NextLink>
+              ) : null}
               {course.status === 'PUBLISHED' ? <UnpublishCourse courseId={course.id} texts={texts} /> : null}
             </li>
           ))}

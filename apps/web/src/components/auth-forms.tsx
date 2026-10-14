@@ -32,6 +32,7 @@ export function SignInForm({ texts, returnTo }: { texts: SignInTexts; returnTo: 
   if (join !== null) {
     return (
       <form
+        method="post"
         className="flex flex-col gap-4"
         onSubmit={async (event) => {
           const done = await joinForm.submit(event, () =>
@@ -58,6 +59,7 @@ export function SignInForm({ texts, returnTo }: { texts: SignInTexts; returnTo: 
 
   return (
     <form
+      method="post"
       className="flex flex-col gap-4"
       noValidate
       onSubmit={async (event) => {
@@ -115,6 +117,7 @@ export function SignUpForm({ texts }: { texts: SignUpTexts }) {
   const router = useRouter();
   return (
     <form
+      method="post"
       className="flex flex-col gap-4"
       noValidate
       onSubmit={async (event) => {
@@ -260,6 +263,7 @@ export function ForgotPasswordForm({
   if (sent) return <Alert tone="success" role="status" title={texts.sent} />;
   return (
     <form
+      method="post"
       className="flex flex-col gap-4"
       noValidate
       onSubmit={async (event) => {
@@ -320,6 +324,7 @@ export function ResetPasswordForm({
   }
   return (
     <form
+      method="post"
       className="flex flex-col gap-4"
       noValidate
       onSubmit={async (event) => {
@@ -385,6 +390,7 @@ export function InvitationAccept({ texts }: { texts: InvitationTexts }) {
       .replace('{email}', preview.email);
   return (
     <form
+      method="post"
       className="flex flex-col gap-4"
       noValidate
       onSubmit={async (event) => {

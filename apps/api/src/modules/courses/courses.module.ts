@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AuditModule } from '../audit';
+import { LearningModule } from '../learning';
 import {
   CatalogueController,
   ContentAdminController,
@@ -15,7 +16,7 @@ import { StudioService } from './application/studio.service';
 
 /** Catalogue and authoring (M5): categories, instructors, courses, outline, review, public catalogue. */
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, LearningModule],
   controllers: [CatalogueController, InstructorController, StudioController, ContentAdminController],
   providers: [CategoriesService, InstructorsService, StudioService, CoursesAdminService, CatalogueService],
 })

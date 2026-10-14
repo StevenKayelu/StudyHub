@@ -345,7 +345,28 @@ export const catalogueResponseSchema = z.object({
   page: z.object({ nextCursor: z.string().nullable(), hasMore: z.boolean() }),
 });
 
+/** The landing page's view of the visitor (05 §4.3 `viewer`). */
+export const courseViewerSchema = z.object({
+  signedIn: z.boolean(),
+  /** The visitor's own course: they open it in the player without enrolling. */
+  isOwner: z.boolean(),
+  /** School administrators open every course without enrolling. */
+  canOpenWithoutEnrolment: z.boolean(),
+  enrollment: z
+    .object({
+      id: z.uuid(),
+      progressPercent: z.number(),
+      resumeLessonId: z.uuid().nullable(),
+      resumeLessonTitle: z.string().nullable(),
+      completed: z.boolean(),
+    })
+    .nullable(),
+  /** Free, published, not the visitor's own: "Enrol for free" is offered (sign-in first if needed). */
+  canEnrolFree: z.boolean(),
+});
+
 export const courseLandingSchema = courseCardSchema.extend({
+  id: z.uuid(),
   description: z.unknown().nullable(),
   outcomes: z.array(z.string()),
   requirements: z.array(z.string()),
@@ -356,6 +377,7 @@ export const courseLandingSchema = courseCardSchema.extend({
       title: z.string(),
       lessons: z.array(
         z.object({
+          id: z.uuid(),
           title: z.string(),
           type: lessonTypeSchema,
           durationSeconds: z.number().nullable(),
@@ -372,6 +394,7 @@ export const courseLandingSchema = courseCardSchema.extend({
       bio: z.string().nullable(),
     })
     .nullable(),
+  viewer: courseViewerSchema,
 });
 
 export const instructorPageSchema = z.object({
@@ -386,6 +409,7 @@ export const instructorPageSchema = z.object({
 export type CourseCard = z.infer<typeof courseCardSchema>;
 export type CatalogueResponse = z.infer<typeof catalogueResponseSchema>;
 export type CourseLanding = z.infer<typeof courseLandingSchema>;
+export type CourseViewer = z.infer<typeof courseViewerSchema>;
 export type StudioCourse = z.infer<typeof studioCourseSchema>;
 export type Outline = z.infer<typeof outlineSchema>;
 export type LessonDetail = z.infer<typeof lessonDetailSchema>;

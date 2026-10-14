@@ -2223,6 +2223,7 @@
               "SLUG_RESERVED",
               "ENROLMENT_INACTIVE",
               "ALREADY_ENROLLED",
+              "SCHOOL_READ_ONLY",
               "ATTEMPT_CLOSED",
               "ATTEMPT_LIMIT_REACHED",
               "PAYMENT_PROVIDER_UNAVAILABLE",

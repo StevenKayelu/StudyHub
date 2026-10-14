@@ -18,6 +18,7 @@ export function ConsoleSignInForm({
   const form = useApiForm(texts);
   return (
     <form
+      method="post"
       className="flex flex-col gap-4"
       noValidate
       onSubmit={async (event) => {
@@ -64,6 +65,7 @@ export function ConsoleVerifyForm({
   const form = useApiForm(texts);
   return (
     <form
+      method="post"
       className="flex flex-col gap-4"
       noValidate
       onSubmit={async (event) => {
@@ -138,6 +140,7 @@ export function ConsoleEnrol({ texts }: { texts: EnrolTexts }) {
   if (setup === null) return null;
   return (
     <form
+      method="post"
       className="flex flex-col gap-4"
       noValidate
       onSubmit={async (event) => {
@@ -253,6 +256,7 @@ export function StaffTable({
         closeLabel={texts.close}
       >
         <form
+          method="post"
           className="flex flex-col gap-4"
           noValidate
           onSubmit={async (event) => {

@@ -136,6 +136,45 @@ export const TENANT_AUTHZ_MATRIX: readonly MatrixRow<TenantMatrixActor>[] = [
       staff: 401,
     },
   },
+  // M6 learning: My learning and the player need a member of this school; a course that doesn't exist
+  // here (or belongs to another school) is 404 for everyone signed in.
+  { method: 'GET', path: '/api/v1/me/enrollments', expect: signedInOnly(200) },
+  { method: 'GET', path: '/api/v1/learn/courses/{missing}', expect: signedInOnly(404) },
+  { method: 'POST', path: '/api/v1/courses/no-such-course/enrol', expect: signedInOnly(404) },
+  {
+    method: 'PUT',
+    path: '/api/v1/learn/lessons/{missing}/progress',
+    body: { positionSeconds: 10 },
+    expect: signedInOnly(404),
+  },
+  // Preview lessons are open to visitors, so a missing lesson is simply not found, for anyone.
+  {
+    method: 'GET',
+    path: '/api/v1/learn/lessons/{missing}',
+    expect: {
+      anonymous: 404,
+      learner: 404,
+      instructor: 404,
+      admin: 404,
+      owner: 404,
+      otherSchool: 404,
+      staff: 404,
+    },
+  },
+  { method: 'GET', path: '/api/v1/studio/courses/{missing}/learners', expect: signedInOnly(404) },
+  { method: 'GET', path: '/api/v1/admin/courses/{missing}/enrollments', expect: adminOnly(404) },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/courses/{missing}/enrollments',
+    body: { email: 'matrix-learner@example.com', reason: 'Scholarship' },
+    expect: adminOnly(404),
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/enrollments/{missing}/revoke',
+    body: { reason: 'Matrix check' },
+    expect: adminOnly(404),
+  },
 ];
 
 export const CONSOLE_AUTHZ_MATRIX: readonly MatrixRow<ConsoleMatrixActor>[] = [

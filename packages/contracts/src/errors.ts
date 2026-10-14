@@ -38,8 +38,10 @@ export const ERROR_DEFINITIONS = {
   LIMIT_REACHED: { status: 409, title: 'Plan limit reached', active: true },
   SLUG_TAKEN: { status: 409, title: 'That address is already taken', active: true },
   SLUG_RESERVED: { status: 422, title: 'That address is reserved', active: false },
-  ENROLMENT_INACTIVE: { status: 403, title: 'Your access to this course is not active', active: false },
-  ALREADY_ENROLLED: { status: 409, title: 'You are already enrolled', active: false },
+  // Learning (M6)
+  ENROLMENT_INACTIVE: { status: 403, title: 'Your access to this course is not active', active: true },
+  ALREADY_ENROLLED: { status: 409, title: 'Already enrolled', active: true },
+  SCHOOL_READ_ONLY: { status: 403, title: 'This school is read-only for now', active: true },
   ATTEMPT_CLOSED: { status: 409, title: 'This attempt is closed', active: false },
   ATTEMPT_LIMIT_REACHED: { status: 409, title: 'No attempts left', active: false },
   PAYMENT_PROVIDER_UNAVAILABLE: { status: 503, title: 'Payments are temporarily unavailable', active: false },

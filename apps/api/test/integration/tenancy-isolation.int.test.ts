@@ -225,6 +225,27 @@ const FIXTURES: Readonly<
         [tenantId, ref('lesson', tenantId), ref('asset', tenantId)],
       ),
   },
+  enrollment: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'enrollment',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO enrollment (tenant_id, membership_id, course_id, source, status)
+         VALUES ($1, $2, $3, 'FREE', 'EXPIRED') RETURNING id`,
+          [tenantId, membershipOf[tenantId] ?? randomUUID(), ref('course', tenantId)],
+        ),
+      ),
+  },
+  lesson_progress: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO lesson_progress (tenant_id, enrollment_id, lesson_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [tenantId, ref('enrollment', tenantId), ref('lesson', tenantId)],
+      ),
+  },
   tenant_branding: {
     granted: false, // read-only for the runtime role until the branding editor (F39); provisioning writes it
     insert: (c, tenantId) =>

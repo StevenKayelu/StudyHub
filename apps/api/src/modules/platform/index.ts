@@ -12,6 +12,7 @@ export {
 export { tenantCacheKey } from './cache/cache-key';
 export {
   currentContext,
+  isSchoolReadOnly,
   registerRequestContextHook,
   type RequestContext,
   requireTenantId,

@@ -148,6 +148,7 @@ export function ChangePasswordForm({
     <Card>
       <h2 className="text-h3">{texts.title}</h2>
       <form
+        method="post"
         className="mt-3 flex max-w-md flex-col gap-4"
         noValidate
         onSubmit={async (event) => {

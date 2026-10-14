@@ -1,7 +1,8 @@
 import 'server-only';
 
 import { type StudioCourse, studioCourseSchema } from '@studyhub/contracts';
-import { type BadgeStatus, SecondaryNav, StatusBadge } from '@studyhub/ui';
+import { type BadgeStatus, buttonClasses, SecondaryNav, StatusBadge } from '@studyhub/ui';
+import NextLink from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
@@ -38,7 +39,7 @@ export const loadStudioCourse = cache(async (id: string): Promise<StudioCourse> 
   return course;
 });
 
-type Tab = 'outline' | 'details' | 'pricing' | 'publish';
+type Tab = 'outline' | 'details' | 'pricing' | 'publish' | 'learners';
 
 /** Course workspace (S-T03…S-T08): Studio frame, status, and the tabs between its pages. */
 export async function StudioCourseFrame({
@@ -61,6 +62,7 @@ export async function StudioCourseFrame({
     { key: 'details', href: `${base}/details` },
     { key: 'pricing', href: `${base}/pricing` },
     { key: 'publish', href: `${base}/publish` },
+    { key: 'learners', href: `${base}/learners` },
   ];
   return (
     <StudioFrame
@@ -73,7 +75,12 @@ export async function StudioCourseFrame({
         ...(extraCrumb !== undefined ? [extraCrumb] : []),
       ]}
       headerActions={
-        <StatusBadge status={COURSE_BADGES[course.status]}>{t(`statuses.${course.status}`)}</StatusBadge>
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusBadge status={COURSE_BADGES[course.status]}>{t(`statuses.${course.status}`)}</StatusBadge>
+          <NextLink href={`/learn/courses/${course.id}`} className={buttonClasses('ghost', 'sm')}>
+            {t('previewAsLearner')}
+          </NextLink>
+        </div>
       }
     >
       <div className="flex flex-col gap-6">

@@ -336,10 +336,11 @@ model TenantMembership {
   createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   version             Int              @default(1)
 
-  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  user     UserAccount      @relation(fields: [userId], references: [id], onDelete: Restrict)
-  roles    MembershipRole[]
-  sessions Session[]
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user        UserAccount      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  roles       MembershipRole[]
+  sessions    Session[]
+  enrollments Enrollment[]
 
   @@unique([tenantId, userId], map: "tenant_membership_tenant_user_key")
   @@unique([tenantId, id], map: "tenant_membership_tenant_id_id_key")
@@ -670,6 +671,7 @@ model Course {
   sections    Section[]
   lessons     Lesson[]
   submissions CourseSubmission[]
+  enrollments Enrollment[]
 
   @@unique([tenantId, slug], map: "course_tenant_slug_key")
   @@unique([tenantId, id], map: "course_tenant_id_id_key")
@@ -732,6 +734,7 @@ model Lesson {
   course      Course             @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Cascade)
   section     Section            @relation(fields: [tenantId, sectionId], references: [tenantId, id], onDelete: Cascade)
   attachments LessonAttachment[]
+  progress    LessonProgress[]
 
   @@unique([tenantId, id], map: "lesson_tenant_id_id_key")
   @@unique([tenantId, sectionId, position], map: "lesson_section_position_key")
@@ -749,4 +752,73 @@ model LessonAttachment {
 
   @@id([tenantId, lessonId, assetId])
   @@map("lesson_attachment")
+}
+
+// ---------------------------------------------------------------------------------------------
+// M6 learning (migration 0006): enrolments and lesson progress
+// ---------------------------------------------------------------------------------------------
+
+enum EnrollmentSource {
+  FREE
+  PURCHASE
+  ADMIN_GRANT
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum LessonProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Enrollment {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  membershipId    String           @map("membership_id") @db.Uuid
+  courseId        String           @map("course_id") @db.Uuid
+  source          EnrollmentSource
+  orderItemId     String?          @map("order_item_id") @db.Uuid
+  status          EnrollmentStatus @default(ACTIVE)
+  startedAt       DateTime         @default(now()) @map("started_at") @db.Timestamptz(3)
+  expiresAt       DateTime?        @map("expires_at") @db.Timestamptz(3)
+  revokedAt       DateTime?        @map("revoked_at") @db.Timestamptz(3)
+  revokeReason    String?          @map("revoke_reason")
+  grantedBy       String?          @map("granted_by") @db.Uuid
+  grantReason     String?          @map("grant_reason")
+  progressPercent Int              @default(0) @map("progress_percent") @db.SmallInt
+  completedAt     DateTime?        @map("completed_at") @db.Timestamptz(3)
+  // FK with ON DELETE SET NULL (last_lesson_id) in SQL; no Prisma relation (composite key).
+  lastLessonId    String?          @map("last_lesson_id") @db.Uuid
+  lastAccessedAt  DateTime?        @map("last_accessed_at") @db.Timestamptz(3)
+  updatedAt       DateTime         @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  membership TenantMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Restrict)
+  course     Course           @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  progress   LessonProgress[]
+
+  @@unique([tenantId, id], map: "enrollment_tenant_id_id_key")
+  @@index([tenantId, courseId, status], map: "enrollment_tenant_course_status_idx")
+  @@map("enrollment")
+}
+
+model LessonProgress {
+  tenantId        String               @map("tenant_id") @db.Uuid
+  enrollmentId    String               @map("enrollment_id") @db.Uuid
+  lessonId        String               @map("lesson_id") @db.Uuid
+  status          LessonProgressStatus @default(IN_PROGRESS)
+  positionSeconds Int                  @default(0) @map("position_seconds")
+  completedAt     DateTime?            @map("completed_at") @db.Timestamptz(3)
+  updatedAt       DateTime             @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  enrollment Enrollment @relation(fields: [tenantId, enrollmentId], references: [tenantId, id], onDelete: Cascade)
+  lesson     Lesson     @relation(fields: [tenantId, lessonId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, enrollmentId, lessonId])
+  @@index([tenantId, lessonId], map: "lesson_progress_tenant_lesson_idx")
+  @@map("lesson_progress")
 }

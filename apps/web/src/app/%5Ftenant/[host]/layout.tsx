@@ -1,13 +1,13 @@
 import type { TenantBootstrap } from '@studyhub/contracts';
-import { buttonClasses, StatePanel } from '@studyhub/ui';
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
-import NextLink from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 
 import { ErrorTextsProvider } from '../../../components/error-texts';
+import { isReadOnlySchool, SchoolStatusPage } from '../../../components/school-status';
+import { requestedPath } from '../../../lib/session';
 import { tenantForRoute, tenantThemeCss } from '../../../lib/tenant';
 
 // School pages render per request for now; per-host ISR caching (keyed by /_tenant/<host>) comes with
@@ -42,37 +42,8 @@ export async function generateMetadata({ params }: Pick<TenantLayoutProps, 'para
   };
 }
 
-/** S-X07 (suspended or offboarding, BR-52) and S-X08 (provisioning): neutral pages with the school's name. */
-async function StatusPage({ tenant }: { tenant: TenantBootstrap }) {
-  const t = await getTranslations('system');
-  const name = tenant.branding.displayName;
-  const provisioning = tenant.status === 'PROVISIONING';
-  return (
-    <main id="content" className="flex min-h-dvh flex-col items-center justify-center gap-2">
-      <p className="text-h3 text-ink">{name}</p>
-      {provisioning ? (
-        <StatePanel
-          kind="coming-soon"
-          headingLevel={1}
-          title={t('comingSoon.title')}
-          message={t('comingSoon.message', { school: name })}
-          actions={
-            <NextLink href="/sign-in" className={buttonClasses('secondary')}>
-              {t('comingSoon.ownerSignIn')}
-            </NextLink>
-          }
-        />
-      ) : (
-        <StatePanel
-          kind="unavailable"
-          headingLevel={1}
-          title={t('unavailable.title')}
-          message={t('unavailable.message')}
-        />
-      )}
-    </main>
-  );
-}
+/** Paths a read-only school still serves (BR-52): sign-in and the learner space. */
+const READ_ONLY_PATHS = /^\/(sign-in|switch|learn)(\/|\?|$)/;
 
 export default async function TenantLayout({ children, params }: TenantLayoutProps) {
   const tenant = await tenantFor(params);
@@ -96,7 +67,12 @@ export default async function TenantLayout({ children, params }: TenantLayoutPro
         {tenantThemeCss(tenant)}
       </style>
       <ErrorTextsProvider texts={errorTexts}>
-        {tenant.status === 'ACTIVE' ? children : <StatusPage tenant={tenant} />}
+        {tenant.status === 'ACTIVE' ||
+        (isReadOnlySchool(tenant) && READ_ONLY_PATHS.test(await requestedPath())) ? (
+          children
+        ) : (
+          <SchoolStatusPage tenant={tenant} />
+        )}
       </ErrorTextsProvider>
     </>
   );

@@ -18,12 +18,21 @@ export interface VideoEvent {
   reason?: string;
 }
 
+/** How the player plays a READY video (a signed, short-lived URL at the provider). */
+export interface VideoPlayback {
+  /** `simulated`: the fake provider keeps no bytes; the player simulates playback for development. */
+  kind: 'hls' | 'mp4' | 'simulated';
+  url: string | null;
+}
+
 export interface VideoProvider {
   /** Name used in webhook paths and stored on the asset (`asset.provider`). */
   readonly name: string;
   createUpload(input: { tenantId: string; assetId: string; maxBytes: number }): Promise<VideoUpload>;
   /** Verifies the signature over the RAW body and parses the event; null when the signature is wrong. */
   parseWebhook(rawBody: Buffer, headers: Record<string, string | string[] | undefined>): VideoEvent | null;
+  /** A playback URL for one viewer, valid for `expiresSeconds`. */
+  playback(providerVideoId: string, options: { expiresSeconds: number }): Promise<VideoPlayback>;
 }
 
 /** Signature header of the fake provider: hex HMAC-SHA256 of the raw body. */
@@ -44,6 +53,10 @@ export class FakeVideoProvider implements VideoProvider {
   createUpload(_input: { tenantId: string; assetId: string; maxBytes: number }): Promise<VideoUpload> {
     const providerVideoId = `fake_${randomUUID()}`;
     return Promise.resolve({ providerVideoId, uploadUrl: `${this.uploadBaseUrl}/${providerVideoId}` });
+  }
+
+  playback(_providerVideoId: string, _options: { expiresSeconds: number }): Promise<VideoPlayback> {
+    return Promise.resolve({ kind: 'simulated', url: null });
   }
 
   sign(rawBody: Buffer | string): string {

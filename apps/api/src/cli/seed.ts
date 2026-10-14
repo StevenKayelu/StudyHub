@@ -1,4 +1,4 @@
-// `pnpm db:seed`: three demo schools for local development and e2e tests (idempotent).
+// `pnpm db:seed`: four demo schools for local development and e2e tests (idempotent).
 // Runs as the migrator role. Never run against production.
 import { Client } from 'pg';
 
@@ -8,7 +8,7 @@ import { provisionTenant, type ProvisionTenantInput, writeTenantProfile } from '
 /**
  * Acme keeps the Copperline default; Beta has its own accent, font preset and terminology, so the
  * theming runtime and terminology substitution are visible (and tested) side by side. Gamma is still
- * being set up.
+ * being set up. Delta is suspended (read-only, BR-52): its learner keeps their course.
  */
 export const DEMO_TENANTS: readonly (ProvisionTenantInput & {
   branding: NonNullable<ProvisionTenantInput['branding']>;
@@ -47,7 +47,18 @@ export const DEMO_TENANTS: readonly (ProvisionTenantInput & {
     status: 'PROVISIONING',
     branding: { accentHex: '#6d28d9', fontPreset: 'GEOMETRIC' },
   },
+  {
+    // Provisioned ACTIVE so its demo course can be seeded, then suspended by seedSuspendedSchool().
+    slug: 'delta',
+    name: 'Delta Institute',
+    kind: 'SCHOOL',
+    hostname: 'delta.localhost',
+    status: 'ACTIVE',
+    branding: { accentHex: '#2f6f3e', fontPreset: 'COPPERLINE' },
+  },
 ];
+
+type DemoSchool = 'acme' | 'beta' | 'delta';
 
 /** The id of an existing school, found the way the runtime finds it (resolve_tenant, as the app role). */
 async function existingTenantId(appUrl: string | undefined, hostname: string): Promise<string | undefined> {
@@ -94,7 +105,7 @@ export const DEMO_ACCOUNTS: readonly {
   id: string;
   email: string;
   name: string;
-  memberships: Partial<Record<'acme' | 'beta', DemoRole[]>>;
+  memberships: Partial<Record<DemoSchool, DemoRole[]>>;
 }[] = [
   {
     id: '0d6c2b1e-0000-4000-8000-00000000a001',
@@ -112,13 +123,13 @@ export const DEMO_ACCOUNTS: readonly {
     id: '0d6c2b1e-0000-4000-8000-00000000b001',
     email: 'owner@beta.test',
     name: 'Bwalya Zulu',
-    memberships: { beta: ['LEARNER', 'TENANT_OWNER'] },
+    memberships: { beta: ['LEARNER', 'TENANT_OWNER'], delta: ['LEARNER', 'TENANT_OWNER', 'INSTRUCTOR'] },
   },
   {
     id: '0d6c2b1e-0000-4000-8000-00000000c001',
     email: 'learner@example.test',
     name: 'Chanda Mwila',
-    memberships: { acme: ['LEARNER'], beta: ['LEARNER'] },
+    memberships: { acme: ['LEARNER'], beta: ['LEARNER'], delta: ['LEARNER'] },
   },
 ];
 
@@ -129,10 +140,7 @@ export const DEMO_STAFF = {
   role: 'PLATFORM_OWNER',
 } as const;
 
-async function seedAccounts(
-  client: Client,
-  tenantIds: Partial<Record<'acme' | 'beta', string>>,
-): Promise<void> {
+async function seedAccounts(client: Client, tenantIds: Partial<Record<DemoSchool, string>>): Promise<void> {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
   for (const account of DEMO_ACCOUNTS) {
     await withContext(client, { 'app.user_id': account.id }, async () => {
@@ -146,7 +154,7 @@ async function seedAccounts(
         [account.id, passwordHash],
       );
     });
-    for (const [school, roles] of Object.entries(account.memberships) as ['acme' | 'beta', DemoRole[]][]) {
+    for (const [school, roles] of Object.entries(account.memberships) as [DemoSchool, DemoRole[]][]) {
       const tenantId = tenantIds[school];
       if (tenantId === undefined) continue;
       await withContext(client, { 'app.tenant_id': tenantId }, async () => {
@@ -331,6 +339,118 @@ async function seedCatalogue(client: Client, tenantId: string): Promise<void> {
   });
 }
 
+const VIDEO_LESSON = {
+  assetId: '0d6c2b1e-0000-4000-8000-0000000cd001',
+  title: 'Graphs in motion',
+  durationSeconds: 120,
+} as const;
+
+/**
+ * M6 demo content: a video lesson in Algebra essentials (fake provider, READY), added once even to an
+ * existing demo catalogue, so the player's video, progress and resume can be tried.
+ */
+async function seedLearning(client: Client, tenantId: string): Promise<void> {
+  await withContext(client, { 'app.tenant_id': tenantId }, async () => {
+    const course = DEMO_CATALOGUE.courses[1];
+    const { rows } = await client.query<{ owner: string; section: string }>(
+      `SELECT c.owner_membership_id AS owner, s.id AS section FROM course c JOIN section s ON s.course_id = c.id
+        WHERE c.id = $1 ORDER BY s.position LIMIT 1`,
+      [course.id],
+    );
+    const target = rows[0];
+    if (target === undefined) return;
+    const exists = await client.query('SELECT 1 FROM lesson WHERE course_id = $1 AND title = $2', [
+      course.id,
+      VIDEO_LESSON.title,
+    ]);
+    if ((exists.rowCount ?? 0) > 0) return;
+    await client.query(
+      `INSERT INTO asset (id, tenant_id, owner_membership_id, kind, purpose, provider, provider_video_id, original_name,
+         mime, size_bytes, status, duration_seconds)
+       VALUES ($1, $2, $3, 'VIDEO', 'LESSON_VIDEO', 'fake', 'fake_demo_graphs', 'graphs.mp4', 'video/mp4', 1048576,
+         'READY', $4)
+       ON CONFLICT DO NOTHING`,
+      [VIDEO_LESSON.assetId, tenantId, target.owner, VIDEO_LESSON.durationSeconds],
+    );
+    await client.query(
+      `INSERT INTO lesson (tenant_id, course_id, section_id, title, type, position, video_asset_id, duration_seconds)
+       VALUES ($1, $2, $3, $4, 'VIDEO', (SELECT coalesce(max(position) + 1, 0) FROM lesson WHERE section_id = $3), $5, $6)`,
+      [
+        tenantId,
+        course.id,
+        target.section,
+        VIDEO_LESSON.title,
+        VIDEO_LESSON.assetId,
+        VIDEO_LESSON.durationSeconds,
+      ],
+    );
+  });
+}
+
+const DELTA_COURSE = {
+  id: '0d6c2b1e-0000-4000-8000-0000000dc001',
+  slug: 'world-history',
+  title: 'World history',
+  lessons: ['Ancient empires', 'The modern world'],
+} as const;
+
+/**
+ * Delta (BR-52): one published course the demo learner is enrolled in, then the school is suspended,
+ * so its site shows S-X07 while the learner can still sign in and read the course.
+ */
+async function seedSuspendedSchool(client: Client, tenantId: string): Promise<void> {
+  await withContext(client, { 'app.tenant_id': tenantId }, async () => {
+    const membership = async (email: string) => {
+      const account = DEMO_ACCOUNTS.find((a) => a.email === email)!;
+      const { rows } = await client.query<{ id: string }>(
+        'SELECT id FROM tenant_membership WHERE tenant_id = $1 AND user_id = $2',
+        [tenantId, account.id],
+      );
+      return rows[0]?.id;
+    };
+    const owner = await membership('owner@beta.test');
+    const learner = await membership('learner@example.test');
+    if (owner === undefined || learner === undefined) return;
+    await client.query(
+      `INSERT INTO instructor_profile (membership_id, tenant_id, slug, display_name, status, decided_at)
+       VALUES ($1, $2, 'bwalya-zulu', 'Bwalya Zulu', 'APPROVED', now()) ON CONFLICT (membership_id) DO NOTHING`,
+      [owner, tenantId],
+    );
+    const inserted = await client.query(
+      `INSERT INTO course (id, tenant_id, owner_membership_id, slug, title, status, first_published_at, published_at)
+       VALUES ($1, $2, $3, $4, $5, 'PUBLISHED', now(), now()) ON CONFLICT DO NOTHING`,
+      [DELTA_COURSE.id, tenantId, owner, DELTA_COURSE.slug, DELTA_COURSE.title],
+    );
+    if ((inserted.rowCount ?? 0) > 0) {
+      const section = await client.query<{ id: string }>(
+        `INSERT INTO section (tenant_id, course_id, title, position) VALUES ($1, $2, 'Overview', 0) RETURNING id`,
+        [tenantId, DELTA_COURSE.id],
+      );
+      for (const [position, title] of DELTA_COURSE.lessons.entries()) {
+        await client.query(
+          `INSERT INTO lesson (tenant_id, course_id, section_id, title, type, position, content_json, duration_seconds)
+           VALUES ($1, $2, $3, $4, 'TEXT', $5, $6, 300)`,
+          [
+            tenantId,
+            DELTA_COURSE.id,
+            section.rows[0]!.id,
+            title,
+            position,
+            JSON.stringify(doc(`${title}: demo reading.`)),
+          ],
+        );
+      }
+      await client.query(
+        `INSERT INTO enrollment (tenant_id, membership_id, course_id, source) VALUES ($1, $2, $3, 'FREE')`,
+        [tenantId, learner, DELTA_COURSE.id],
+      );
+    }
+    await client.query(`UPDATE tenant SET status = 'SUSPENDED', updated_at = now() WHERE id = $1`, [
+      tenantId,
+    ]);
+  });
+}
+
 async function main(): Promise<void> {
   const env = loadMigratorEnv();
   if (env.NODE_ENV === 'production') throw new Error('Refusing to seed demo schools in production.');
@@ -363,7 +483,12 @@ async function main(): Promise<void> {
     await seedAccounts(client, tenantIds);
     if (tenantIds.acme !== undefined) {
       await seedCatalogue(client, tenantIds.acme);
+      await seedLearning(client, tenantIds.acme);
       console.log('acme.localhost: demo catalogue present');
+    }
+    if (tenantIds.delta !== undefined) {
+      await seedSuspendedSchool(client, tenantIds.delta);
+      console.log('delta.localhost: suspended, with one enrolled learner (read-only)');
     }
     console.log(
       `demo accounts: ${[...DEMO_ACCOUNTS.map((a) => a.email), DEMO_STAFF.email].join(', ')} (password: ${DEMO_PASSWORD})`,

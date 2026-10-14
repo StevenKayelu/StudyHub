@@ -48,11 +48,16 @@ function renderText(node: Node, key: number): ReactNode {
   return <span key={key}>{element}</span>;
 }
 
-function renderNode(raw: unknown, key: number): ReactNode {
+/** Signed URLs for `asset:{id}` images, keyed by asset id (the course player passes them). */
+type Images = Readonly<Record<string, string>>;
+
+function renderNode(raw: unknown, key: number, images: Images): ReactNode {
   if (typeof raw !== 'object' || raw === null) return null;
   const node = raw as Node;
   if (node.type === 'text') return renderText(node, key);
-  const children = Array.isArray(node.content) ? node.content.map(renderNode) : null;
+  const children = Array.isArray(node.content)
+    ? node.content.map((child, index) => renderNode(child, index, images))
+    : null;
   switch (node.type) {
     case 'doc':
       return <div key={key}>{children}</div>;
@@ -101,13 +106,37 @@ function renderNode(raw: unknown, key: number): ReactNode {
       return <hr key={key} className="border-line" />;
     case 'hardBreak':
       return <br key={key} />;
+    case 'image': {
+      // Only images uploaded to this school (asset:{id}) with a signed URL from the API render.
+      const src = typeof node.attrs?.src === 'string' ? node.attrs.src : '';
+      const url = src.startsWith('asset:') ? images[src.slice('asset:'.length)] : undefined;
+      if (url === undefined) return null;
+      return (
+        // eslint-disable-next-line @next/next/no-img-element -- short-lived signed object-storage URL
+        <img
+          key={key}
+          src={url}
+          alt={typeof node.attrs?.alt === 'string' ? node.attrs.alt : ''}
+          loading="lazy"
+          className="h-auto max-w-full rounded-md border border-line"
+        />
+      );
+    }
     default:
-      // Images are rendered by the course player with signed URLs (M6); unknown types are dropped.
+      // Unknown types are dropped, never interpreted.
       return null;
   }
 }
 
-export function RichText({ doc, className }: { doc: unknown; className?: string }) {
+export function RichText({
+  doc,
+  className,
+  images = {},
+}: {
+  doc: unknown;
+  className?: string;
+  images?: Images;
+}) {
   if (doc === null || doc === undefined) return null;
-  return <div className={`flex flex-col gap-3 ${className ?? ''}`}>{renderNode(doc, 0)}</div>;
+  return <div className={`flex flex-col gap-3 ${className ?? ''}`}>{renderNode(doc, 0, images)}</div>;
 }

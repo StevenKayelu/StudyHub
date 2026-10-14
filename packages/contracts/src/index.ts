@@ -4,6 +4,7 @@ export * from './errors';
 export * from './health';
 export * from './i18n';
 export * from './identity';
+export * from './learning';
 export * from './problem';
 export * from './rich-text';
 export * from './settings';

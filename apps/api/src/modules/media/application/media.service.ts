@@ -182,6 +182,56 @@ export class MediaService {
     return { url, expiresAt: new Date(Date.now() + DOWNLOAD_SECONDS * 1000).toISOString() };
   }
 
+  // ----------------------------------------------------------------------------------------------
+  // Reads for callers that have already decided the viewer may see the asset (the learning module's
+  // entitlement checks). Only READY assets of the current school are ever signed.
+
+  /** Short-lived inline URLs (web-sized derivative when there is one) for READY images. */
+  async readUrls(assetIds: readonly string[]): Promise<Map<string, string>> {
+    if (assetIds.length === 0) return new Map();
+    const assets = await this.db.run((tx) =>
+      tx.asset.findMany({
+        where: { id: { in: [...assetIds] }, status: 'READY' },
+        select: { id: true, storageKey: true, derivativeKey: true },
+      }),
+    );
+    const entries = await Promise.all(
+      assets
+        .filter((a) => (a.derivativeKey ?? a.storageKey) !== null)
+        .map(
+          async (a) =>
+            [
+              a.id,
+              await this.storage.presignGet(a.derivativeKey ?? a.storageKey!, {
+                expiresSeconds: DOWNLOAD_SECONDS,
+              }),
+            ] as const,
+        ),
+    );
+    return new Map(entries);
+  }
+
+  /** A short-lived download URL for a READY file, named as uploaded. */
+  async fileUrl(asset: {
+    status: string;
+    storageKey: string | null;
+    originalName: string;
+  }): Promise<{ url: string; expiresAt: string }> {
+    if (asset.status !== 'READY' || asset.storageKey === null) throw new AppError('NOT_FOUND');
+    const url = await this.storage.presignGet(asset.storageKey, {
+      expiresSeconds: DOWNLOAD_SECONDS,
+      downloadName: asset.originalName,
+    });
+    return { url, expiresAt: new Date(Date.now() + DOWNLOAD_SECONDS * 1000).toISOString() };
+  }
+
+  /** How to play a READY video, valid for a few minutes. */
+  async playback(asset: { status: string; providerVideoId: string | null }) {
+    if (asset.status !== 'READY' || asset.providerVideoId === null) throw new AppError('INVALID_STATE');
+    const playback = await this.video.playback(asset.providerVideoId, { expiresSeconds: DOWNLOAD_SECONDS });
+    return { ...playback, expiresAt: new Date(Date.now() + DOWNLOAD_SECONDS * 1000).toISOString() };
+  }
+
   /**
    * Applies a verified provider event inside the asset's school (the caller resolved it through
    * resolve_video_asset and set the tenant context). Idempotent: a finished asset isn't changed again.
