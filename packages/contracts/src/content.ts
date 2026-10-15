@@ -366,6 +366,11 @@ export const courseViewerSchema = z.object({
     .nullable(),
   /** Free, published, not the visitor's own: "Enrol for free" is offered (sign-in first if needed). */
   canEnrolFree: z.boolean(),
+  /**
+   * Paid, published, not the visitor's own or already theirs, and the school can take payments now
+   * (BR-54): "Buy" is offered (sign-in first if needed). M8.
+   */
+  purchasable: z.boolean(),
 });
 
 export const courseLandingSchema = courseCardSchema.extend({

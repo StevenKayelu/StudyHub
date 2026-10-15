@@ -52,6 +52,10 @@ export const DEFINER_INVENTORY: ReadonlySet<string> = new Set([
   'exchange_handoff',
   // M5 media (04 §17.9)
   'resolve_video_asset',
+  // M8 commerce (04 §17.10): webhook routing, the daily ledger-check sweep, links in worker emails
+  'resolve_payment_account',
+  'due_ledger_checks',
+  'current_school_host',
 ]);
 
 /** Indexes on tenant tables that may not lead with tenant_id, and why. */

@@ -11,6 +11,7 @@ import {
 
 import { Prisma } from '../../../generated/prisma/client';
 import { AuditService } from '../../audit';
+import { paymentsProblem } from '../../commerce';
 import type { TenantActor } from '../../identity';
 import {
   AppError,
@@ -610,6 +611,7 @@ export class StudioService {
       coverAssetId: string | null;
       outcomes: string[];
       priceMinor: bigint;
+      ownerMembershipId: string;
     },
   ): Promise<Checklist> {
     const settings = await readContentSettings(tx);
@@ -635,7 +637,7 @@ export class StudioService {
       outcomes: course.outcomes.length,
       priceMinor: Number(course.priceMinor),
       minPaidPriceMinor: settings.minPaidPriceMinor,
-      paymentsAvailable: false,
+      paymentsProblem: course.priceMinor > 0n ? await paymentsProblem(tx, course.ownerMembershipId) : null,
       sections: sections.map((s) => ({
         lessons: s.lessons.map((l) => ({ title: l.title, type: l.type, ready: ready.get(l.id) ?? false })),
       })),

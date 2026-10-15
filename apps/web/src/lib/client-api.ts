@@ -20,6 +20,8 @@ export async function callApi<T = unknown>(
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
+  /** Extra request headers, e.g. Idempotency-Key for orders, payments and refunds (04 §7.2). */
+  extraHeaders?: Record<string, string>,
 ): Promise<ApiResult<T>> {
   let response: Response;
   try {
@@ -29,6 +31,7 @@ export async function callApi<T = unknown>(
       headers: {
         accept: 'application/json',
         ...(body !== undefined && { 'content-type': 'application/json' }),
+        ...extraHeaders,
       },
       ...(body !== undefined && { body: JSON.stringify(body) }),
     });
@@ -69,4 +72,9 @@ export function splitProblem(
  */
 export function reloadTo(path: string): void {
   window.location.assign(new URL(path, window.location.origin).href);
+}
+
+/** A fresh Idempotency-Key for one user action (a retry of the same action reuses it). */
+export function idempotencyKey(): string {
+  return crypto.randomUUID();
 }

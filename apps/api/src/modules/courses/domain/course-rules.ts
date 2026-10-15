@@ -76,8 +76,11 @@ export interface ChecklistInput {
   outcomes: number;
   priceMinor: number;
   minPaidPriceMinor: number;
-  /** Paid courses need the school's payment account (BR-54) and the instructor's payout method (BR-04): M8. */
-  paymentsAvailable: boolean;
+  /**
+   * Why this course can't be sold yet, or null: paid courses need the school's active payment account
+   * (BR-54) and, with revenue share, the instructor's payout method (BR-04).
+   */
+  paymentsProblem: string | null;
   sections: { lessons: { title: string; ready: boolean; type: string }[] }[];
 }
 
@@ -144,8 +147,8 @@ export function evaluateChecklist(courseId: string, input: ChecklistInput): Chec
     });
     items.push({
       key: 'payments',
-      ok: input.paymentsAvailable,
-      message: 'Paid courses need the school’s payment account and your payout method (available soon)',
+      ok: input.paymentsProblem === null,
+      message: input.paymentsProblem ?? 'The school can take payments for this course',
       fixPath: `${base}/pricing`,
     });
   }

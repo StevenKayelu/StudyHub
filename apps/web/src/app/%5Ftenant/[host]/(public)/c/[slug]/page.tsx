@@ -206,6 +206,7 @@ export default async function CourseLandingPage({ params }: { params: Params }) 
               course={{ id: course.id, slug: course.slug, priceMinor: course.priceMinor }}
               viewer={course.viewer}
               texts={await learnTexts(terms)}
+              priceLabel={await formatPrice(course.priceMinor, course.currency)}
             />
           </Card>
         </aside>

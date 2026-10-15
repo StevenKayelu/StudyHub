@@ -3,9 +3,22 @@ import type { ReactNode } from 'react';
 
 import { cx } from './cx.js';
 
-export function Card({ children, className }: { children: ReactNode; className?: string }) {
+export function Card({
+  children,
+  className,
+  'data-testid': testId,
+}: {
+  children: ReactNode;
+  className?: string;
+  /** Passed through for end-to-end tests. */
+  'data-testid'?: string;
+}) {
   // Flat, bordered surface: no shadow (06 §1.3).
-  return <div className={cx('rounded-md border border-line bg-surface p-4', className)}>{children}</div>;
+  return (
+    <div className={cx('rounded-md border border-line bg-surface p-4', className)} data-testid={testId}>
+      {children}
+    </div>
+  );
 }
 
 export function StatCard({

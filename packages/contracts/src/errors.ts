@@ -46,8 +46,18 @@ export const ERROR_DEFINITIONS = {
   ATTEMPT_CLOSED: { status: 409, title: 'This attempt is closed', active: true },
   ATTEMPT_LIMIT_REACHED: { status: 409, title: 'No attempts left', active: true },
   QUIZ_NOT_OPEN: { status: 409, title: 'This quiz is not open', active: true },
-  PAYMENT_PROVIDER_UNAVAILABLE: { status: 503, title: 'Payments are temporarily unavailable', active: false },
-  PAYMENT_METHOD_NOT_SUPPORTED: { status: 422, title: 'Payment method not supported', active: false },
+  // Commerce (M8)
+  PAYMENT_PROVIDER_UNAVAILABLE: { status: 503, title: 'Payments are temporarily unavailable', active: true },
+  PAYMENT_METHOD_NOT_SUPPORTED: { status: 422, title: 'Payment method not supported', active: true },
+  EMAIL_NOT_VERIFIED: { status: 403, title: 'Verify your email address first', active: true },
+  COURSE_NOT_PURCHASABLE: { status: 422, title: 'This course cannot be bought', active: true },
+  ORDER_NOT_PAYABLE: { status: 409, title: 'This order can no longer be paid', active: true },
+  IDEMPOTENCY_KEY_REUSED: {
+    status: 422,
+    title: 'This request key was already used for another request',
+    active: true,
+  },
+  IDEMPOTENCY_IN_PROGRESS: { status: 409, title: 'The same request is still being processed', active: true },
 } as const satisfies Record<string, { status: number; title: string; active: boolean }>;
 
 export type ErrorCode = keyof typeof ERROR_DEFINITIONS;

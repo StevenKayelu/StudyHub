@@ -2228,7 +2228,12 @@
               "ATTEMPT_LIMIT_REACHED",
               "QUIZ_NOT_OPEN",
               "PAYMENT_PROVIDER_UNAVAILABLE",
-              "PAYMENT_METHOD_NOT_SUPPORTED"
+              "PAYMENT_METHOD_NOT_SUPPORTED",
+              "EMAIL_NOT_VERIFIED",
+              "COURSE_NOT_PURCHASABLE",
+              "ORDER_NOT_PAYABLE",
+              "IDEMPOTENCY_KEY_REUSED",
+              "IDEMPOTENCY_IN_PROGRESS"
             ]
           },
           "detail": {

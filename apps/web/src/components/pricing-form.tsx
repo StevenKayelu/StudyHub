@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { callApi } from '../lib/client-api';
+import { fill } from '../lib/fill';
 import type { StudioTexts } from '../lib/studio-texts-type';
 import { text, useApiForm } from './forms';
 
@@ -16,15 +17,24 @@ function toMinor(value: string): number | null {
   return Number(match[1]) * 100 + Number((match[2] ?? '0').padEnd(2, '0'));
 }
 
-/** S-T05 Pricing and access. Paid courses can be prepared; selling them arrives with payments (M8). */
+/** Half-up to the ngwee, as the server computes commission (BR-14). */
+const commissionOf = (minor: number, bps: number) => Math.floor((minor * bps * 2 + 10_000) / 20_000);
+
+/**
+ * S-T05 / S-T07 Pricing and access. With instructor revenue share the form previews the split:
+ * "Learner pays K250.00 · Commission K50.00 · You earn ≈ K200.00" (the provider fee varies).
+ */
 export function PricingForm({
   course,
   editable,
   texts,
+  commissionBps,
 }: {
   course: StudioCourse;
   editable: boolean;
   texts: StudioTexts;
+  /** The school's instructor commission, or null without revenue share. */
+  commissionBps: number | null;
 }) {
   const router = useRouter();
   const p = texts.studio.pricing;
@@ -33,6 +43,11 @@ export function PricingForm({
   const [limited, setLimited] = useState(course.accessDays !== null);
   const [saved, setSaved] = useState(false);
   const [priceError, setPriceError] = useState<string | undefined>(undefined);
+  const [priceText, setPriceText] = useState(
+    course.priceMinor > 0 ? (course.priceMinor / 100).toFixed(2) : '',
+  );
+  const previewMinor = toMinor(priceText);
+  const kwacha = (minor: number) => `K${(minor / 100).toFixed(2)}`;
 
   return (
     <form
@@ -82,10 +97,21 @@ export function PricingForm({
               name="price"
               label={p.price}
               inputMode="decimal"
-              defaultValue={course.priceMinor > 0 ? (course.priceMinor / 100).toFixed(2) : ''}
+              value={priceText}
+              onChange={(event) => setPriceText(event.target.value)}
               error={priceError ?? form.fieldError('priceMinor')}
             />
-            <Alert tone="info" title={p.paidSoon} />
+            {commissionBps !== null && previewMinor !== null && previewMinor > 0 ? (
+              <p className="text-body-sm" data-testid="earnings-preview">
+                {fill(p.preview, {
+                  price: kwacha(previewMinor),
+                  commission: kwacha(commissionOf(previewMinor, commissionBps)),
+                  net: kwacha(previewMinor - commissionOf(previewMinor, commissionBps)),
+                })}
+                <span className="block text-caption text-muted">{p.previewFee}</span>
+              </p>
+            ) : null}
+            <Alert tone="info" title={p.paidNote} />
           </>
         ) : null}
         <RadioGroup

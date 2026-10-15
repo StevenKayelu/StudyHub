@@ -2,6 +2,7 @@ import { type DynamicModule, Module, type Type } from '@nestjs/common';
 
 import { AssessmentModule } from './modules/assessment';
 import { AuditModule } from './modules/audit';
+import { CommerceModule } from './modules/commerce';
 import { ConsoleModule } from './modules/console';
 import { CoursesModule } from './modules/courses';
 import { IdentityModule } from './modules/identity';
@@ -31,6 +32,7 @@ export class AppModule {
         CoursesModule,
         LearningModule,
         AssessmentModule,
+        CommerceModule,
         ...(options.imports ?? []),
       ],
     };

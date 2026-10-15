@@ -4,7 +4,17 @@
  * part is the same content with links, with no remote images or tracking.
  */
 export type EmailTemplate =
-  'verify-email' | 'account-exists' | 'reset-password' | 'password-changed' | 'invitation';
+  | 'verify-email'
+  | 'account-exists'
+  | 'reset-password'
+  | 'password-changed'
+  | 'invitation'
+  // Commerce (M8)
+  | 'receipt'
+  | 'refund-learner'
+  | 'refund-instructor'
+  | 'payout-recorded'
+  | 'ledger-mismatch';
 
 export interface EmailVariables {
   schoolName: string;
@@ -12,6 +22,11 @@ export interface EmailVariables {
   /** A one-time link; sealed in the queue, never logged. */
   link?: string;
   roleLabel?: string;
+  /** Commerce (M8): what the email is about, already formatted ("K250.00", "ACME-2026-000123"). */
+  courseTitle?: string;
+  amount?: string;
+  number?: string;
+  reference?: string;
 }
 
 export interface RenderedEmail {
@@ -88,6 +103,47 @@ export function renderEmail(template: EmailTemplate, vars: EmailVariables): Rend
           `You have been invited to join ${school} as ${vars.roleLabel ?? 'a member'}. The invitation works for 7 days.`,
         ],
         { label: 'Accept the invitation', href: link },
+      );
+    case 'receipt':
+      return render(
+        `Your receipt ${vars.number ?? ''} from ${school}`.replace('  ', ' '),
+        [
+          hello,
+          `Thank you. Your payment of ${vars.amount ?? ''} for "${vars.courseTitle ?? 'your course'}" is confirmed and the course is now in My learning.`,
+          `Receipt number: ${vars.number ?? ''}. ${school} is the seller.`,
+        ],
+        { label: 'View your receipt', href: link },
+      );
+    case 'refund-learner':
+      return render(`Your refund from ${school}`, [
+        hello,
+        `${school} has refunded ${vars.amount ?? 'your payment'} for "${vars.courseTitle ?? 'your course'}". Your access to the course has ended.`,
+        ...(vars.reference ? [`Refund reference: ${vars.reference}.`] : []),
+        'Mobile money and card refunds can take a few days to reach you.',
+      ]);
+    case 'refund-instructor':
+      return render(`A sale of "${vars.courseTitle ?? 'your course'}" was refunded`, [
+        hello,
+        `${school} refunded a sale of "${vars.courseTitle ?? 'your course'}". The earnings from that sale (${vars.amount ?? ''}) have been reversed in your statement.`,
+      ]);
+    case 'payout-recorded':
+      return render(
+        `${school} recorded a payout to you`,
+        [
+          hello,
+          `${school} recorded a payout of ${vars.amount ?? ''} to you (reference ${vars.reference ?? '—'}). Check that it reached your account.`,
+        ],
+        { label: 'See your earnings', href: link },
+      );
+    case 'ledger-mismatch':
+      return render(
+        `Action needed: earnings check found a difference at ${school}`,
+        [
+          hello,
+          `The daily check of instructor earnings at ${school} found entries that don't match sales and refunds. Payouts should wait until it is resolved.`,
+          vars.reference ?? '',
+        ].filter((p) => p !== ''),
+        { label: 'Open orders and payments', href: link },
       );
   }
 }

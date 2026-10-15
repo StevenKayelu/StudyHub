@@ -33,11 +33,19 @@ export class EnrollmentsService {
       isOwner,
       canOpenWithoutEnrolment: isOwner || can(actor, 'admin.access'),
     };
-    if (actor === null) return { ...base, enrollment: null, canEnrolFree: course.priceMinor === 0 };
+    // `purchasable` is decided by the catalogue, which knows whether the school can take payments (M8).
+    if (actor === null) {
+      return { ...base, enrollment: null, canEnrolFree: course.priceMinor === 0, purchasable: false };
+    }
     return this.db.run(async (tx) => {
       const enrollment = await activeEnrollment(tx, actor.membershipId, course.id);
       if (enrollment === null) {
-        return { ...base, enrollment: null, canEnrolFree: course.priceMinor === 0 && !isOwner };
+        return {
+          ...base,
+          enrollment: null,
+          canEnrolFree: course.priceMinor === 0 && !isOwner,
+          purchasable: false,
+        };
       }
       const resume =
         enrollment.lastLessonId === null
@@ -56,6 +64,7 @@ export class EnrollmentsService {
           completed: enrollment.completedAt !== null,
         },
         canEnrolFree: false,
+        purchasable: false,
       };
     });
   }

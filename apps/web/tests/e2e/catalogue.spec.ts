@@ -23,7 +23,10 @@ test.describe('catalogue (M5)', () => {
   test('home lists courses; search tolerates a typo; filters live in the URL', async ({ page }) => {
     await page.context().clearCookies();
     await page.goto(school(ACME, '/'));
-    await expect(page.getByRole('link', { name: 'Biology foundations' })).toBeVisible();
+    // The home page shows only the newest courses (earlier runs add more), so any course card will do here.
+    await expect(
+      page.getByRole('region', { name: 'New courses' }).getByRole('article').first(),
+    ).toBeVisible();
     await expectNoSeriousAxeViolations(page);
 
     await page.getByRole('searchbox', { name: 'What do you want to learn?' }).fill('biolgy');

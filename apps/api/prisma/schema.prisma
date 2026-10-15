@@ -53,14 +53,16 @@ enum DomainStatus {
 
 /// A school (tenant). RLS: visible only inside its own tenant context (policy tenant_self).
 model Tenant {
-  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  slug      String       @unique
-  name      String
-  kind      TenantKind
-  status    TenantStatus @default(PROVISIONING)
-  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime     @default(now()) @map("updated_at") @db.Timestamptz(3)
-  version   Int          @default(1)
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug          String       @unique
+  name          String
+  kind          TenantKind
+  status        TenantStatus @default(PROVISIONING)
+  /// BR-55 receipt prefix (2–8 of A–Z, 0–9); null: derived from the slug.
+  receiptPrefix String?      @map("receipt_prefix")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime     @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version       Int          @default(1)
 
   domains          TenantDomain[]
   auditLogs        AuditLog[]
@@ -676,6 +678,7 @@ model Course {
   questions   Question[]
   quizzes     Quiz[]
   attempts    Attempt[]
+  orderItems  OrderItem[]
 
   @@unique([tenantId, slug], map: "course_tenant_slug_key")
   @@unique([tenantId, id], map: "course_tenant_id_id_key")
@@ -1074,4 +1077,343 @@ model TenantFeature {
 
   @@id([tenantId, featureKey])
   @@map("tenant_feature")
+}
+
+// ---------------------------------------------------------------------------------------------
+// M8 commerce (migration 0008): payment accounts, orders, payments, refunds, receipts, idempotency,
+// the earnings ledger and payouts. Membership references are plain ids (composite FKs in SQL).
+// ---------------------------------------------------------------------------------------------
+
+enum PaymentAccountStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+  FAILED_TEST
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  MOBILE_MONEY
+  CARD
+}
+
+enum MobileNetwork {
+  MTN
+  AIRTEL
+  ZAMTEL
+}
+
+enum PaymentStatus {
+  INITIATED
+  PENDING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+  CANCELLED
+  NEEDS_REVIEW
+  REFUNDED
+}
+
+enum RefundMode {
+  PROVIDER
+  MANUAL
+}
+
+enum RefundStatus {
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+enum LedgerType {
+  SALE
+  REFUND_REVERSAL
+  ADJUSTMENT
+}
+
+enum LedgerStatus {
+  PENDING
+  AVAILABLE
+  PAID
+  FROZEN
+}
+
+enum PayoutMethodType {
+  MOBILE_MONEY
+  BANK
+}
+
+model PaymentAccount {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String               @map("tenant_id") @db.Uuid
+  provider         String
+  label            String
+  status           PaymentAccountStatus @default(PENDING)
+  credentialsEnc   Bytes                @map("credentials_enc")
+  webhookSecretEnc Bytes                @map("webhook_secret_enc")
+  dataKeyEnc       Bytes                @map("data_key_enc")
+  maskedHint       String               @map("masked_hint")
+  capabilities     Json?
+  lastTestedAt     DateTime?            @map("last_tested_at") @db.Timestamptz(3)
+  lastTestResult   String?              @map("last_test_result")
+  createdBy        String               @map("created_by") @db.Uuid
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime             @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version          Int                  @default(1)
+
+  payments Payment[]
+  events   PaymentEvent[]
+
+  @@unique([tenantId, id], map: "payment_account_tenant_id_id_key")
+  @@map("payment_account")
+}
+
+model Order {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String      @map("tenant_id") @db.Uuid
+  membershipId String      @map("membership_id") @db.Uuid
+  status       OrderStatus @default(PENDING)
+  currency     String      @db.Char(3)
+  totalMinor   BigInt      @map("total_minor")
+  expiresAt    DateTime    @map("expires_at") @db.Timestamptz(3)
+  paidAt       DateTime?   @map("paid_at") @db.Timestamptz(3)
+  cancelledAt  DateTime?   @map("cancelled_at") @db.Timestamptz(3)
+  refundedAt   DateTime?   @map("refunded_at") @db.Timestamptz(3)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime    @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version      Int         @default(1)
+
+  items    OrderItem[]
+  payments Payment[]
+  refunds  Refund[]
+  receipt  Receipt?
+
+  @@unique([tenantId, id], map: "order_tenant_id_id_key")
+  @@map("order")
+}
+
+model OrderItem {
+  id                     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String @map("tenant_id") @db.Uuid
+  orderId                String @map("order_id") @db.Uuid
+  courseId               String @map("course_id") @db.Uuid
+  instructorMembershipId String @map("instructor_membership_id") @db.Uuid
+  titleSnapshot          String @map("title_snapshot")
+  instructorNameSnapshot String @map("instructor_name_snapshot")
+  unitPriceMinor         BigInt @map("unit_price_minor")
+  currency               String @db.Char(3)
+  accessDays             Int?   @map("access_days")
+  commissionBps          Int?   @map("commission_bps")
+
+  order  Order         @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  course Course        @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  ledger LedgerEntry[]
+
+  @@unique([tenantId, id], map: "order_item_tenant_id_id_key")
+  @@map("order_item")
+}
+
+model Payment {
+  id                    String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String         @map("tenant_id") @db.Uuid
+  orderId               String         @map("order_id") @db.Uuid
+  paymentAccountId      String         @map("payment_account_id") @db.Uuid
+  provider              String
+  method                PaymentMethod
+  network               MobileNetwork?
+  msisdnEnc             Bytes?         @map("msisdn_enc")
+  msisdnMasked          String?        @map("msisdn_masked")
+  reference             String         @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  providerTransactionId String?        @map("provider_transaction_id")
+  amountMinor           BigInt         @map("amount_minor")
+  currency              String         @db.Char(3)
+  providerAmountMinor   BigInt?        @map("provider_amount_minor")
+  providerCurrency      String?        @map("provider_currency") @db.Char(3)
+  providerFeeMinor      BigInt?        @map("provider_fee_minor")
+  status                PaymentStatus  @default(INITIATED)
+  failureCode           String?        @map("failure_code")
+  failureMessage        String?        @map("failure_message")
+  reviewReason          String?        @map("review_reason")
+  nextCheckAt           DateTime?      @map("next_check_at") @db.Timestamptz(3)
+  checkCount            Int            @default(0) @map("check_count")
+  confirmedAt           DateTime?      @map("confirmed_at") @db.Timestamptz(3)
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime       @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  order   Order          @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  account PaymentAccount @relation(fields: [tenantId, paymentAccountId], references: [tenantId, id], onDelete: Restrict)
+  events  PaymentEvent[]
+  refunds Refund[]
+
+  @@unique([tenantId, id], map: "payment_tenant_id_id_key")
+  @@unique([tenantId, reference], map: "payment_tenant_reference_key")
+  @@map("payment")
+}
+
+model PaymentEvent {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  paymentAccountId String    @map("payment_account_id") @db.Uuid
+  providerEventId  String    @map("provider_event_id")
+  paymentId        String?   @map("payment_id") @db.Uuid
+  type             String
+  payload          Json
+  receivedAt       DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt      DateTime? @map("processed_at") @db.Timestamptz(3)
+  processingError  String?   @map("processing_error")
+
+  account PaymentAccount @relation(fields: [tenantId, paymentAccountId], references: [tenantId, id], onDelete: Restrict)
+  payment Payment?       @relation(fields: [tenantId, paymentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id], map: "payment_event_tenant_id_id_key")
+  @@unique([tenantId, paymentAccountId, providerEventId], map: "payment_event_provider_event_key")
+  @@map("payment_event")
+}
+
+model Refund {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String       @map("tenant_id") @db.Uuid
+  orderId          String       @map("order_id") @db.Uuid
+  paymentId        String       @map("payment_id") @db.Uuid
+  amountMinor      BigInt       @map("amount_minor")
+  currency         String       @db.Char(3)
+  reason           String
+  mode             RefundMode
+  status           RefundStatus @default(PROCESSING)
+  providerRefundId String?      @map("provider_refund_id")
+  manualReference  String?      @map("manual_reference")
+  failureMessage   String?      @map("failure_message")
+  requestedBy      String       @map("requested_by") @db.Uuid
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt      DateTime?    @map("completed_at") @db.Timestamptz(3)
+
+  order   Order         @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  payment Payment       @relation(fields: [tenantId, paymentId], references: [tenantId, id], onDelete: Restrict)
+  ledger  LedgerEntry[]
+
+  @@unique([tenantId, id], map: "refund_tenant_id_id_key")
+  @@map("refund")
+}
+
+model ReceiptSequence {
+  tenantId  String @map("tenant_id") @db.Uuid
+  year      Int
+  lastValue Int    @default(0) @map("last_value")
+
+  @@id([tenantId, year])
+  @@map("receipt_sequence")
+}
+
+model Receipt {
+  id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  orderId  String   @map("order_id") @db.Uuid
+  number   String
+  year     Int
+  seq      Int
+  issuedAt DateTime @default(now()) @map("issued_at") @db.Timestamptz(3)
+
+  order Order @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, orderId], map: "receipt_tenant_order_key")
+  @@unique([tenantId, number], map: "receipt_tenant_number_key")
+  @@map("receipt")
+}
+
+model IdempotencyKey {
+  tenantId       String   @map("tenant_id") @db.Uuid
+  membershipId   String   @map("membership_id") @db.Uuid
+  key            String
+  route          String
+  requestHash    String   @map("request_hash")
+  responseStatus Int?     @map("response_status")
+  responseBody   Json?    @map("response_body")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([tenantId, membershipId, key])
+  @@map("idempotency_key")
+}
+
+model PayoutMethod {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String           @map("tenant_id") @db.Uuid
+  membershipId String           @map("membership_id") @db.Uuid
+  type         PayoutMethodType
+  detailsEnc   Bytes            @map("details_enc")
+  displayHint  String           @map("display_hint")
+  isDefault    Boolean          @default(false) @map("is_default")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, id], map: "payout_method_tenant_id_id_key")
+  @@map("payout_method")
+}
+
+model Payout {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String   @map("tenant_id") @db.Uuid
+  instructorMembershipId String   @map("instructor_membership_id") @db.Uuid
+  amountMinor            BigInt   @map("amount_minor")
+  currency               String   @db.Char(3)
+  methodSnapshot         Json?    @map("method_snapshot")
+  externalReference      String   @map("external_reference")
+  paidAt                 DateTime @map("paid_at") @db.Timestamptz(3)
+  recordedBy             String   @map("recorded_by") @db.Uuid
+  note                   String?
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  entries LedgerEntry[]
+
+  @@unique([tenantId, id], map: "payout_tenant_id_id_key")
+  @@map("payout")
+}
+
+model LedgerEntry {
+  id                     String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String       @map("tenant_id") @db.Uuid
+  instructorMembershipId String       @map("instructor_membership_id") @db.Uuid
+  orderItemId            String?      @map("order_item_id") @db.Uuid
+  refundId               String?      @map("refund_id") @db.Uuid
+  type                   LedgerType
+  grossMinor             BigInt       @map("gross_minor")
+  providerFeeMinor       BigInt       @default(0) @map("provider_fee_minor")
+  commissionMinor        BigInt       @default(0) @map("commission_minor")
+  netMinor               BigInt       @map("net_minor")
+  currency               String       @db.Char(3)
+  status                 LedgerStatus @default(PENDING)
+  availableAt            DateTime     @map("available_at") @db.Timestamptz(3)
+  payoutId               String?      @map("payout_id") @db.Uuid
+  note                   String?
+  createdBy              String?      @map("created_by") @db.Uuid
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime     @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  orderItem OrderItem? @relation(fields: [tenantId, orderItemId], references: [tenantId, id], onDelete: Restrict)
+  refund    Refund?    @relation(fields: [tenantId, refundId], references: [tenantId, id], onDelete: Restrict)
+  payout    Payout?    @relation(fields: [tenantId, payoutId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id], map: "ledger_entry_tenant_id_id_key")
+  @@index([tenantId, instructorMembershipId, status], map: "ledger_entry_tenant_instructor_idx")
+  @@map("ledger_entry")
+}
+
+model LedgerCheck {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String   @map("tenant_id") @db.Uuid
+  checkedAt              DateTime @default(now()) @map("checked_at") @db.Timestamptz(3)
+  ok                     Boolean
+  salesExpectedMinor     BigInt   @map("sales_expected_minor")
+  salesRecordedMinor     BigInt   @map("sales_recorded_minor")
+  reversalsExpectedMinor BigInt   @map("reversals_expected_minor")
+  reversalsRecordedMinor BigInt   @map("reversals_recorded_minor")
+  mismatches             Json     @default("[]")
+
+  @@index([tenantId, checkedAt(sort: Desc)], map: "ledger_check_tenant_checked_idx")
+  @@map("ledger_check")
 }

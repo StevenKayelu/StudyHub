@@ -5,6 +5,7 @@ export {
   type ApiEnv,
   ConfigError,
   DEV_IDENTITY_ENCRYPTION_KEY,
+  DEV_PAYMENT_ENCRYPTION_KEY,
   loadApiEnv,
   loadMigratorEnv,
   type MigratorEnv,

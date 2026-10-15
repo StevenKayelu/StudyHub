@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { CatalogueResponse, CourseCard, CourseLanding, InstructorPage } from '@studyhub/contracts';
 
+import { paymentsProblem } from '../../commerce';
 import type { TenantActor } from '../../identity';
 import { EnrollmentsService } from '../../learning';
 import { AppError, TenantDb, type TenantTx } from '../../platform';
@@ -133,6 +134,16 @@ export class CatalogueService {
       ownerMembershipId: course.ownerMembershipId,
       priceMinor: Number(course.priceMinor),
     });
+    // M8: "Buy" only where the school can sell this course now (BR-54, BR-04).
+    if (
+      course.priceMinor > 0n &&
+      viewer.enrollment === null &&
+      !viewer.isOwner &&
+      course.status === 'PUBLISHED'
+    ) {
+      viewer.purchasable =
+        (await this.db.run((tx) => paymentsProblem(tx, course.ownerMembershipId))) === null;
+    }
     return {
       id: course.id,
       slug: course.slug,

@@ -2,7 +2,8 @@
 // Runs as the migrator role. Never run against production.
 import { Client } from 'pg';
 
-import { ConfigError, hashPassword, loadMigratorEnv } from '../modules/platform';
+import { FAKE_PROFILE_CAPABILITIES, PaymentVault } from '../modules/commerce';
+import { ConfigError, DEV_PAYMENT_ENCRYPTION_KEY, hashPassword, loadMigratorEnv } from '../modules/platform';
 import { provisionTenant, type ProvisionTenantInput, writeTenantProfile } from '../modules/tenancy';
 
 /**
@@ -253,8 +254,27 @@ const DEMO_CATALOGUE = {
       ),
       sections: [{ title: 'Expressions', lessons: ['Like terms', 'Brackets'] }],
     },
+    {
+      id: '0d6c2b1e-0000-4000-8000-0000000cc003',
+      slug: 'statistics-in-practice',
+      title: 'Statistics in practice',
+      subtitle: 'Averages, spread and charts with real Zambian data',
+      subjectId: '0d6c2b1e-0000-4000-8000-0000000cb003',
+      level: 'INTERMEDIATE',
+      tags: ['statistics', 'data'],
+      outcomes: ['Choose the right average', 'Measure spread', 'Read and draw charts honestly'],
+      description: doc(
+        'Statistics turns numbers into answers. Using rainfall, crop and market data, this course shows ' +
+          'you how to summarise a data set, compare groups and present results clearly.',
+        'It is a paid demo course: buy it with the development payment provider to try checkout.',
+      ),
+      sections: [{ title: 'Describing data', lessons: ['Averages', 'Spread'] }],
+    },
   ],
 } as const;
+
+/** M8: paid demo course prices (minor units); every other demo course is free. */
+const DEMO_PRICES: Readonly<Record<string, number>> = { 'statistics-in-practice': 25_000 };
 
 async function seedCatalogue(client: Client, tenantId: string): Promise<void> {
   await withContext(client, { 'app.tenant_id': tenantId }, async () => {
@@ -294,8 +314,8 @@ async function seedCatalogue(client: Client, tenantId: string): Promise<void> {
     for (const course of DEMO_CATALOGUE.courses) {
       const inserted = await client.query(
         `INSERT INTO course (id, tenant_id, owner_membership_id, subject_id, slug, title, subtitle, description_json,
-           description_text, outcomes, level, tags, status, first_published_at, published_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::"CourseLevel", $12, 'PUBLISHED', now(), now())
+           description_text, outcomes, level, tags, status, first_published_at, published_at, price_minor)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::"CourseLevel", $12, 'PUBLISHED', now(), now(), $13)
          ON CONFLICT DO NOTHING`,
         [
           course.id,
@@ -310,6 +330,7 @@ async function seedCatalogue(client: Client, tenantId: string): Promise<void> {
           course.outcomes,
           course.level,
           course.tags,
+          DEMO_PRICES[course.slug] ?? 0,
         ],
       );
       if (inserted.rowCount === 0) continue; // already seeded: leave any local edits alone
@@ -561,6 +582,74 @@ async function seedAssessment(client: Client, tenantId: string): Promise<void> {
   });
 }
 
+/** M8 demo commerce at Acme: the development (fake) payment account, revenue share and a payout method. */
+const DEMO_COMMERCE = {
+  accountId: '0d6c2b1e-0000-4000-8000-0000000ea001',
+  payoutMethodId: '0d6c2b1e-0000-4000-8000-0000000eb001',
+  credentials: { merchantId: 'acme-demo-merchant', apiKey: 'fake-demo-api-key', profile: 'FULL' },
+  webhookSecret: 'fake-demo-webhook-secret-0001',
+} as const;
+
+async function seedCommerce(client: Client, tenantId: string, kek: string): Promise<void> {
+  const vault = new PaymentVault(kek);
+  await withContext(client, { 'app.tenant_id': tenantId }, async () => {
+    const member = async (email: string) => {
+      const account = DEMO_ACCOUNTS.find((a) => a.email === email)!;
+      const { rows } = await client.query<{ id: string }>(
+        'SELECT id FROM tenant_membership WHERE tenant_id = $1 AND user_id = $2',
+        [tenantId, account.id],
+      );
+      return rows[0]?.id;
+    };
+    const owner = await member('owner@acme.test');
+    const tutor = await member('tutor@acme.test');
+    if (owner === undefined || tutor === undefined) return;
+    const sealed = vault.sealAccount(
+      tenantId,
+      DEMO_COMMERCE.accountId,
+      DEMO_COMMERCE.credentials,
+      DEMO_COMMERCE.webhookSecret,
+    );
+    await client.query(
+      `INSERT INTO payment_account (id, tenant_id, provider, label, status, credentials_enc, webhook_secret_enc,
+         data_key_enc, masked_hint, capabilities, last_tested_at, last_test_result, created_by)
+       VALUES ($1, $2, 'fake', 'Development account', 'ACTIVE', $3, $4, $5, $6, $7, now(), 'OK', $8)
+       ON CONFLICT DO NOTHING`,
+      [
+        DEMO_COMMERCE.accountId,
+        tenantId,
+        Buffer.from(sealed.credentialsEnc),
+        Buffer.from(sealed.webhookSecretEnc),
+        Buffer.from(sealed.dataKeyEnc),
+        'Fake provider · merchant ••••hant · FULL',
+        JSON.stringify(FAKE_PROFILE_CAPABILITIES.FULL),
+        owner,
+      ],
+    );
+    await client.query(
+      `INSERT INTO tenant_feature (tenant_id, feature_key, enabled_by_tenant) VALUES ($1, 'instructorRevenueShare', true)
+       ON CONFLICT DO NOTHING`,
+      [tenantId],
+    );
+    await client.query(
+      `INSERT INTO payout_method (id, tenant_id, membership_id, type, details_enc, display_hint, is_default)
+       VALUES ($1, $2, $3, 'MOBILE_MONEY', $4, 'MTN +260 96 ••• 233', true) ON CONFLICT DO NOTHING`,
+      [
+        DEMO_COMMERCE.payoutMethodId,
+        tenantId,
+        tutor,
+        Buffer.from(
+          vault.sealValue(
+            tenantId,
+            'payout-details',
+            JSON.stringify({ type: 'MOBILE_MONEY', msisdn: '+260961112233', accountName: 'Tiko Phiri' }),
+          ),
+        ),
+      ],
+    );
+  });
+}
+
 async function main(): Promise<void> {
   const env = loadMigratorEnv();
   if (env.NODE_ENV === 'production') throw new Error('Refusing to seed demo schools in production.');
@@ -595,7 +684,12 @@ async function main(): Promise<void> {
       await seedCatalogue(client, tenantIds.acme);
       await seedLearning(client, tenantIds.acme);
       await seedAssessment(client, tenantIds.acme);
-      console.log('acme.localhost: demo catalogue present');
+      await seedCommerce(
+        client,
+        tenantIds.acme,
+        process.env.PAYMENT_ENCRYPTION_KEY ?? DEV_PAYMENT_ENCRYPTION_KEY,
+      );
+      console.log('acme.localhost: demo catalogue present (with a paid course and the fake payment account)');
     }
     if (tenantIds.delta !== undefined) {
       await seedSuspendedSchool(client, tenantIds.delta);

@@ -44,7 +44,7 @@ describe('publish checklist (BR-04)', () => {
     outcomes: 2,
     priceMinor: 0,
     minPaidPriceMinor: 1000,
-    paymentsAvailable: false,
+    paymentsProblem: 'The school has no active payment account yet',
     sections: [{ lessons: [{ title: 'Intro', ready: true, type: 'TEXT' }] }],
   };
 
@@ -65,8 +65,12 @@ describe('publish checklist (BR-04)', () => {
     expect(failing[2]!.message).toContain('"Empty"');
   });
 
-  it('blocks paid courses until payments exist (BR-54)', () => {
+  it('blocks paid courses until the school can take payments (BR-54, BR-04)', () => {
     const items = evaluateChecklist('c', { ...ready, priceMinor: 25_000 });
-    expect(items.find((item) => item.key === 'payments')?.ok).toBe(false);
+    const payments = items.find((item) => item.key === 'payments');
+    expect(payments?.ok).toBe(false);
+    expect(payments?.message).toBe('The school has no active payment account yet');
+    const ok = evaluateChecklist('c', { ...ready, priceMinor: 25_000, paymentsProblem: null });
+    expect(ok.find((item) => item.key === 'payments')?.ok).toBe(true);
   });
 });

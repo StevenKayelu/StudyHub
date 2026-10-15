@@ -69,6 +69,15 @@ describe('loadApiEnv', () => {
     expect(error.message).toContain('DATABASE_URL_APP');
     expect(error.message).toContain('placeholder');
   });
+
+  it('refuses the fake payment provider and the development payment key in production (Q-PAY-3)', () => {
+    const error = captureConfigError(() =>
+      loadApiEnv({ NODE_ENV: 'production', DATABASE_URL_APP: validDatabaseUrl }),
+    );
+    expect(error.message).toContain('PAYMENT_PROVIDERS');
+    expect(error.message).toContain('PAYMENT_ENCRYPTION_KEY');
+    expect(loadApiEnv({ DATABASE_URL_APP: validDatabaseUrl }).PAYMENT_PROVIDERS).toEqual(['fake']);
+  });
 });
 
 describe('loadMigratorEnv', () => {

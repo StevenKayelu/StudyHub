@@ -3,6 +3,9 @@ import { z } from 'zod';
 /** Public development-only key (base64 of a fixed 32-byte string). Refused in production. */
 export const DEV_IDENTITY_ENCRYPTION_KEY = Buffer.from('studyhub-local-development-key!!').toString('base64');
 
+/** Public development-only key-encryption key for payment credentials (M8). Refused in production. */
+export const DEV_PAYMENT_ENCRYPTION_KEY = Buffer.from('studyhub-local-payments-kek-dev!').toString('base64');
+
 /** The local object store's access key (infra/seaweedfs/s3.json). Refused in production. */
 export const DEV_S3_ACCESS_KEY = 'studyhub-local';
 
@@ -107,6 +110,27 @@ export const apiEnvSchema = z
     /** Managed video provider. Only the fake exists until a provider is approved (as for payments). */
     VIDEO_PROVIDER: z.enum(['fake']).default('fake'),
     FAKE_VIDEO_SECRET: z.string().min(16).default('studyhub-local-fake-video-secret'),
+    /**
+     * Key-encryption key (32 bytes, base64) for school payment credentials, webhook secrets, payer numbers
+     * and payout details (04 §17.10 envelope encryption). A KMS-managed key replaces it later.
+     */
+    PAYMENT_ENCRYPTION_KEY: z
+      .string()
+      .default(DEV_PAYMENT_ENCRYPTION_KEY)
+      .refine((value) => Buffer.from(value, 'base64').length === 32, {
+        message: 'must be 32 bytes, base64-encoded',
+      }),
+    /** Payment provider adapters schools may connect. Only the fake exists until one is approved (Q-PAY-3). */
+    PAYMENT_PROVIDERS: z
+      .string()
+      .default('fake')
+      .transform((value) =>
+        value
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0),
+      )
+      .pipe(z.array(z.enum(['fake']))),
     /** Storage per school until plans exist (M9): BR-49 limits apply against this. */
     DEFAULT_STORAGE_QUOTA_MB: z.coerce.number().int().min(1).default(10_240),
   })
@@ -118,6 +142,10 @@ export const apiEnvSchema = z
       if (env.MALWARE_SCANNER !== 'clamd') refuse('MALWARE_SCANNER', 'must be clamd in production');
       if (env.VIDEO_PROVIDER === 'fake')
         refuse('VIDEO_PROVIDER', 'the fake provider is for development only');
+      if (env.PAYMENT_PROVIDERS.includes('fake'))
+        refuse('PAYMENT_PROVIDERS', 'the fake payment provider is for development only');
+      if (env.PAYMENT_ENCRYPTION_KEY === DEV_PAYMENT_ENCRYPTION_KEY)
+        refuse('PAYMENT_ENCRYPTION_KEY', 'is the public development key; set a real key for production');
       if (env.S3_ACCESS_KEY_ID === DEV_S3_ACCESS_KEY)
         refuse('S3_ACCESS_KEY_ID', 'is the local development key');
       if (env.S3_CREATE_BUCKET)

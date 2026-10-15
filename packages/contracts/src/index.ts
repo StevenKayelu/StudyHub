@@ -1,4 +1,5 @@
 export * from './assessment';
+export * from './commerce';
 export * from './authz-matrix';
 export * from './content';
 export * from './errors';

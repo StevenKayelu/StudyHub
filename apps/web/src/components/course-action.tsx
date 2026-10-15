@@ -5,25 +5,29 @@ import { Alert, Button, buttonClasses, ProgressLine } from '@studyhub/ui';
 import NextLink from 'next/link';
 import { useState } from 'react';
 
-import { callApi, reloadTo, splitProblem } from '../lib/client-api';
+import { callApi, idempotencyKey, reloadTo, splitProblem } from '../lib/client-api';
 import { fill } from '../lib/fill';
 import type { LearnTexts } from '../lib/learn-texts-type';
 
 /**
- * The landing page's primary action (S-P03 sticky card; F14): Enrol for free, Continue, open as the
- * course owner or an administrator, or "buying opens soon" for paid courses (M8).
+ * The landing page's primary action (S-P03 sticky card; F14, F25): Enrol for free, Buy, Continue, or open
+ * as the course owner or an administrator.
  */
 export function CourseAction({
   course,
   viewer,
   texts,
+  priceLabel,
 }: {
   course: { id: string; slug: string; priceMinor: number };
   viewer: CourseViewer;
   texts: LearnTexts;
+  /** The formatted price for "Buy for K250.00" (paid courses). */
+  priceLabel?: string;
 }) {
   const c = texts.cta;
   const [busy, setBusy] = useState(false);
+  const [buyKey] = useState(idempotencyKey);
   const [error, setError] = useState<string | null>(null);
   const player = `/learn/courses/${course.id}`;
 
@@ -62,10 +66,56 @@ export function CourseAction({
   }
 
   if (course.priceMinor > 0) {
+    if (!viewer.purchasable && viewer.signedIn) {
+      return (
+        <Alert tone="info" title={c.notForSale}>
+          {c.notForSaleHint}
+        </Alert>
+      );
+    }
+    if (!viewer.signedIn) {
+      return (
+        <NextLink
+          href={`/sign-in?returnTo=${encodeURIComponent(`/c/${course.slug}`)}`}
+          className={buttonClasses('primary')}
+          data-testid="course-cta"
+        >
+          {c.signInToBuy}
+        </NextLink>
+      );
+    }
+    // F25: Buy → an order (reused while pending, BR-35) → checkout. The key makes a double click harmless.
     return (
-      <Alert tone="info" title={c.paidSoon}>
-        {c.paidSoonHint}
-      </Alert>
+      <div className="flex flex-col gap-2">
+        {error !== null ? <Alert tone="danger">{error}</Alert> : null}
+        <Button
+          variant="primary"
+          disabled={busy}
+          data-testid="course-cta"
+          onClick={async () => {
+            setBusy(true);
+            setError(null);
+            const result = await callApi<{ id: string }>(
+              'POST',
+              '/api/v1/orders',
+              { courseId: course.id },
+              { 'idempotency-key': buyKey },
+            );
+            if (result.ok) {
+              reloadTo(`/learn/orders/${result.data.id}`);
+              return;
+            }
+            setBusy(false);
+            setError(
+              result.problem.code === 'EMAIL_NOT_VERIFIED'
+                ? c.verifyFirst
+                : splitProblem(result.problem, texts.common.networkError).summary,
+            );
+          }}
+        >
+          {busy ? c.starting : fill(c.buy, { price: priceLabel ?? '' })}
+        </Button>
+      </div>
     );
   }
 

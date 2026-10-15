@@ -74,3 +74,89 @@ export function contentSettingsFrom(rows: { key: string; value: unknown }[]): Co
   }
   return contentSettingsSchema.parse(values);
 }
+
+/**
+ * Commerce settings (M8; 05 §8.2 "Commerce", BR-62, Q-BIZ-2 defaults). `minPaidPriceMinor` stays in the
+ * content settings above (the publish checklist reads it) and is editable with this group.
+ */
+export const commerceSettingsSchema = z.object({
+  /** Offered at checkout only where the active payment account also supports them (BR-62). */
+  enabledPaymentMethods: z.array(z.enum(['MOBILE_MONEY', 'CARD'])).default(['MOBILE_MONEY', 'CARD']),
+  /** BR-08: an unpaid order expires after this many minutes. */
+  orderExpiryMinutes: z.number().int().min(10).max(1440).default(30),
+  /** BR-15: earnings become available after the refund window; also the refund guidance (F28). */
+  refundWindowDays: z.number().int().min(0).max(90).default(7),
+  /** `PROVIDER_API` only when the account has a refund API (BR-62); otherwise refunds are recorded. */
+  refundMode: z.enum(['PROVIDER_API', 'MANUAL']).default('MANUAL'),
+  /** BR-14 / BR-63: the share of an instructor's sale the school keeps (revenue share only). */
+  instructorCommissionBps: z.number().int().min(0).max(10_000).default(2000),
+  /** Shown to instructors; payouts are recorded by an administrator (W3). */
+  payoutSchedule: z.enum(['WEEKLY', 'MONTHLY', 'ON_REQUEST']).default('MONTHLY'),
+  /** F48 / Q-LEG-3: the seller on receipts. No tax is computed. */
+  receiptSeller: z
+    .object({
+      legalName: z.string().trim().max(160).nullable().default(null),
+      address: z.string().trim().max(400).nullable().default(null),
+      taxId: z.string().trim().max(40).nullable().default(null),
+    })
+    .default({ legalName: null, address: null, taxId: null }),
+});
+export type CommerceSettings = z.infer<typeof commerceSettingsSchema>;
+
+export const COMMERCE_SETTING_KEYS = Object.keys(commerceSettingsSchema.shape) as (keyof CommerceSettings)[];
+
+export function commerceSettingsFrom(rows: { key: string; value: unknown }[]): CommerceSettings {
+  const values: Record<string, unknown> = {};
+  for (const row of rows) {
+    const field = (commerceSettingsSchema.shape as Record<string, z.ZodType>)[row.key];
+    if (field !== undefined && field.safeParse(row.value).success) values[row.key] = row.value;
+  }
+  return commerceSettingsSchema.parse(values);
+}
+
+/** PATCH /admin/settings (M8: the commerce group; M9 adds the others). Every change needs a reason (S-AD09). */
+export const settingsPatchSchema = z
+  .object({
+    enabledPaymentMethods: z
+      .array(z.enum(['MOBILE_MONEY', 'CARD']))
+      .max(2)
+      .optional(),
+    orderExpiryMinutes: z.number().int().min(10).max(1440).optional(),
+    refundWindowDays: z.number().int().min(0).max(90).optional(),
+    refundMode: z.enum(['PROVIDER_API', 'MANUAL']).optional(),
+    instructorCommissionBps: z.number().int().min(0).max(10_000).optional(),
+    payoutSchedule: z.enum(['WEEKLY', 'MONTHLY', 'ON_REQUEST']).optional(),
+    receiptSeller: z
+      .object({
+        legalName: z.string().trim().max(160).nullable(),
+        address: z.string().trim().max(400).nullable(),
+        taxId: z.string().trim().max(40).nullable(),
+      })
+      .optional(),
+    minPaidPriceMinor: z.number().int().min(100).max(100_000_000).optional(),
+    reason: z.string().trim().min(3).max(300),
+  })
+  .strict();
+export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
+
+/** GET /admin/settings (M8: commerce). */
+export const adminSettingsSchema = z.object({
+  commerce: commerceSettingsSchema.extend({ minPaidPriceMinor: z.number().int() }),
+  /** What the active payment account supports (null: no active account), for BR-62 in the form. */
+  supported: z
+    .object({
+      methods: z.array(z.enum(['MOBILE_MONEY', 'CARD'])),
+      refundApi: z.enum(['FULL', 'PARTIAL', 'NONE']),
+    })
+    .nullable(),
+  revenueShare: z.boolean(),
+  lastChange: z
+    .object({
+      key: z.string(),
+      by: z.string().nullable(),
+      at: z.iso.datetime(),
+      reason: z.string().nullable(),
+    })
+    .nullable(),
+});
+export type AdminSettings = z.infer<typeof adminSettingsSchema>;

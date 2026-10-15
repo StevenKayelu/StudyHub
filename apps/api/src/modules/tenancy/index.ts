@@ -18,7 +18,8 @@ export {
   type TenantKind,
   writeTenantProfile,
 } from './infra/tenant-provisioning';
+export { readCommerceSettings } from './infra/commerce-settings';
 export { readContentSettings } from './infra/content-settings';
-export { featureEnabled, featureMap } from './domain/features';
+export { featureEnabled, featureMap, TENANT_SWITCH_DEFAULTS } from './domain/features';
 export { readFeatures, requireFeature } from './infra/features';
 export { TenancyModule } from './tenancy.module';

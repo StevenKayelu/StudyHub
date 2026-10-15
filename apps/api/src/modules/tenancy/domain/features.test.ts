@@ -20,4 +20,13 @@ describe('features (F40, BR-48)', () => {
     expect(map.quizAnalytics).toBe(true);
     expect(Object.keys(map)).toHaveLength(10);
   });
+
+  it('instructor revenue share stays off until the school switches it on (M8)', () => {
+    expect(featureMap([]).instructorRevenueShare).toBe(false);
+    expect(featureMap([]).paidCourses).toBe(true);
+    const on = featureMap([
+      { featureKey: 'instructorRevenueShare', enabledByTenant: true, platformOverride: 'NONE' },
+    ]);
+    expect(on.instructorRevenueShare).toBe(true);
+  });
 });

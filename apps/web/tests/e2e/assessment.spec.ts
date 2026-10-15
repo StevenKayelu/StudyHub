@@ -10,6 +10,10 @@ const ACME = 'acme.localhost';
 const BIOLOGY_ID = '0d6c2b1e-0000-4000-8000-0000000cc001';
 const QUIZ_ID = '0d6c2b1e-0000-4000-8000-0000000ce001';
 const SECRETS = /isCorrect|acceptedAnswers|explanation|Mitochondria carry out|Plant cells have a cell wall/;
+// The page also carries the UI's own labels (e.g. the "Explanation" heading text), so the bare word is not
+// a leak there; the answers' fields and texts are.
+const PAGE_SECRETS =
+  /isCorrect|acceptedAnswers|"explanation(Json)?\\?":\s*\{|Mitochondria carry out|Plant cells have a cell wall/;
 
 async function expectNoSeriousAxeViolations(page: Page): Promise<void> {
   const results = await new AxeBuilder({ page })
@@ -51,7 +55,7 @@ test.describe('assessment (M7)', () => {
     });
     await openAttempt(page);
     // The runner page itself (server-rendered with the attempt) carries no answers either (F19 AC 2).
-    expect(await page.content()).not.toMatch(SECRETS);
+    expect(await page.content()).not.toMatch(PAGE_SECRETS);
     await expectNoSeriousAxeViolations(page);
 
     await page.getByRole('radio', { name: /Mitochondrion/ }).check();

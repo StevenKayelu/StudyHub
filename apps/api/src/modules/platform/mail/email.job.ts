@@ -18,6 +18,11 @@ const TEMPLATES = [
   'reset-password',
   'password-changed',
   'invitation',
+  'receipt',
+  'refund-learner',
+  'refund-instructor',
+  'payout-recorded',
+  'ledger-mismatch',
 ] as const;
 
 export const emailPayloadSchema = z.object({

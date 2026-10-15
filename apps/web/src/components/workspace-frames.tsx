@@ -9,14 +9,17 @@ import {
   CreditCard,
   FolderTree,
   GraduationCap,
+  Landmark,
   LayoutDashboard,
   Library,
   ListChecks,
   Palette,
+  Receipt,
   Settings,
   UserRound,
   UserRoundCog,
   Users,
+  Wallet,
 } from 'lucide-react';
 import NextLink from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
@@ -140,6 +143,21 @@ export async function AdminFrame({ tenant, current, ...props }: FrameProps & { t
             href: '/admin/instructors',
             label: t('admin.nav.instructors', terms),
             icon: <GraduationCap aria-hidden="true" className={icon} />,
+          },
+          {
+            href: '/admin/orders',
+            label: t('admin.nav.orders'),
+            icon: <Receipt aria-hidden="true" className={icon} />,
+          },
+          {
+            href: '/admin/payouts',
+            label: t('admin.nav.payouts'),
+            icon: <Wallet aria-hidden="true" className={icon} />,
+          },
+          {
+            href: '/admin/payments',
+            label: t('admin.nav.payments'),
+            icon: <Landmark aria-hidden="true" className={icon} />,
           },
           {
             href: '/admin/users',

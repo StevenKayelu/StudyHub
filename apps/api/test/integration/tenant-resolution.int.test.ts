@@ -148,6 +148,53 @@ const CONTENT_ROUTES: readonly string[] = [
   'PUT /api/v1/studio/quizzes/:id/items',
 ];
 
+/**
+ * Commerce routes (M8). Covered by commerce.int.test.ts (07 M8 AC 1-8: per-account webhooks verified with
+ * the account's own secret, cross-account signature confusion, failure isolation, write-only credentials)
+ * and by the M8 rows of the authorization matrix. Payment webhooks are not school-scoped by host: they
+ * resolve the school through resolve_payment_account(). The dev routes answer only with the fake provider.
+ */
+const COMMERCE_ROUTES: readonly string[] = [
+  'DELETE /api/v1/admin/payment-accounts/:id',
+  'DELETE /api/v1/me/payout-methods/:id',
+  'GET /api/v1/admin/earnings',
+  'GET /api/v1/admin/earnings/:membershipId',
+  'GET /api/v1/admin/orders',
+  'GET /api/v1/admin/orders/:id',
+  'GET /api/v1/admin/payment-accounts',
+  'GET /api/v1/admin/payment-accounts/:id/capabilities',
+  'GET /api/v1/admin/payment-exceptions',
+  'GET /api/v1/admin/payment-providers',
+  'GET /api/v1/admin/payouts',
+  'GET /api/v1/admin/settings',
+  'GET /api/v1/dev/fake-pay/:transactionId',
+  'GET /api/v1/me/orders',
+  'GET /api/v1/me/orders/:id/receipt',
+  'GET /api/v1/me/payout-methods',
+  'GET /api/v1/orders/:id',
+  'GET /api/v1/payments/return',
+  'GET /api/v1/studio/earnings',
+  'GET /api/v1/studio/earnings.csv',
+  'PATCH /api/v1/admin/settings',
+  'POST /api/v1/admin/orders/:id/refunds',
+  'POST /api/v1/admin/payment-accounts',
+  'POST /api/v1/admin/payment-accounts/:id/activate',
+  'POST /api/v1/admin/payment-accounts/:id/test',
+  'POST /api/v1/admin/payments/:id/recheck',
+  'POST /api/v1/admin/payments/:id/resolve',
+  'POST /api/v1/admin/payouts',
+  'POST /api/v1/dev/fake-pay/:transactionId/:decision',
+  'POST /api/v1/dev/fake-pay/phone/:paymentId/:decision',
+  'POST /api/v1/me/payout-methods',
+  'POST /api/v1/me/payout-methods/:id/default',
+  'POST /api/v1/orders',
+  'POST /api/v1/orders/:id/cancel',
+  'POST /api/v1/orders/:id/payments',
+  'POST /api/v1/orders/:id/refresh',
+  'POST /api/v1/webhooks/payments/:provider/:accountId',
+  'PUT /api/v1/admin/payment-accounts/:id/credentials',
+];
+
 describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
   let database: TestDatabase;
   let migrator: Client;
@@ -224,7 +271,8 @@ describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
       },
       locales: { defaultLocale: 'en', enabledLocales: ['en'], timeZone: 'Africa/Lusaka' },
       // Every feature is on until plans arrive (M9) or the school switches one off (F40, BR-48).
-      features: Object.fromEntries(FEATURE_KEYS.map((key) => [key, true])),
+      // Every feature is on by default except instructor revenue share (M8 PROPOSED 4).
+      features: Object.fromEntries(FEATURE_KEYS.map((key) => [key, key !== 'instructorRevenueShare'])),
     });
     const beta = tenantBootstrapSchema.parse(
       (await get('/api/v1/tenant', { host: 'beta.localhost' })).json(),
@@ -295,6 +343,7 @@ describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
         ...TENANT_ROUTES.map((route) => `${route.method} ${route.url}`),
         ...IDENTITY_ROUTES,
         ...CONTENT_ROUTES,
+        ...COMMERCE_ROUTES,
       ].sort(),
     );
   });

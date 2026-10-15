@@ -13,9 +13,27 @@ import {
   startWorker,
 } from './modules/platform';
 import { AUTO_SUBMIT_JOB, createAutoSubmitHandler } from './modules/assessment';
+import { AuditService } from './modules/audit';
+import {
+  type CommerceDeps,
+  createLedgerCheckHandler,
+  createLedgerReleaseHandler,
+  createOrderExpireHandler,
+  createPaymentCheckHandler,
+  createPaymentEventHandler,
+  createPaymentGateway,
+  enqueueDueLedgerChecks,
+  LEDGER_CHECK_JOB,
+  LEDGER_RELEASE_JOB,
+  ORDER_EXPIRE_JOB,
+  PAYMENT_CHECK_JOB,
+  PAYMENT_EVENT_JOB,
+} from './modules/commerce';
 import { createProcessAssetHandler, MEDIA_PROCESS_JOB } from './modules/media';
 
 const OUTBOX_INTERVAL_MS = 2000;
+/** W6: schools due their daily ledger check are looked for every hour (and at start). */
+const LEDGER_CHECK_INTERVAL_MS = 3600_000;
 
 /** Background worker process: same codebase as the API, separate entry point (blueprint 04 §2). */
 async function main(): Promise<void> {
@@ -24,19 +42,28 @@ async function main(): Promise<void> {
   // Runtime role (studyhub_app) under RLS; the outbox sweep uses only the claim_due_outbox() definer function.
   const prisma = new PrismaService(env, logger);
   const media = createMediaPorts(env);
+  const box = new SecretBox(env.IDENTITY_ENCRYPTION_KEY);
+  const commerce: CommerceDeps = {
+    prisma,
+    gateway: createPaymentGateway(env, prisma),
+    box,
+    schoolUrlTemplate: env.SCHOOL_URL_TEMPLATE,
+    audit: new AuditService(),
+  };
   const handlers = {
     ...DEFAULT_JOB_HANDLERS,
-    [EMAIL_SEND_JOB]: createEmailHandler(
-      new SecretBox(env.IDENTITY_ENCRYPTION_KEY),
-      createMailTransport(env.SMTP_URL),
-      env.MAIL_FROM_ADDRESS,
-    ),
+    [EMAIL_SEND_JOB]: createEmailHandler(box, createMailTransport(env.SMTP_URL), env.MAIL_FROM_ADDRESS),
     [MEDIA_PROCESS_JOB]: createProcessAssetHandler({
       prisma,
       storage: media.storage,
       scanner: media.scanner,
     }),
     [AUTO_SUBMIT_JOB]: createAutoSubmitHandler({ prisma }),
+    [PAYMENT_EVENT_JOB]: createPaymentEventHandler(commerce),
+    [PAYMENT_CHECK_JOB]: createPaymentCheckHandler(commerce),
+    [ORDER_EXPIRE_JOB]: createOrderExpireHandler(commerce),
+    [LEDGER_RELEASE_JOB]: createLedgerReleaseHandler(commerce),
+    [LEDGER_CHECK_JOB]: createLedgerCheckHandler(commerce),
   };
   const boss = await startWorker({ connectionString: env.DATABASE_URL_APP, logger, handlers });
 
@@ -50,6 +77,14 @@ async function main(): Promise<void> {
         sweeping = false;
       });
   }, OUTBOX_INTERVAL_MS);
+  // System side of W6: discovers schools through due_ledger_checks() (ids only), one job per school.
+  const sweepLedgers = (): void => {
+    enqueueDueLedgerChecks({ prisma, boss }).catch((error: unknown) =>
+      logger.error({ err: error }, 'Ledger check sweep failed'),
+    );
+  };
+  sweepLedgers();
+  const ledgerTimer = setInterval(sweepLedgers, LEDGER_CHECK_INTERVAL_MS);
   logger.info('Worker started');
 
   let stopping = false;
@@ -57,6 +92,7 @@ async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     clearInterval(outboxTimer);
+    clearInterval(ledgerTimer);
     logger.info({ signal }, 'Worker stopping');
     boss
       .stop({ graceful: true, timeout: 10_000 })

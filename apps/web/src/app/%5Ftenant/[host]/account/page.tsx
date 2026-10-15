@@ -1,6 +1,7 @@
 import { mySchoolsResponseSchema, sessionListSchema } from '@studyhub/contracts';
 import { Card, StatusBadge } from '@studyhub/ui';
 import type { Metadata } from 'next';
+import NextLink from 'next/link';
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import {
@@ -83,6 +84,12 @@ export default async function AccountPage() {
               )}
             </dd>
           </dl>
+        </Card>
+        <Card className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-h3">{t('commerce.purchases.title')}</h2>
+          <NextLink href="/account/purchases" className="text-label">
+            {t('commerce.purchases.open')}
+          </NextLink>
         </Card>
         <SchoolSwitcher
           schools={schools.schools}

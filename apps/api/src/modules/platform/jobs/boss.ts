@@ -36,6 +36,22 @@ export const QUEUE_DEFINITIONS: ReadonlyArray<Omit<Queue, 'name'> & { name: stri
     retryBackoff: true,
     retentionSeconds: 7 * 24 * 3600,
   },
+  // Commerce (M8): webhook events, reconciliation (W5), order expiry, ledger release and check (W6).
+  // Provider outages are retried with backoff; every handler is idempotent.
+  ...['commerce.payment-event', 'commerce.payment-check'].map((name) => ({
+    name,
+    retryLimit: 8,
+    retryDelay: 15,
+    retryBackoff: true,
+    retentionSeconds: 14 * 24 * 3600,
+  })),
+  ...['commerce.order-expire', 'commerce.ledger-release', 'commerce.ledger-check'].map((name) => ({
+    name,
+    retryLimit: 5,
+    retryDelay: 30,
+    retryBackoff: true,
+    retentionSeconds: 14 * 24 * 3600,
+  })),
 ];
 
 export type JobHandler = (envelope: JobEnvelope, logger: Logger) => Promise<unknown>;

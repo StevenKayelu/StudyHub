@@ -334,6 +334,157 @@ const FIXTURES: Readonly<
         [tenantId, ref('attempt_item', tenantId)],
       ),
   },
+  // M8 commerce, in dependency order.
+  payment_account: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'payment_account',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO payment_account (tenant_id, provider, label, credentials_enc, webhook_secret_enc, data_key_enc,
+             masked_hint, created_by)
+           VALUES ($1, 'fake', 'Fixture account', decode('00', 'hex'), decode('00', 'hex'), decode('00', 'hex'),
+                   '••••', $2) RETURNING id`,
+          [tenantId, membershipOf[tenantId] ?? randomUUID()],
+        ),
+      ),
+  },
+  order: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'order',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO "order" (tenant_id, membership_id, currency, total_minor, expires_at)
+           VALUES ($1, $2, 'ZMW', 25000, now() + interval '30 minutes') RETURNING id`,
+          [tenantId, membershipOf[tenantId] ?? randomUUID()],
+        ),
+      ),
+  },
+  order_item: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'order_item',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO order_item (tenant_id, order_id, course_id, instructor_membership_id, title_snapshot,
+             instructor_name_snapshot, unit_price_minor, currency)
+           VALUES ($1, $2, $3, $4, 'Fixture course', 'Fixture tutor', 25000, 'ZMW') RETURNING id`,
+          [tenantId, ref('order', tenantId), ref('course', tenantId), membershipOf[tenantId] ?? randomUUID()],
+        ),
+      ),
+  },
+  payment: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'payment',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO payment (tenant_id, order_id, payment_account_id, provider, method, amount_minor, currency)
+           VALUES ($1, $2, $3, 'fake', 'CARD', 25000, 'ZMW') RETURNING id`,
+          [tenantId, ref('order', tenantId), ref('payment_account', tenantId)],
+        ),
+      ),
+  },
+  payment_event: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO payment_event (tenant_id, payment_account_id, provider_event_id, payment_id, type, payload)
+         VALUES ($1, $2, $3, $4, 'payment.updated', '{}')`,
+        [tenantId, ref('payment_account', tenantId), `ev_${randomUUID()}`, ref('payment', tenantId)],
+      ),
+  },
+  refund: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'refund',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO refund (tenant_id, order_id, payment_id, amount_minor, currency, reason, mode, status,
+             manual_reference, requested_by)
+           VALUES ($1, $2, $3, 25000, 'ZMW', 'Fixture refund', 'MANUAL', 'FAILED', 'REF-1', $4) RETURNING id`,
+          [
+            tenantId,
+            ref('order', tenantId),
+            ref('payment', tenantId),
+            membershipOf[tenantId] ?? randomUUID(),
+          ],
+        ),
+      ),
+  },
+  receipt_sequence: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO receipt_sequence (tenant_id, year, last_value) VALUES ($1, 2001, 1)
+         ON CONFLICT (tenant_id, year) DO UPDATE SET last_value = receipt_sequence.last_value + 1`,
+        [tenantId],
+      ),
+  },
+  receipt: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(`INSERT INTO receipt (tenant_id, order_id, number, year, seq) VALUES ($1, $2, $3, 2001, $4)`, [
+        tenantId,
+        ref('order', tenantId),
+        `ISO-2001-${randomUUID().slice(0, 8)}`,
+        Math.floor(Math.random() * 1e9),
+      ]),
+  },
+  idempotency_key: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO idempotency_key (tenant_id, membership_id, key, route, request_hash)
+         VALUES ($1, $2, $3, 'POST /orders', 'hash')`,
+        [tenantId, membershipOf[tenantId] ?? randomUUID(), `iso-${randomUUID()}`],
+      ),
+  },
+  payout_method: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO payout_method (tenant_id, membership_id, type, details_enc, display_hint)
+         VALUES ($1, $2, 'BANK', decode('00', 'hex'), 'Bank ••••0000')`,
+        [tenantId, membershipOf[tenantId] ?? randomUUID()],
+      ),
+  },
+  payout: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO payout (tenant_id, instructor_membership_id, amount_minor, currency, external_reference,
+           paid_at, recorded_by)
+         VALUES ($1, $2, 100, 'ZMW', 'PAY-1', now(), $2)`,
+        [tenantId, membershipOf[tenantId] ?? randomUUID()],
+      ),
+  },
+  ledger_entry: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO ledger_entry (tenant_id, instructor_membership_id, type, gross_minor, net_minor, currency,
+           available_at, note)
+         VALUES ($1, $2, 'ADJUSTMENT', 100, 100, 'ZMW', now(), 'Fixture adjustment')`,
+        [tenantId, membershipOf[tenantId] ?? randomUUID()],
+      ),
+  },
+  ledger_check: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO ledger_check (tenant_id, ok, sales_expected_minor, sales_recorded_minor,
+           reversals_expected_minor, reversals_recorded_minor)
+         VALUES ($1, true, 0, 0, 0, 0)`,
+        [tenantId],
+      ),
+  },
   tenant_feature: {
     granted: false, // read-only for the runtime role until the settings screens (M9)
     insert: (c, tenantId) =>
@@ -358,11 +509,13 @@ const FIXTURES: Readonly<
       ]),
   },
   tenant_setting: {
-    granted: false, // read-only for the runtime role until the settings screens; provisioning writes defaults
+    granted: true, // administrators edit the payments group from M8 (S-AD09)
     insert: (c, tenantId) =>
-      c.query(`INSERT INTO tenant_setting (tenant_id, key, value) VALUES ($1, 'isoFixture', '1')`, [
-        tenantId,
-      ]),
+      c.query(
+        `INSERT INTO tenant_setting (tenant_id, key, value) VALUES ($1, 'isoFixture', '1')
+         ON CONFLICT (tenant_id, key) DO NOTHING`,
+        [tenantId],
+      ),
   },
   tenant_domain: {
     granted: false, // runtime code resolves hosts only through resolve_tenant()
@@ -452,7 +605,7 @@ describe('tenant isolation in PostgreSQL (T-ISO-01..09, 15, 16)', () => {
 
   it('T-ISO-04: with no tenant context every tenant table is empty and writes fail', async () => {
     for (const table of [...(await tenantOwnedTables(migrator)), 'tenant']) {
-      const result = await outcome(() => app.query(`SELECT count(*) FROM ${table}`));
+      const result = await outcome(() => app.query(`SELECT count(*) FROM "${table}"`));
       expect([0, 'denied'], `${table} without context`).toContain(result);
     }
     expect(await sqlState(FIXTURES.audit_log!.insert(app, tenantA))).toBe(INSUFFICIENT_PRIVILEGE);
@@ -469,14 +622,14 @@ describe('tenant isolation in PostgreSQL (T-ISO-01..09, 15, 16)', () => {
       const fixture = FIXTURES[table]!;
       // Each operation in its own transaction: a denied statement aborts the transaction it runs in.
       const asB = (sql: string) => outcome(() => asTenant(app, tenantB, () => app.query(sql, [tenantA])));
-      expect(await asB(`SELECT count(*) FROM ${table} WHERE tenant_id = $1`), `${table} read`).toSatisfy(
+      expect(await asB(`SELECT count(*) FROM "${table}" WHERE tenant_id = $1`), `${table} read`).toSatisfy(
         isolated,
       );
       expect(
-        await asB(`UPDATE ${table} SET tenant_id = tenant_id WHERE tenant_id = $1`),
+        await asB(`UPDATE "${table}" SET tenant_id = tenant_id WHERE tenant_id = $1`),
         `${table} update`,
       ).toSatisfy(isolated);
-      expect(await asB(`DELETE FROM ${table} WHERE tenant_id = $1`), `${table} delete`).toSatisfy(isolated);
+      expect(await asB(`DELETE FROM "${table}" WHERE tenant_id = $1`), `${table} delete`).toSatisfy(isolated);
       // Forging: inserting a row that belongs to A while acting as B.
       expect(
         await sqlState(asTenant(app, tenantB, () => fixture.insert(app, tenantA))),
@@ -489,7 +642,7 @@ describe('tenant isolation in PostgreSQL (T-ISO-01..09, 15, 16)', () => {
     for (const [table, fixture] of Object.entries(FIXTURES)) {
       if (!fixture.granted) continue;
       const count = await asTenant(app, tenantA, () =>
-        outcome(() => app.query(`SELECT count(*) FROM ${table}`)),
+        outcome(() => app.query(`SELECT count(*) FROM "${table}"`)),
       );
       expect(count, table).toBeGreaterThan(0);
     }
@@ -498,7 +651,7 @@ describe('tenant isolation in PostgreSQL (T-ISO-01..09, 15, 16)', () => {
   it('T-ISO-05: FORCE RLS applies to the table owner (migrator) too', async () => {
     for (const table of await tenantOwnedTables(migrator)) {
       const count = await asTenant(migrator, tenantB, () =>
-        outcome(() => migrator.query(`SELECT count(*) FROM ${table} WHERE tenant_id = $1`, [tenantA])),
+        outcome(() => migrator.query(`SELECT count(*) FROM "${table}" WHERE tenant_id = $1`, [tenantA])),
       );
       expect(count, table).toBe(0);
     }

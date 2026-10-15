@@ -45,6 +45,21 @@ const adminOnly = (status: number) =>
     staff: 401,
   }) as const;
 
+/** Payment accounts (F45): the school owner only. */
+const ownerOnly = (status: number) =>
+  ({
+    anonymous: 401,
+    learner: 403,
+    instructor: 403,
+    admin: 403,
+    owner: status,
+    otherSchool: 401,
+    staff: 401,
+  }) as const;
+
+/** An id that exists in no school, for request bodies (paths use `{missing}`). */
+const MISSING_ID = '00000000-0000-4000-8000-00000000dead';
+
 export const TENANT_AUTHZ_MATRIX: readonly MatrixRow<TenantMatrixActor>[] = [
   { method: 'GET', path: '/api/v1/me', expect: signedInOnly(200) },
   { method: 'GET', path: '/api/v1/me/sessions', expect: signedInOnly(200) },
@@ -201,6 +216,72 @@ export const TENANT_AUTHZ_MATRIX: readonly MatrixRow<TenantMatrixActor>[] = [
     path: '/api/v1/studio/attempts/{missing}/items/{missing}/grade',
     body: { points: 1 },
     expect: signedInOnly(404),
+  },
+  // M8 commerce: orders belong to their buyer (another school's or a missing order is 404); payment
+  // accounts are the owner's; orders, exceptions and settings the administrators'; earnings need
+  // revenue share (off by default: 403 FEATURE_NOT_ENABLED); payout methods are the instructor's.
+  { method: 'POST', path: '/api/v1/orders', body: { courseId: MISSING_ID }, expect: signedInOnly(404) },
+  { method: 'GET', path: '/api/v1/orders/{missing}', expect: signedInOnly(404) },
+  {
+    method: 'POST',
+    path: '/api/v1/orders/{missing}/payments',
+    body: { method: 'CARD' },
+    expect: signedInOnly(404),
+  },
+  { method: 'POST', path: '/api/v1/orders/{missing}/refresh', expect: signedInOnly(404) },
+  { method: 'POST', path: '/api/v1/orders/{missing}/cancel', expect: signedInOnly(404) },
+  { method: 'GET', path: '/api/v1/me/orders', expect: signedInOnly(200) },
+  { method: 'GET', path: '/api/v1/me/orders/{missing}/receipt', expect: signedInOnly(404) },
+  { method: 'GET', path: '/api/v1/admin/payment-accounts', expect: ownerOnly(200) },
+  { method: 'GET', path: '/api/v1/admin/payment-providers', expect: ownerOnly(200) },
+  { method: 'POST', path: '/api/v1/admin/payment-accounts/{missing}/test', expect: ownerOnly(404) },
+  { method: 'POST', path: '/api/v1/admin/payment-accounts/{missing}/activate', expect: ownerOnly(404) },
+  { method: 'DELETE', path: '/api/v1/admin/payment-accounts/{missing}', expect: ownerOnly(404) },
+  { method: 'GET', path: '/api/v1/admin/payment-accounts/{missing}/capabilities', expect: adminOnly(404) },
+  { method: 'GET', path: '/api/v1/admin/settings', expect: adminOnly(200) },
+  { method: 'GET', path: '/api/v1/admin/orders', expect: adminOnly(200) },
+  { method: 'GET', path: '/api/v1/admin/orders/{missing}', expect: adminOnly(404) },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/orders/{missing}/refunds',
+    body: { mode: 'MANUAL', reason: 'Matrix check', reference: 'MATRIX-1' },
+    expect: adminOnly(404),
+  },
+  { method: 'GET', path: '/api/v1/admin/payment-exceptions', expect: adminOnly(200) },
+  { method: 'POST', path: '/api/v1/admin/payments/{missing}/recheck', expect: adminOnly(404) },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/payments/{missing}/resolve',
+    body: { decision: 'ACCEPT', note: 'Matrix check' },
+    expect: adminOnly(404),
+  },
+  { method: 'GET', path: '/api/v1/admin/earnings', expect: adminOnly(403) },
+  { method: 'GET', path: '/api/v1/admin/payouts', expect: adminOnly(403) },
+  {
+    method: 'GET',
+    path: '/api/v1/me/payout-methods',
+    expect: {
+      anonymous: 401,
+      learner: 403,
+      instructor: 200,
+      admin: 403,
+      owner: 403,
+      otherSchool: 401,
+      staff: 401,
+    },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/me/payout-methods/{missing}',
+    expect: {
+      anonymous: 401,
+      learner: 403,
+      instructor: 404,
+      admin: 403,
+      owner: 403,
+      otherSchool: 401,
+      staff: 401,
+    },
   },
 ];
 
