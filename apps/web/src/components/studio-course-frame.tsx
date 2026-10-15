@@ -39,7 +39,7 @@ export const loadStudioCourse = cache(async (id: string): Promise<StudioCourse> 
   return course;
 });
 
-type Tab = 'outline' | 'details' | 'pricing' | 'publish' | 'learners';
+type Tab = 'outline' | 'details' | 'pricing' | 'publish' | 'questions' | 'quizzes' | 'results' | 'learners';
 
 /** Course workspace (S-T03…S-T08): Studio frame, status, and the tabs between its pages. */
 export async function StudioCourseFrame({
@@ -62,6 +62,9 @@ export async function StudioCourseFrame({
     { key: 'details', href: `${base}/details` },
     { key: 'pricing', href: `${base}/pricing` },
     { key: 'publish', href: `${base}/publish` },
+    { key: 'questions', href: `${base}/questions` },
+    { key: 'quizzes', href: `${base}/quizzes` },
+    { key: 'results', href: `${base}/results` },
     { key: 'learners', href: `${base}/learners` },
   ];
   return (

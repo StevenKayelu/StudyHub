@@ -451,6 +451,116 @@ async function seedSuspendedSchool(client: Client, tenantId: string): Promise<vo
   });
 }
 
+const DEMO_QUIZ = {
+  id: '0d6c2b1e-0000-4000-8000-0000000ce001',
+  title: 'Cells check',
+  questions: [
+    {
+      id: '0d6c2b1e-0000-4000-8000-0000000cf001',
+      type: 'SINGLE_CHOICE',
+      stem: 'Which organelle releases energy from food?',
+      explanation: 'Mitochondria carry out respiration, which releases energy.',
+      tags: ['cells'],
+      options: [
+        ['Ribosome', false],
+        ['Mitochondrion', true],
+        ['Cell wall', false],
+      ],
+    },
+    {
+      id: '0d6c2b1e-0000-4000-8000-0000000cf002',
+      type: 'MULTIPLE_CHOICE',
+      stem: 'Which of these are found in plant cells but not animal cells?',
+      explanation: 'Plant cells have a cell wall and chloroplasts.',
+      tags: ['cells'],
+      options: [
+        ['Cell wall', true],
+        ['Chloroplast', true],
+        ['Nucleus', false],
+      ],
+    },
+    {
+      id: '0d6c2b1e-0000-4000-8000-0000000cf003',
+      type: 'SHORT_ANSWER',
+      stem: 'What is the basic unit of life?',
+      explanation: 'All living things are made of cells.',
+      tags: ['cells'],
+      settings: { acceptedAnswers: ['cell', 'the cell', 'cells'], caseSensitive: false },
+    },
+  ],
+} as const;
+
+/**
+ * M7 demo content: a question bank and a ready quiz ("Cells check") in Biology foundations, used by a
+ * quiz lesson; the demo learner is enrolled so the quiz, practice and results can be tried at once.
+ */
+async function seedAssessment(client: Client, tenantId: string): Promise<void> {
+  await withContext(client, { 'app.tenant_id': tenantId }, async () => {
+    const course = DEMO_CATALOGUE.courses[0];
+    const { rows } = await client.query<{ owner: string; section: string }>(
+      `SELECT c.owner_membership_id AS owner, s.id AS section FROM course c JOIN section s ON s.course_id = c.id
+        WHERE c.id = $1 ORDER BY s.position DESC LIMIT 1`,
+      [course.id],
+    );
+    const target = rows[0];
+    if (target === undefined) return;
+    for (const q of DEMO_QUIZ.questions) {
+      const inserted = await client.query(
+        `INSERT INTO question (id, tenant_id, course_id, created_by, type, stem_json, stem_text, explanation_json, tags,
+           settings)
+         VALUES ($1, $2, $3, $4, $5::"QuestionType", $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING`,
+        [
+          q.id,
+          tenantId,
+          course.id,
+          target.owner,
+          q.type,
+          JSON.stringify(doc(q.stem)),
+          q.stem,
+          JSON.stringify(doc(q.explanation)),
+          q.tags,
+          JSON.stringify('settings' in q ? q.settings : {}),
+        ],
+      );
+      if ((inserted.rowCount ?? 0) === 0 || !('options' in q)) continue;
+      for (const [position, [content, isCorrect]] of q.options.entries()) {
+        await client.query(
+          `INSERT INTO question_option (tenant_id, question_id, position, content_json, is_correct)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [tenantId, q.id, position, JSON.stringify(content), isCorrect],
+        );
+      }
+    }
+    const quiz = await client.query(
+      `INSERT INTO quiz (id, tenant_id, course_id, title, pass_mark_percent, status, feedback_policy)
+       VALUES ($1, $2, $3, $4, 50, 'READY', 'IMMEDIATE') ON CONFLICT DO NOTHING`,
+      [DEMO_QUIZ.id, tenantId, course.id, DEMO_QUIZ.title],
+    );
+    if ((quiz.rowCount ?? 0) > 0) {
+      for (const [position, q] of DEMO_QUIZ.questions.entries()) {
+        await client.query(
+          `INSERT INTO quiz_item (tenant_id, quiz_id, question_id, position) VALUES ($1, $2, $3, $4)`,
+          [tenantId, DEMO_QUIZ.id, q.id, position],
+        );
+      }
+      await client.query(
+        `INSERT INTO lesson (tenant_id, course_id, section_id, title, type, position, quiz_id)
+         VALUES ($1, $2, $3, $4, 'QUIZ', (SELECT coalesce(max(position) + 1, 0) FROM lesson WHERE section_id = $3), $5)`,
+        [tenantId, course.id, target.section, DEMO_QUIZ.title, DEMO_QUIZ.id],
+      );
+    }
+    // The demo learner takes the quiz: enrolled in Biology (if not already).
+    const learner = DEMO_ACCOUNTS.find((a) => a.email === 'learner@example.test')!;
+    await client.query(
+      `INSERT INTO enrollment (tenant_id, membership_id, course_id, source)
+       SELECT $1, m.id, $2, 'FREE' FROM tenant_membership m
+        WHERE m.tenant_id = $1 AND m.user_id = $3
+          AND NOT EXISTS (SELECT 1 FROM enrollment e WHERE e.membership_id = m.id AND e.course_id = $2 AND e.status = 'ACTIVE')`,
+      [tenantId, course.id, learner.id],
+    );
+  });
+}
+
 async function main(): Promise<void> {
   const env = loadMigratorEnv();
   if (env.NODE_ENV === 'production') throw new Error('Refusing to seed demo schools in production.');
@@ -484,6 +594,7 @@ async function main(): Promise<void> {
     if (tenantIds.acme !== undefined) {
       await seedCatalogue(client, tenantIds.acme);
       await seedLearning(client, tenantIds.acme);
+      await seedAssessment(client, tenantIds.acme);
       console.log('acme.localhost: demo catalogue present');
     }
     if (tenantIds.delta !== undefined) {

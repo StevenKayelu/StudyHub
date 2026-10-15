@@ -7,7 +7,7 @@ import NextLink from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 
-import type { Terms } from '../lib/tenant';
+import { currentTenant, type Terms } from '../lib/tenant';
 
 /**
  * The course player's frame (S-L02, 06 §1 "content first, chrome last"): a slim top bar with the way
@@ -35,6 +35,8 @@ export async function PlayerFrame({
   if (course.access === 'ADMIN') notices.push(p('adminPreview'));
   if (course.access === 'ENROLLED' && course.course.status !== 'PUBLISHED') notices.push(p('unpublished'));
   const back = course.course.status === 'PUBLISHED' ? `/c/${course.course.slug}` : '/learn';
+  // F22: practice for enrolled learners, while the school has the practice feature (F40).
+  const practice = course.access === 'ENROLLED' && (await currentTenant())?.features.practiceMode === true;
 
   const outline = (
     <nav aria-label={p('outline')} className="flex flex-col gap-4">
@@ -99,6 +101,14 @@ export async function PlayerFrame({
             <ArrowLeft aria-hidden="true" className="size-5" />
           </NextLink>
           <p className="min-w-0 flex-1 truncate text-label">{course.course.title}</p>
+          {practice ? (
+            <NextLink
+              href={`/learn/courses/${course.course.id}/practice`}
+              className="flex min-h-11 items-center text-label"
+            >
+              {t('learn.practiceLink')}
+            </NextLink>
+          ) : null}
         </div>
         {course.enrollment !== null ? (
           <ProgressLine

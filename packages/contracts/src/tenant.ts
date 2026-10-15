@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { featureMapSchema } from './features';
 import { localizedTextSchema, tenantLocaleSettingsSchema } from './i18n';
 
 export const tenantStatusSchema = z.enum(['PROVISIONING', 'ACTIVE', 'SUSPENDED', 'OFFBOARDING', 'DELETED']);
@@ -34,8 +35,8 @@ export const tenantBrandingSchema = z.object({
 
 /**
  * GET /api/v1/tenant — public bootstrap for the school resolved from the request host
- * (blueprint 05 §8.3): identity, status, published branding and language settings.
- * Features and plan data are added in later milestones.
+ * (blueprint 05 §8.3): identity, status, published branding, language settings and the effective
+ * features (F40, BR-48), so navigation hides what is switched off. Plan data arrives with M9.
  */
 export const tenantBootstrapSchema = z.object({
   id: z.uuid(),
@@ -44,6 +45,7 @@ export const tenantBootstrapSchema = z.object({
   status: tenantStatusSchema,
   branding: tenantBrandingSchema,
   locales: tenantLocaleSettingsSchema,
+  features: featureMapSchema,
 });
 
 export type TenantStatus = z.infer<typeof tenantStatusSchema>;

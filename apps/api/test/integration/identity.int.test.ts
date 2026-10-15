@@ -753,7 +753,9 @@ describe('identity realms (M4)', () => {
     for (const row of TENANT_AUTHZ_MATRIX) {
       for (const [actor, expected] of Object.entries(row.expect) as [TenantMatrixActor, number][]) {
         it(`${row.method} ${row.path} as ${actor} → ${expected}`, async () => {
-          const path = row.path.replace('{missing}', MISSING).replace('{otherMembership}', otherMembership);
+          const path = row.path
+            .replaceAll('{missing}', MISSING)
+            .replaceAll('{otherMembership}', otherMembership);
           const response = await call(row.method, path, {
             host: ACME,
             cookie: cookies[actor],

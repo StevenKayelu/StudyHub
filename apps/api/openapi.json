@@ -2226,6 +2226,7 @@
               "SCHOOL_READ_ONLY",
               "ATTEMPT_CLOSED",
               "ATTEMPT_LIMIT_REACHED",
+              "QUIZ_NOT_OPEN",
               "PAYMENT_PROVIDER_UNAVAILABLE",
               "PAYMENT_METHOD_NOT_SUPPORTED"
             ]
@@ -2432,6 +2433,39 @@
               "timeZone"
             ],
             "additionalProperties": false
+          },
+          "features": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": [
+                "paidCourses",
+                "practiceMode",
+                "quizAnalytics",
+                "instructorApplications",
+                "instructorRevenueShare",
+                "publicCatalog",
+                "whiteLabel",
+                "customDomain",
+                "dataExport",
+                "certificates"
+              ]
+            },
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "required": [
+              "paidCourses",
+              "practiceMode",
+              "quizAnalytics",
+              "instructorApplications",
+              "instructorRevenueShare",
+              "publicCatalog",
+              "whiteLabel",
+              "customDomain",
+              "dataExport",
+              "certificates"
+            ]
           }
         },
         "required": [
@@ -2440,7 +2474,8 @@
           "name",
           "status",
           "branding",
-          "locales"
+          "locales",
+          "features"
         ],
         "additionalProperties": false
       }

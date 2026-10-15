@@ -10,7 +10,7 @@ import { type ApiResult, callApi, splitProblem } from '../lib/client-api';
 import { fill } from '../lib/fill';
 import type { StudioTexts } from '../lib/studio-texts-type';
 
-const LESSON_TYPES = ['TEXT', 'VIDEO', 'FILE'] as const;
+const LESSON_TYPES = ['TEXT', 'VIDEO', 'FILE', 'QUIZ'] as const;
 
 type Order = { id: string; lessonIds: string[] }[];
 

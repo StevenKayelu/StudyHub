@@ -15,6 +15,11 @@ export async function learnTexts(terms: Terms): Promise<LearnTexts> {
       video: t.raw('learn.video') as LearnTexts['video'],
       cta: t.raw('course.cta') as LearnTexts['cta'],
       common: t.raw('common') as LearnTexts['common'],
+      quiz: t.raw('learn.quiz') as LearnTexts['quiz'],
+      runner: t.raw('learn.runner') as LearnTexts['runner'],
+      result: t.raw('learn.result') as LearnTexts['result'],
+      practice: t.raw('learn.practice') as LearnTexts['practice'],
+      assessment: t.raw('assessment') as LearnTexts['assessment'],
     },
     terms,
   );

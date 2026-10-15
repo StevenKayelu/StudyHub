@@ -7,4 +7,5 @@ export interface StudioTexts {
   admin: (typeof messages)['admin'];
   levels: (typeof messages)['catalogue']['levels'];
   lessonTypes: (typeof messages)['course']['lessonTypes'];
+  assessment: (typeof messages)['assessment'];
 }

@@ -34,7 +34,7 @@ export const ERROR_DEFINITIONS = {
   INVALID_STATE: { status: 409, title: 'This action is not possible in the current state', active: true },
   CHECKLIST_INCOMPLETE: { status: 422, title: 'The course is not ready to publish yet', active: true },
   VERSION_CONFLICT: { status: 409, title: 'This item was changed elsewhere', active: true },
-  FEATURE_NOT_ENABLED: { status: 403, title: 'This feature is not enabled', active: false },
+  FEATURE_NOT_ENABLED: { status: 403, title: 'This feature is not enabled', active: true },
   LIMIT_REACHED: { status: 409, title: 'Plan limit reached', active: true },
   SLUG_TAKEN: { status: 409, title: 'That address is already taken', active: true },
   SLUG_RESERVED: { status: 422, title: 'That address is reserved', active: false },
@@ -42,8 +42,10 @@ export const ERROR_DEFINITIONS = {
   ENROLMENT_INACTIVE: { status: 403, title: 'Your access to this course is not active', active: true },
   ALREADY_ENROLLED: { status: 409, title: 'Already enrolled', active: true },
   SCHOOL_READ_ONLY: { status: 403, title: 'This school is read-only for now', active: true },
-  ATTEMPT_CLOSED: { status: 409, title: 'This attempt is closed', active: false },
-  ATTEMPT_LIMIT_REACHED: { status: 409, title: 'No attempts left', active: false },
+  // Assessment (M7)
+  ATTEMPT_CLOSED: { status: 409, title: 'This attempt is closed', active: true },
+  ATTEMPT_LIMIT_REACHED: { status: 409, title: 'No attempts left', active: true },
+  QUIZ_NOT_OPEN: { status: 409, title: 'This quiz is not open', active: true },
   PAYMENT_PROVIDER_UNAVAILABLE: { status: 503, title: 'Payments are temporarily unavailable', active: false },
   PAYMENT_METHOD_NOT_SUPPORTED: { status: 422, title: 'Payment method not supported', active: false },
 } as const satisfies Record<string, { status: number; title: string; active: boolean }>;

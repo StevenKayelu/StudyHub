@@ -28,6 +28,13 @@ export const QUEUE_DEFINITIONS: ReadonlyArray<Omit<Queue, 'name'> & { name: stri
     retryDelay: 10,
     retryBackoff: true,
     retentionSeconds: 7 * 24 * 3600,
+  }, // Quiz attempts submitted at their deadline (the assessment module's AUTO_SUBMIT_JOB, F19 AC 3).
+  {
+    name: 'assessment.auto-submit',
+    retryLimit: 5,
+    retryDelay: 5,
+    retryBackoff: true,
+    retentionSeconds: 7 * 24 * 3600,
   },
 ];
 

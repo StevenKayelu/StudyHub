@@ -254,6 +254,7 @@ export class LearningService {
                 },
               ];
         }),
+        quizId: lesson.quizId,
         progress: enrollment === null ? null : (progress ?? { status: 'NOT_STARTED', positionSeconds: 0 }),
         completionThresholdPct: settings.videoCompletionThresholdPct,
         previous: neighbour(lessons[index - 1]),
@@ -503,6 +504,7 @@ export class LearningService {
         durationSeconds: true,
         contentJson: true,
         videoAssetId: true,
+        quizId: true,
         course: { select: COURSE_FOR_ACCESS },
       },
     });

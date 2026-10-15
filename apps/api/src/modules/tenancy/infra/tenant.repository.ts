@@ -10,6 +10,7 @@ import {
 
 import { PrismaService, type TenantTx } from '../../platform';
 import type { ResolvedTenant, ResolvedTenantStatus, TenantLookup } from '../application/tenant-resolver';
+import { readFeatures } from './features';
 
 interface ResolveRow {
   tenant_id: string;
@@ -38,7 +39,7 @@ export class TenantRepository implements TenantLookup {
   }
 
   /**
-   * The current school with its published branding and language settings, read under RLS inside a
+   * The current school with its published branding, language settings and features, read under RLS inside a
    * tenant transaction. A school without a published branding row or settings gets the defaults.
    */
   async findBootstrap(tx: TenantTx, tenantId: string): Promise<TenantBootstrap | null> {
@@ -64,6 +65,7 @@ export class TenantRepository implements TenantLookup {
       },
     });
     if (tenant === null) return null;
+    const features = await readFeatures(tx);
 
     return {
       id: tenant.id,
@@ -72,6 +74,7 @@ export class TenantRepository implements TenantLookup {
       status: tenant.status,
       branding: toBranding(tenant.name, tenant.branding),
       locales: toLocaleSettings(tenant.settings),
+      features,
     };
   }
 }

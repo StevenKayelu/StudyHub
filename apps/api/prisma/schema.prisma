@@ -341,6 +341,7 @@ model TenantMembership {
   roles       MembershipRole[]
   sessions    Session[]
   enrollments Enrollment[]
+  attempts    Attempt[]
 
   @@unique([tenantId, userId], map: "tenant_membership_tenant_user_key")
   @@unique([tenantId, id], map: "tenant_membership_tenant_id_id_key")
@@ -672,6 +673,9 @@ model Course {
   lessons     Lesson[]
   submissions CourseSubmission[]
   enrollments Enrollment[]
+  questions   Question[]
+  quizzes     Quiz[]
+  attempts    Attempt[]
 
   @@unique([tenantId, slug], map: "course_tenant_slug_key")
   @@unique([tenantId, id], map: "course_tenant_id_id_key")
@@ -821,4 +825,253 @@ model LessonProgress {
   @@id([tenantId, enrollmentId, lessonId])
   @@index([tenantId, lessonId], map: "lesson_progress_tenant_lesson_idx")
   @@map("lesson_progress")
+}
+
+// ---------------------------------------------------------------------------------------------
+// M7 assessment (migration 0007): question bank, quizzes, attempts, feature switches
+// ---------------------------------------------------------------------------------------------
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+  NUMERIC
+  LONG_ANSWER
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum QuizSelectionMode {
+  FIXED
+  DRAW
+}
+
+enum FeedbackPolicy {
+  IMMEDIATE
+  AFTER_CLOSE
+  NEVER
+}
+
+enum QuizStatus {
+  DRAFT
+  READY
+}
+
+enum AttemptMode {
+  ASSESSED
+  PRACTICE
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  NEEDS_REVIEW
+  GRADED
+  ABANDONED
+}
+
+enum SubmitKind {
+  MANUAL
+  AUTO
+}
+
+enum FeatureOverride {
+  NONE
+  GRANT
+  REVOKE
+}
+
+model Question {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String         @map("tenant_id") @db.Uuid
+  courseId         String         @map("course_id") @db.Uuid
+  createdBy        String         @map("created_by") @db.Uuid
+  type             QuestionType
+  stemJson         Json           @map("stem_json")
+  stemText         String         @default("") @map("stem_text")
+  explanationJson  Json?          @map("explanation_json")
+  points           Decimal        @default(1) @db.Decimal(6, 2)
+  difficulty       Difficulty     @default(MEDIUM)
+  tags             String[]       @default([])
+  practiceEligible Boolean        @default(true) @map("practice_eligible")
+  settings         Json           @default("{}")
+  status           QuestionStatus @default(ACTIVE)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime       @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version          Int            @default(1)
+
+  course    Course           @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Cascade)
+  options   QuestionOption[]
+  quizItems QuizItem[]
+
+  @@unique([tenantId, id], map: "question_tenant_id_id_key")
+  @@index([tenantId, courseId, status, type], map: "question_tenant_course_idx")
+  @@map("question")
+}
+
+model QuestionOption {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String  @map("tenant_id") @db.Uuid
+  questionId   String  @map("question_id") @db.Uuid
+  position     Int
+  contentJson  Json    @map("content_json")
+  isCorrect    Boolean @default(false) @map("is_correct")
+  feedbackJson Json?   @map("feedback_json")
+
+  question Question @relation(fields: [tenantId, questionId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id], map: "question_option_tenant_id_id_key")
+  @@unique([tenantId, questionId, position], map: "question_option_position_key")
+  @@map("question_option")
+}
+
+model Quiz {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String            @map("tenant_id") @db.Uuid
+  courseId           String            @map("course_id") @db.Uuid
+  title              String
+  instructionsJson   Json?             @map("instructions_json")
+  selectionMode      QuizSelectionMode @default(FIXED) @map("selection_mode")
+  timeLimitSeconds   Int?              @map("time_limit_seconds")
+  attemptsAllowed    Int?              @map("attempts_allowed")
+  passMarkPercent    Int?              @map("pass_mark_percent")
+  shuffleQuestions   Boolean           @default(false) @map("shuffle_questions")
+  shuffleOptions     Boolean           @default(false) @map("shuffle_options")
+  opensAt            DateTime?         @map("opens_at") @db.Timestamptz(3)
+  closesAt           DateTime?         @map("closes_at") @db.Timestamptz(3)
+  feedbackPolicy     FeedbackPolicy    @default(IMMEDIATE) @map("feedback_policy")
+  showCorrectAnswers Boolean           @default(true) @map("show_correct_answers")
+  status             QuizStatus        @default(DRAFT)
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime          @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version            Int               @default(1)
+
+  course    Course         @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Cascade)
+  items     QuizItem[]
+  drawRules QuizDrawRule[]
+  attempts  Attempt[]
+
+  @@unique([tenantId, id], map: "quiz_tenant_id_id_key")
+  @@index([tenantId, courseId], map: "quiz_tenant_course_idx")
+  @@map("quiz")
+}
+
+model QuizItem {
+  tenantId       String   @map("tenant_id") @db.Uuid
+  quizId         String   @map("quiz_id") @db.Uuid
+  questionId     String   @map("question_id") @db.Uuid
+  position       Int
+  pointsOverride Decimal? @map("points_override") @db.Decimal(6, 2)
+
+  quiz     Quiz     @relation(fields: [tenantId, quizId], references: [tenantId, id], onDelete: Cascade)
+  question Question @relation(fields: [tenantId, questionId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, quizId, questionId])
+  @@unique([tenantId, quizId, position], map: "quiz_item_position_key")
+  @@map("quiz_item")
+}
+
+model QuizDrawRule {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String         @map("tenant_id") @db.Uuid
+  quizId     String         @map("quiz_id") @db.Uuid
+  position   Int            @default(0)
+  count      Int
+  tags       String[]       @default([])
+  difficulty Difficulty?
+  types      QuestionType[] @default([])
+
+  quiz Quiz @relation(fields: [tenantId, quizId], references: [tenantId, id], onDelete: Cascade)
+
+  @@map("quiz_draw_rule")
+}
+
+model Attempt {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String        @map("tenant_id") @db.Uuid
+  membershipId     String        @map("membership_id") @db.Uuid
+  courseId         String        @map("course_id") @db.Uuid
+  quizId           String?       @map("quiz_id") @db.Uuid
+  mode             AttemptMode
+  attemptNumber    Int?          @map("attempt_number")
+  status           AttemptStatus @default(IN_PROGRESS)
+  startedAt        DateTime      @default(now()) @map("started_at") @db.Timestamptz(3)
+  deadlineAt       DateTime?     @map("deadline_at") @db.Timestamptz(3)
+  submittedAt      DateTime?     @map("submitted_at") @db.Timestamptz(3)
+  submitKind       SubmitKind?   @map("submit_kind")
+  score            Decimal       @default(0) @db.Decimal(8, 2)
+  maxScore         Decimal       @default(0) @map("max_score") @db.Decimal(8, 2)
+  percent          Decimal?      @db.Decimal(5, 2)
+  passed           Boolean?
+  settingsSnapshot Json          @default("{}") @map("settings_snapshot")
+  gradedAt         DateTime?     @map("graded_at") @db.Timestamptz(3)
+  // FK with ON DELETE SET NULL (graded_by) in SQL; no Prisma relation (composite key).
+  gradedBy         String?       @map("graded_by") @db.Uuid
+  updatedAt        DateTime      @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  membership TenantMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Restrict)
+  course     Course           @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  quiz       Quiz?            @relation(fields: [tenantId, quizId], references: [tenantId, id], onDelete: Restrict)
+  items      AttemptItem[]
+
+  @@unique([tenantId, id], map: "attempt_tenant_id_id_key")
+  @@unique([tenantId, membershipId, quizId, attemptNumber], map: "attempt_number_key")
+  @@index([tenantId, quizId, status], map: "attempt_tenant_quiz_status_idx")
+  @@map("attempt")
+}
+
+model AttemptItem {
+  id               String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String  @map("tenant_id") @db.Uuid
+  attemptId        String  @map("attempt_id") @db.Uuid
+  position         Int
+  questionId       String  @map("question_id") @db.Uuid
+  questionSnapshot Json    @map("question_snapshot")
+  points           Decimal @db.Decimal(6, 2)
+
+  attempt Attempt        @relation(fields: [tenantId, attemptId], references: [tenantId, id], onDelete: Cascade)
+  answer  AttemptAnswer?
+
+  @@unique([tenantId, id], map: "attempt_item_tenant_id_id_key")
+  @@unique([tenantId, attemptId, position], map: "attempt_item_position_key")
+  @@map("attempt_item")
+}
+
+model AttemptAnswer {
+  tenantId      String    @map("tenant_id") @db.Uuid
+  attemptItemId String    @map("attempt_item_id") @db.Uuid
+  response      Json
+  clientSeq     Int       @default(0) @map("client_seq")
+  savedAt       DateTime  @default(now()) @map("saved_at") @db.Timestamptz(3)
+  isCorrect     Boolean?  @map("is_correct")
+  awardedPoints Decimal?  @map("awarded_points") @db.Decimal(6, 2)
+  graderComment String?   @map("grader_comment")
+  gradedBy      String?   @map("graded_by") @db.Uuid
+  gradedAt      DateTime? @map("graded_at") @db.Timestamptz(3)
+
+  item AttemptItem @relation(fields: [tenantId, attemptItemId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, attemptItemId])
+  @@map("attempt_answer")
+}
+
+model TenantFeature {
+  tenantId         String          @map("tenant_id") @db.Uuid
+  featureKey       String          @map("feature_key")
+  enabledByTenant  Boolean         @default(true) @map("enabled_by_tenant")
+  platformOverride FeatureOverride @default(NONE) @map("platform_override")
+  updatedBy        String?         @map("updated_by") @db.Uuid
+  updatedAt        DateTime        @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, featureKey])
+  @@map("tenant_feature")
 }

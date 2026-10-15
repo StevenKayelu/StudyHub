@@ -246,6 +246,103 @@ const FIXTURES: Readonly<
         [tenantId, ref('enrollment', tenantId), ref('lesson', tenantId)],
       ),
   },
+  question: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'question',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO question (tenant_id, course_id, created_by, type, stem_json)
+         VALUES ($1, $2, $3, 'SINGLE_CHOICE', '{"type":"doc"}') RETURNING id`,
+          [tenantId, ref('course', tenantId), membershipOf[tenantId] ?? randomUUID()],
+        ),
+      ),
+  },
+  question_option: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO question_option (tenant_id, question_id, position, content_json, is_correct)
+         VALUES ($1, $2, (SELECT coalesce(max(position) + 1, 0) FROM question_option WHERE question_id = $2), '"A"', true)`,
+        [tenantId, ref('question', tenantId)],
+      ),
+  },
+  quiz: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'quiz',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO quiz (tenant_id, course_id, title) VALUES ($1, $2, 'Fixture quiz') RETURNING id`,
+          [tenantId, ref('course', tenantId)],
+        ),
+      ),
+  },
+  quiz_item: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO quiz_item (tenant_id, quiz_id, question_id, position)
+         VALUES ($1, $2, $3, (SELECT coalesce(max(position) + 1, 0) FROM quiz_item WHERE quiz_id = $2))
+         ON CONFLICT (tenant_id, quiz_id, question_id) DO NOTHING`,
+        [tenantId, ref('quiz', tenantId), ref('question', tenantId)],
+      ),
+  },
+  quiz_draw_rule: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(`INSERT INTO quiz_draw_rule (tenant_id, quiz_id, count) VALUES ($1, $2, 1)`, [
+        tenantId,
+        ref('quiz', tenantId),
+      ]),
+  },
+  attempt: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'attempt',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO attempt (tenant_id, membership_id, course_id, mode, status)
+         VALUES ($1, $2, $3, 'PRACTICE', 'GRADED') RETURNING id`,
+          [tenantId, membershipOf[tenantId] ?? randomUUID(), ref('course', tenantId)],
+        ),
+      ),
+  },
+  attempt_item: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'attempt_item',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO attempt_item (tenant_id, attempt_id, position, question_id, question_snapshot, points)
+         VALUES ($1, $2, (SELECT coalesce(max(position) + 1, 0) FROM attempt_item WHERE attempt_id = $2), $3, '{}', 1)
+         RETURNING id`,
+          [tenantId, ref('attempt', tenantId), ref('question', tenantId)],
+        ),
+      ),
+  },
+  attempt_answer: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO attempt_answer (tenant_id, attempt_item_id, response) VALUES ($1, $2, '{"text":"x"}')
+         ON CONFLICT DO NOTHING`,
+        [tenantId, ref('attempt_item', tenantId)],
+      ),
+  },
+  tenant_feature: {
+    granted: false, // read-only for the runtime role until the settings screens (M9)
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO tenant_feature (tenant_id, feature_key, enabled_by_tenant) VALUES ($1, 'practiceMode', false)
+         ON CONFLICT DO NOTHING`,
+        [tenantId],
+      ),
+  },
   tenant_branding: {
     granted: false, // read-only for the runtime role until the branding editor (F39); provisioning writes it
     insert: (c, tenantId) =>

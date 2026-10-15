@@ -19,4 +19,6 @@ export {
   writeTenantProfile,
 } from './infra/tenant-provisioning';
 export { readContentSettings } from './infra/content-settings';
+export { featureEnabled, featureMap } from './domain/features';
+export { readFeatures, requireFeature } from './infra/features';
 export { TenancyModule } from './tenancy.module';

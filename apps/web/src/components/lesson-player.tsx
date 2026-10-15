@@ -164,7 +164,14 @@ export function LessonPlayer({
 
       {lesson.attachments.length > 0 ? <FileList lesson={lesson} texts={texts} /> : null}
 
-      {lesson.type === 'QUIZ' ? <Alert tone="info">{p.quizSoon}</Alert> : null}
+      {lesson.type === 'QUIZ' && lesson.quizId !== null && lesson.access !== 'PREVIEW' ? (
+        <NextLink
+          href={`/learn/quizzes/${lesson.quizId}`}
+          className={`${buttonClasses('primary')} self-start`}
+        >
+          {p.takeQuiz}
+        </NextLink>
+      ) : null}
 
       <p className="sr-only" aria-live="polite">
         {announcement}

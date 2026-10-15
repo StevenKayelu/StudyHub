@@ -26,6 +26,7 @@ export async function studioTexts(terms: Terms): Promise<StudioTexts> {
       admin: t.raw('admin') as StudioTexts['admin'],
       levels: t.raw('catalogue.levels') as StudioTexts['levels'],
       lessonTypes: t.raw('course.lessonTypes') as StudioTexts['lessonTypes'],
+      assessment: t.raw('assessment') as StudioTexts['assessment'],
     },
     terms,
   );

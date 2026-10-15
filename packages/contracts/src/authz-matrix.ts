@@ -175,6 +175,33 @@ export const TENANT_AUTHZ_MATRIX: readonly MatrixRow<TenantMatrixActor>[] = [
     body: { reason: 'Matrix check' },
     expect: adminOnly(404),
   },
+  // M7 assessment: learners reach quizzes and attempts of their own school only; Studio's bank, quizzes and
+  // grading belong to the course owner. Missing (or another school's) ids are 404 for everyone signed in.
+  { method: 'GET', path: '/api/v1/me/assessments', expect: signedInOnly(200) },
+  { method: 'GET', path: '/api/v1/learn/quizzes/{missing}', expect: signedInOnly(404) },
+  { method: 'POST', path: '/api/v1/learn/quizzes/{missing}/attempts', expect: signedInOnly(404) },
+  {
+    method: 'PUT',
+    path: '/api/v1/learn/attempts/{missing}/answers/{missing}',
+    body: { response: { text: 'x' }, clientSeq: 1 },
+    expect: signedInOnly(404),
+  },
+  { method: 'GET', path: '/api/v1/learn/attempts/{missing}/result', expect: signedInOnly(404) },
+  { method: 'GET', path: '/api/v1/learn/courses/{missing}/practice', expect: signedInOnly(404) },
+  { method: 'GET', path: '/api/v1/studio/courses/{missing}/questions', expect: signedInOnly(404) },
+  {
+    method: 'POST',
+    path: '/api/v1/studio/courses/{missing}/quizzes',
+    body: { title: 'Matrix quiz' },
+    expect: signedInOnly(404),
+  },
+  { method: 'GET', path: '/api/v1/studio/courses/{missing}/grading-queue', expect: signedInOnly(404) },
+  {
+    method: 'PUT',
+    path: '/api/v1/studio/attempts/{missing}/items/{missing}/grade',
+    body: { points: 1 },
+    expect: signedInOnly(404),
+  },
 ];
 
 export const CONSOLE_AUTHZ_MATRIX: readonly MatrixRow<ConsoleMatrixActor>[] = [

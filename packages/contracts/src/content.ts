@@ -214,6 +214,8 @@ export const updateLessonSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   content: richTextSchema.nullable().optional(),
   videoAssetId: z.uuid().nullable().optional(),
+  /** QUIZ lessons: the course's quiz they run (M7). */
+  quizId: z.uuid().nullable().optional(),
   attachmentAssetIds: z.array(z.uuid()).max(20).optional(),
   isPreview: z.boolean().optional(),
   isRequired: z.boolean().optional(),
@@ -225,6 +227,7 @@ export const lessonDetailSchema = lessonSummarySchema.extend({
   version: z.number(),
   content: z.unknown().nullable(),
   videoAssetId: z.uuid().nullable(),
+  quizId: z.uuid().nullable(),
   downloadable: z.boolean(),
   attachments: z.array(
     z.object({ assetId: z.uuid(), name: z.string(), status: z.string(), sizeBytes: z.number() }),

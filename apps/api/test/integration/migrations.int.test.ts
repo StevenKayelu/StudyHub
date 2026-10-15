@@ -44,6 +44,7 @@ describe('database migrations and roles (PostgreSQL 17)', () => {
       { migration_name: '0004_identity_realms', finished: true },
       { migration_name: '0005_catalogue_authoring', finished: true },
       { migration_name: '0006_learning', finished: true },
+      { migration_name: '0007_assessment', finished: true },
     ]);
   });
 

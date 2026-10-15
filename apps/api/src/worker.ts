@@ -12,6 +12,7 @@ import {
   SecretBox,
   startWorker,
 } from './modules/platform';
+import { AUTO_SUBMIT_JOB, createAutoSubmitHandler } from './modules/assessment';
 import { createProcessAssetHandler, MEDIA_PROCESS_JOB } from './modules/media';
 
 const OUTBOX_INTERVAL_MS = 2000;
@@ -35,6 +36,7 @@ async function main(): Promise<void> {
       storage: media.storage,
       scanner: media.scanner,
     }),
+    [AUTO_SUBMIT_JOB]: createAutoSubmitHandler({ prisma }),
   };
   const boss = await startWorker({ connectionString: env.DATABASE_URL_APP, logger, handlers });
 

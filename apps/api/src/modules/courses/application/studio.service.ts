@@ -46,6 +46,7 @@ type LessonRow = {
   durationSeconds: number | null;
   contentJson: unknown;
   videoAssetId: string | null;
+  quizId: string | null;
   attachments: { assetId: string }[];
 };
 
@@ -337,17 +338,6 @@ export class StudioService {
     courseId: string,
     input: { sectionId: string; title: string; type: 'TEXT' | 'VIDEO' | 'FILE' | 'QUIZ' },
   ): Promise<LessonDetail> {
-    if (input.type === 'QUIZ') {
-      throw new AppError('VALIDATION_FAILED', {
-        errors: [
-          {
-            field: 'type',
-            code: 'not_available',
-            message: 'Quiz lessons become available with quizzes (coming soon)',
-          },
-        ],
-      });
-    }
     const lessonId = await this.db.run(async (tx) => {
       await this.editableCourse(tx, actor, courseId);
       const section = await tx.section.findFirst({
@@ -395,6 +385,7 @@ export class StudioService {
         version: lesson.version,
         content: lesson.contentJson,
         videoAssetId: lesson.videoAssetId,
+        quizId: lesson.quizId,
         downloadable: lesson.downloadable,
         attachments: lesson.attachments.map(({ assetId }) => {
           const asset = assets.find((a) => a.id === assetId);
@@ -418,6 +409,7 @@ export class StudioService {
       title?: string | undefined;
       content?: unknown;
       videoAssetId?: string | null | undefined;
+      quizId?: string | null | undefined;
       attachmentAssetIds?: string[] | undefined;
       isPreview?: boolean | undefined;
       isRequired?: boolean | undefined;
@@ -445,6 +437,16 @@ export class StudioService {
         });
         durationSeconds = video?.durationSeconds ?? null;
       }
+      if (input.quizId !== undefined && input.quizId !== null) {
+        if (lesson.type !== 'QUIZ')
+          throw new AppError('INVALID_STATE', { detail: 'Only quiz lessons have a quiz.' });
+        const quiz = await tx.quiz.findFirst({ where: { id: input.quizId, courseId }, select: { id: true } });
+        if (quiz === null) {
+          throw new AppError('VALIDATION_FAILED', {
+            errors: [{ field: 'quizId', code: 'unknown', message: 'Choose a quiz of this course' }],
+          });
+        }
+      }
       if (lesson.type === 'TEXT' && input.content !== undefined) {
         const words =
           input.content === null ? 0 : richTextToPlain(input.content).split(' ').filter(Boolean).length;
@@ -467,6 +469,7 @@ export class StudioService {
             contentJson: input.content === null ? Prisma.DbNull : (sanitizeRichText(input.content) as object),
           }),
           ...(input.videoAssetId !== undefined && { videoAssetId: input.videoAssetId }),
+          ...(input.quizId !== undefined && { quizId: input.quizId }),
           ...(durationSeconds !== undefined && { durationSeconds }),
           ...(input.isPreview !== undefined && { isPreview: input.isPreview }),
           ...(input.isRequired !== undefined && { isRequired: input.isRequired }),
@@ -732,8 +735,19 @@ export class StudioService {
     return nextFreeSlug(base, taken);
   }
 
-  /** BR-04 "every lesson has ready content": TEXT has text; VIDEO a READY video; FILE a READY attachment. */
+  /**
+   * BR-04 "every lesson has ready content": TEXT has text; VIDEO a READY video; FILE a READY attachment;
+   * QUIZ a READY quiz (F18 AC 1: a quiz without questions, or with unsatisfiable draw rules, can't be READY).
+   */
   private async readiness(tx: TenantTx, lessons: LessonRow[]): Promise<Map<string, boolean>> {
+    const quizIds = lessons.flatMap((l) => (l.quizId === null ? [] : [l.quizId]));
+    const readyQuizzes = new Set(
+      quizIds.length === 0
+        ? []
+        : (
+            await tx.quiz.findMany({ where: { id: { in: quizIds }, status: 'READY' }, select: { id: true } })
+          ).map((q) => q.id),
+    );
     const assetIds = lessons.flatMap((l) => [
       ...(l.videoAssetId === null ? [] : [l.videoAssetId]),
       ...l.attachments.map((a) => a.assetId),
@@ -758,7 +772,7 @@ export class StudioService {
           case 'FILE':
             return [l.id, l.attachments.some((a) => readyAssets.has(a.assetId))];
           case 'QUIZ':
-            return [l.id, false];
+            return [l.id, l.quizId !== null && readyQuizzes.has(l.quizId)];
         }
       }),
     );
@@ -812,6 +826,7 @@ export const LESSON_SELECT = {
   durationSeconds: true,
   contentJson: true,
   videoAssetId: true,
+  quizId: true,
   attachments: { select: { assetId: true }, orderBy: { position: 'asc' } },
 } as const;
 

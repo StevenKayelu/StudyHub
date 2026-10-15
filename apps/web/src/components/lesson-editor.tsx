@@ -29,11 +29,14 @@ export function LessonEditor({
   initial,
   editable,
   texts,
+  quizzes = [],
 }: {
   courseId: string;
   initial: LessonDetail;
   editable: boolean;
   texts: StudioTexts;
+  /** QUIZ lessons: the course's quizzes to choose from. */
+  quizzes?: { id: string; title: string; status: 'DRAFT' | 'READY' }[];
 }) {
   const router = useRouter();
   const l = texts.studio.lesson;
@@ -210,7 +213,42 @@ export function LessonEditor({
         </section>
       ) : null}
 
-      {lesson.type === 'QUIZ' ? <Alert tone="info" title={l.quizSoon} /> : null}
+      {lesson.type === 'QUIZ' ? (
+        <section className="flex flex-col gap-2" aria-labelledby="lesson-quiz">
+          <h2 id="lesson-quiz" className="text-h3">
+            {l.quiz}
+          </h2>
+          <p className="text-body-sm text-muted">{l.quizHint}</p>
+          {quizzes.length === 0 ? (
+            <p className="text-body-sm">{l.noQuizzes}</p>
+          ) : (
+            <label className="flex max-w-reading flex-col gap-1 text-label">
+              {l.quiz}
+              <select
+                className="h-11 rounded-md border border-strong bg-surface px-3 font-normal"
+                value={lesson.quizId ?? ''}
+                disabled={!editable}
+                onChange={(event) =>
+                  void patchNow({ quizId: event.target.value === '' ? null : event.target.value })
+                }
+              >
+                <option value="">{l.noQuiz}</option>
+                {quizzes.map((quiz) => (
+                  <option key={quiz.id} value={quiz.id}>
+                    {quiz.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {quizzes.find((quiz) => quiz.id === lesson.quizId)?.status === 'DRAFT' ? (
+            <Alert tone="warning">{l.quizDraft}</Alert>
+          ) : null}
+          <a href={`/studio/courses/${courseId}/quizzes`} className="self-start text-label">
+            {l.manageQuizzes}
+          </a>
+        </section>
+      ) : null}
 
       {editable ? (
         <div className="border-t border-line pt-5">

@@ -95,6 +95,8 @@ export const playerLessonSchema = z.object({
   attachments: z.array(
     z.object({ assetId: z.uuid(), name: z.string(), mime: z.string(), sizeBytes: z.number() }),
   ),
+  /** QUIZ lessons: the quiz to take (its intro shows rules, attempts and results). */
+  quizId: z.uuid().nullable(),
   /** The viewer's own progress (enrolled learners only). */
   progress: z.object(lessonStateFields).nullable(),
   /** The video completion threshold of this school (BR-64 `videoCompletionThresholdPct`). */

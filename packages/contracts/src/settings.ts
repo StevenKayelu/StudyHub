@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Typed school settings used from M5 and M6 (blueprint 05 §8.2 tenant_setting; BR-56, BR-57, BR-64). Each key
+ * Typed school settings used from M5 to M7 (blueprint 05 §8.2 tenant_setting; BR-56, BR-57, BR-64). Each key
  * is stored as its own tenant_setting row; missing keys take these defaults. The settings screen
  * (S-AD09) arrives with tenant administration; until then the defaults (or seeded values) apply.
  */
@@ -32,6 +32,29 @@ export const contentSettingsSchema = z.object({
   videoCompletionThresholdPct: z.number().int().min(50).max(100).default(90),
   /** BR-12: access length for courses that don't set their own (null: lifetime). */
   defaultAccessDays: z.number().int().min(1).max(3650).nullable().default(null),
+  /** BR-64 / M7: defaults for new quizzes (each quiz can change them). */
+  quizDefaults: z
+    .object({
+      feedbackPolicy: z.enum(['IMMEDIATE', 'AFTER_CLOSE', 'NEVER']).default('IMMEDIATE'),
+      attemptsAllowed: z.number().int().min(1).max(100).nullable().default(null),
+      passMarkPercent: z.number().int().min(0).max(100).nullable().default(null),
+      shuffleQuestions: z.boolean().default(false),
+      shuffleOptions: z.boolean().default(false),
+    })
+    .default({
+      feedbackPolicy: 'IMMEDIATE',
+      attemptsAllowed: null,
+      passMarkPercent: null,
+      shuffleQuestions: false,
+      shuffleOptions: false,
+    }),
+  /** BR-64 / M7: practice sessions (F22). */
+  practiceDefaults: z
+    .object({
+      questionsPerSession: z.number().int().min(1).max(50).default(10),
+      mistakesModeEnabled: z.boolean().default(true),
+    })
+    .default({ questionsPerSession: 10, mistakesModeEnabled: true }),
   /** Commerce (BR-04): minimum price of a paid course, in minor units. */
   minPaidPriceMinor: z.number().int().min(0).default(1000),
 });
