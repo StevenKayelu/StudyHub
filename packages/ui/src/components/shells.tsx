@@ -11,6 +11,9 @@ export interface ShellNavItem {
   label: string;
   icon?: ReactNode;
   current?: boolean;
+  /** A short count next to the label (waiting queue items); `badgeTone: 'warning'` marks overdue ones. */
+  badge?: string;
+  badgeTone?: 'neutral' | 'warning';
 }
 
 export interface Brand {

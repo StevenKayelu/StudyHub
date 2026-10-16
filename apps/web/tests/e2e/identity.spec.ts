@@ -1,7 +1,7 @@
 import { AxeBuilder } from '@axe-core/playwright';
-import { expect, type Page, test } from '@playwright/test';
+import { type Cookie, expect, type Page, test } from '@playwright/test';
 
-import { DEMO, DEMO_PASSWORD, linkFromEmail, school, signIn, totp, uniqueEmail } from './helpers';
+import { consoleSignIn, DEMO, DEMO_PASSWORD, linkFromEmail, school, signIn, uniqueEmail } from './helpers';
 
 // Requires `pnpm db:seed` (demo schools and accounts) and Mailpit (`pnpm db:up`).
 
@@ -154,34 +154,54 @@ test.describe('school realm (M4)', () => {
 });
 
 test.describe('platform console realm (M4)', () => {
+  // One staff sign-in per run (TOTP steps can't be reused); later console tests reuse its cookies.
+  let staffCookies: Cookie[] = [];
+
   test('M4 AC 4: staff sign-in requires TOTP enrolment, then the console opens', async ({ page }) => {
     await page.context().clearCookies();
     await page.goto(school('console.localhost', '/'));
     await expect(page).toHaveURL(school('console.localhost', '/sign-in'));
     await expectNoSeriousAxeViolations(page);
-    await page.getByLabel('Email').fill(DEMO.staff);
-    await page.getByLabel('Password').fill(DEMO_PASSWORD);
-    await page.getByRole('button', { name: 'Continue' }).click();
-
-    // First sign-in enrols; later sign-ins verify (the demo staff account may already be enrolled).
-    await page.waitForURL(/\/(enrol|verify)$/);
-    if (page.url().endsWith('/enrol')) {
-      const secret = (await page.getByTestId('totp-secret').textContent())!.replace(/\s/g, '');
-      await page.getByLabel('6-digit code').fill(totp(secret));
-      await page.getByRole('button', { name: 'Turn on' }).click();
-      await expect(page.getByTestId('recovery-codes').locator('li')).toHaveCount(8);
-      process.env.E2E_STAFF_TOTP = secret;
-      await page.getByRole('button', { name: 'I have saved them' }).click();
-    } else {
-      test.skip(process.env.E2E_STAFF_TOTP === undefined, 'demo staff already enrolled in an earlier run');
-      await page.getByLabel('Code').fill(totp(process.env.E2E_STAFF_TOTP!, 1));
-      await page.getByRole('button', { name: 'Verify' }).click();
-    }
-    await page.waitForURL(school('console.localhost', '/'));
+    test.skip(!(await consoleSignIn(page)), 'demo staff already enrolled in an earlier run (re-seed)');
+    staffCookies = await page.context().cookies();
     await expect(page.getByText('Platform console', { exact: true })).toBeVisible();
     await page.goto(school('console.localhost', '/staff'));
     await expect(page.getByText(DEMO.staff)).toBeVisible();
     await expectNoSeriousAxeViolations(page);
+  });
+
+  test('M9 F43, UX-17: console screens keep the realm strip and never show school members’ data', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    test.skip(staffCookies.length === 0, 'needs the staff sign-in above (re-seed to reset enrolment)');
+    await page.context().addCookies(staffCookies);
+    const screens = [
+      '/',
+      '/tenants',
+      '/plans',
+      '/statements',
+      '/domains',
+      '/support',
+      '/settings',
+      '/audit-log',
+    ];
+    for (const path of screens) {
+      await page.goto(school('console.localhost', path));
+      await expect(page.getByText('Platform console', { exact: true }), path).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1 }), path).toBeVisible();
+      await expectNoSeriousAxeViolations(page);
+    }
+
+    await page.goto(school('console.localhost', '/tenants?q=acme'));
+    await page.getByTestId('console-tenants').getByRole('link', { name: /Acme/ }).first().click();
+    await expect(page.getByTestId('tenant-metadata')).toBeVisible();
+    await expect(page.getByTestId('tenant-features')).toBeVisible();
+    await expectNoSeriousAxeViolations(page);
+    // F43 AC 1: no learner's or instructor's address appears (the owner contact is the documented exception).
+    const text = await page.locator('main').innerText();
+    expect(text).not.toContain(DEMO.learner);
+    expect(text).not.toContain(DEMO.acmeTutor);
   });
 
   test('M4 AC 3: the console API does not exist on school hosts, and a console cookie means nothing there', async ({

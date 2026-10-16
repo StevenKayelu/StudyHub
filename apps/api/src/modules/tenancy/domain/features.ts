@@ -6,6 +6,9 @@ export interface FeatureRow {
   platformOverride: 'NONE' | 'GRANT' | 'REVOKE';
 }
 
+/** The features a plan grants: key → bool; a missing key is not granted. null: no plan assigned. */
+export type PlanGrants = Partial<Record<FeatureKey, boolean>> | null;
+
 /**
  * A school's own switch when it has never set one. Instructor revenue share is off by default: most
  * schools pay their staff salaries and keep their sales (03 §9.2 F29; M8 PROPOSED).
@@ -14,29 +17,46 @@ export const TENANT_SWITCH_DEFAULTS: Readonly<Partial<Record<FeatureKey, boolean
   instructorRevenueShare: false,
 };
 
+/** Features specified but not built yet (03 F38 custom domains, certificates): never effective. */
+export const LATER_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>(['customDomain', 'certificates']);
+
+/** Whether the plan grants a feature. A school without a plan keeps every feature (M7/M8 behaviour). */
+export function planGrants(plan: PlanGrants, key: FeatureKey): boolean {
+  return plan === null ? true : plan[key] === true;
+}
+
 /**
  * BR-48: effective = (the plan grants it, or the platform grants it) AND the school has it switched on,
- * unless the platform revokes it. Plans arrive with M9: until then the plan grants every feature
- * (PROPOSED), and a school's own switch defaults to on (except TENANT_SWITCH_DEFAULTS).
+ * unless the platform revokes it.
  */
 export function featureEnabled(
   row: Omit<FeatureRow, 'featureKey'> | null,
-  planGrants = true,
+  grantedByPlan = true,
   switchDefault = true,
 ): boolean {
   const override = row?.platformOverride ?? 'NONE';
   if (override === 'REVOKE') return false;
-  const granted = override === 'GRANT' || planGrants;
+  const granted = override === 'GRANT' || grantedByPlan;
   return granted && (row?.enabledByTenant ?? switchDefault);
 }
 
+/** Whether the school may switch the feature on at all (S-AD13 "Included" / "Not in your plan"). */
+export function featureAvailable(
+  row: Omit<FeatureRow, 'featureKey'> | null,
+  grantedByPlan: boolean,
+): boolean {
+  const override = row?.platformOverride ?? 'NONE';
+  return override !== 'REVOKE' && (override === 'GRANT' || grantedByPlan);
+}
+
 /** Every feature key with its effective state. */
-export function featureMap(rows: readonly FeatureRow[]): FeatureMap {
+export function featureMap(rows: readonly FeatureRow[], plan: PlanGrants = null): FeatureMap {
   const byKey = new Map(rows.map((row) => [row.featureKey, row]));
   return Object.fromEntries(
     FEATURE_KEYS.map((key: FeatureKey) => [
       key,
-      featureEnabled(byKey.get(key) ?? null, true, TENANT_SWITCH_DEFAULTS[key] ?? true),
+      !LATER_FEATURES.has(key) &&
+        featureEnabled(byKey.get(key) ?? null, planGrants(plan, key), TENANT_SWITCH_DEFAULTS[key] ?? true),
     ]),
   ) as FeatureMap;
 }

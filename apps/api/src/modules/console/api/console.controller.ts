@@ -29,47 +29,17 @@ import {
   setCookie,
   userAgent,
 } from '../../identity';
-import { AppError, currentContext, parseOrThrow, type RequestContext, sendProblem } from '../../platform';
+import { currentContext, parseOrThrow, sendProblem } from '../../platform';
 import { normalizeHost } from '../../tenancy';
+import { CONSOLE_ABSOLUTE_MS, ConsoleAuthService } from '../application/console-auth.service';
 import {
-  CONSOLE_ABSOLUTE_MS,
-  type ConsoleActor,
-  ConsoleAuthService,
-  REAUTH_VALID_MS,
-} from '../application/console-auth.service';
-
-const actors = new WeakMap<RequestContext, ConsoleActor>();
-
-function consoleActor(): ConsoleActor | null {
-  const context = currentContext();
-  return context === undefined ? null : (actors.get(context) ?? null);
-}
-
-/** A console session that has passed TOTP. */
-function requireStaff(): ConsoleActor {
-  const actor = consoleActor();
-  if (actor === null) throw new AppError('UNAUTHENTICATED');
-  if (!actor.mfaVerified) throw new AppError('MFA_REQUIRED');
-  return actor;
-}
-
-/** A password-only (partial) session: may enrol or verify the second factor, nothing else. */
-function requirePartial(): ConsoleActor {
-  const actor = consoleActor();
-  if (actor === null) throw new AppError('UNAUTHENTICATED');
-  return actor;
-}
-
-/** Sensitive actions need a TOTP re-authentication within REAUTH_VALID_MS (04 §17.5). */
-function requireRecentReauth(actor: ConsoleActor): void {
-  if (actor.reauthAt === null || Date.now() - actor.reauthAt.getTime() > REAUTH_VALID_MS) {
-    throw new AppError('REAUTH_REQUIRED');
-  }
-}
-
-function requireRole(actor: ConsoleActor, ...roles: ConsoleActor['role'][]): void {
-  if (!roles.includes(actor.role)) throw new AppError('FORBIDDEN');
-}
+  actors,
+  consoleActor,
+  requirePartial,
+  requireRecentReauth,
+  requireRole,
+  requireStaff,
+} from './console-guards';
 
 /**
  * Console realm guard: /console/* answers ONLY on a console host (anything else is a plain 404, so a

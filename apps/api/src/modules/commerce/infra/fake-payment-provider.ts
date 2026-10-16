@@ -10,6 +10,7 @@ import {
   type ProviderAccount,
   type ProviderEvent,
   type ProviderStatus,
+  type ProviderTransaction,
   ProviderUnavailableError,
   type RefundResult,
   type StartPaymentInput,
@@ -72,6 +73,7 @@ interface TransactionRow {
   fee_minor: bigint;
   refunded_minor: bigint;
   return_url: string | null;
+  updated_at: Date;
 }
 
 export interface FakeWebhookDelivery {
@@ -171,6 +173,29 @@ export class FakePaymentProvider implements PaymentProvider {
       providerTransactionId: row.id,
       redirectUrl: input.method === 'CARD' ? `${FAKE_PAY_PATH}/${row.id}` : null,
     };
+  }
+
+  /** W7: the merchant's settled transactions (profiles with transactionListApi only). */
+  async listTransactions(
+    account: ProviderAccount,
+    range: { start: Date; end: Date },
+  ): Promise<ProviderTransaction[]> {
+    const credentials = this.authenticate(account);
+    if (!FAKE_PROFILE_CAPABILITIES[credentials.profile].transactionListApi) {
+      throw new ProviderUnavailableError('This account has no transaction list API');
+    }
+    const rows = await this.prisma.$queryRaw<TransactionRow[]>`
+      SELECT * FROM fake_provider.transaction
+       WHERE merchant_id = ${credentials.merchantId} AND status = 'SUCCEEDED'
+         AND updated_at >= ${range.start} AND updated_at < ${range.end}
+       ORDER BY updated_at`;
+    return rows.map((row) => ({
+      reference: row.reference,
+      amountMinor: Number(row.amount_minor),
+      currency: row.currency,
+      status: Number(row.refunded_minor) > 0 ? 'REFUNDED' : 'SUCCEEDED',
+      settledAt: row.updated_at,
+    }));
   }
 
   async getStatus(account: ProviderAccount, reference: string): Promise<ProviderStatus> {

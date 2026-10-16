@@ -8,6 +8,7 @@ import {
   AppError,
   type BreachedPasswordChecker,
   ConfigService,
+  currentContext,
   decoyPasswordHash,
   hashPassword,
   hashToken,
@@ -24,7 +25,7 @@ import {
   type TenantTx,
   verifyPassword,
 } from '../../platform';
-import { TenantResolver } from '../../tenancy';
+import { enforceLimit, TenantResolver } from '../../tenancy';
 import { allowedActions, TENANT_ROLES, type TenantActor, type TenantRole } from '../domain/policy';
 import { SessionService } from './sessions';
 
@@ -137,6 +138,7 @@ export class AuthService {
           data: { id: userId, email: input.email, displayName: input.displayName },
         });
         await tx.credential.create({ data: { userId, passwordHash } });
+        await enforceLimit(tx, 'activeLearners', { box: this.box });
         const membership = await tx.tenantMembership.create({
           data: { tenantId, userId, status: 'ACTIVE', joinedAt: new Date() },
           select: { id: true },
@@ -283,6 +285,7 @@ export class AuthService {
         select: { id: true },
       });
       if (existing !== null) throw new AppError('TOKEN_INVALID');
+      await enforceLimit(tx, 'activeLearners', { box: this.box });
       const membership = await tx.tenantMembership.create({
         data: { tenantId, userId: ticket.userId, status: 'ACTIVE', joinedAt: new Date() },
         select: { id: true },
@@ -509,6 +512,25 @@ export class AuthService {
   // ----------------------------------------------------------------------------------------------
 
   async me(actor: TenantActor): Promise<MeResponse> {
+    // A support session has no account in this school: it describes the staff member and the grant.
+    if (actor.support !== undefined) {
+      return {
+        user: {
+          id: actor.userId,
+          email: '',
+          displayName: actor.support.staffName,
+          emailVerified: true,
+          locale: 'en',
+        },
+        membership: { id: actor.membershipId, roles: [...actor.roles] },
+        allowedActions: allowedActions(actor),
+        support: {
+          staffName: actor.support.staffName,
+          scope: actor.support.scope,
+          expiresAt: actor.support.expiresAt.toISOString(),
+        },
+      };
+    }
     const account = await this.tenantDb.run((tx) =>
       tx.userAccount.findUnique({
         where: { id: actor.userId },
@@ -526,6 +548,7 @@ export class AuthService {
       },
       membership: { id: actor.membershipId, roles: [...actor.roles] },
       allowedActions: allowedActions(actor),
+      support: null,
     };
   }
 
@@ -747,6 +770,8 @@ export class AuthService {
 
   /** BR-57: OPEN (default), INVITE_ONLY, or EMAIL_DOMAIN with an allowlist. */
   private async registrationOpenFor(tx: TenantTx, email: string): Promise<boolean> {
+    // F37: a school being set up shows "coming soon"; only invited staff join it.
+    if (currentContext()?.tenantStatus === 'PROVISIONING') return false;
     const settings = await tx.tenantSetting.findMany({
       where: { key: { in: ['learnerRegistrationMode', 'allowedEmailDomains'] } },
       select: { key: true, value: true },
@@ -764,7 +789,11 @@ export class AuthService {
 
   private async assertRegistrationAllowed(email: string): Promise<void> {
     const open = await this.tenantDb.run((tx) => this.registrationOpenFor(tx, email));
-    if (open) return;
+    // BR-49: checked before the email is looked up, so a full school answers the same for every email.
+    if (open) {
+      await this.tenantDb.run((tx) => enforceLimit(tx, 'activeLearners'));
+      return;
+    }
     const mode = await this.tenantDb.run((tx) =>
       tx.tenantSetting.findFirst({ where: { key: 'learnerRegistrationMode' }, select: { value: true } }),
     );

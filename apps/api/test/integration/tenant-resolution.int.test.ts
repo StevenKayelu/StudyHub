@@ -3,6 +3,7 @@ import {
   PROBLEM_CONTENT_TYPE,
   problemSchema,
   FEATURE_KEYS,
+  HOME_SECTION_KEYS,
   tenantBootstrapSchema,
 } from '@studyhub/contracts';
 import type { Client } from 'pg';
@@ -195,6 +196,67 @@ const COMMERCE_ROUTES: readonly string[] = [
   'PUT /api/v1/admin/payment-accounts/:id/credentials',
 ];
 
+/**
+ * School administration routes (M9). Covered by admin.int.test.ts (07 M9 AC 1–8: cross-school ids are
+ * 404, exports hold only the school's rows, support-session exclusions) and by the M9 rows of the
+ * authorization matrix.
+ */
+const ADMIN_ROUTES: readonly string[] = [
+  'DELETE /api/v1/admin/offboarding',
+  'DELETE /api/v1/admin/users/:membershipId/sessions/:sessionId',
+  'GET /api/v1/admin/audit-log',
+  'GET /api/v1/admin/billing/statements',
+  'GET /api/v1/admin/billing/statements/:id',
+  'GET /api/v1/admin/branding',
+  'GET /api/v1/admin/domains',
+  'GET /api/v1/admin/domains/availability',
+  'GET /api/v1/admin/exports',
+  'GET /api/v1/admin/exports/:id',
+  'GET /api/v1/admin/features',
+  'GET /api/v1/admin/locales',
+  'GET /api/v1/admin/offboarding',
+  'GET /api/v1/admin/onboarding',
+  'GET /api/v1/admin/plan',
+  'GET /api/v1/admin/queues/summary',
+  'GET /api/v1/admin/reconciliation/settlements',
+  'GET /api/v1/admin/reconciliation/settlements/:id',
+  'GET /api/v1/admin/reports/overview',
+  'GET /api/v1/admin/support-access',
+  'GET /api/v1/admin/usage',
+  'GET /api/v1/admin/users',
+  'GET /api/v1/admin/users/:membershipId',
+  'GET /api/v1/legal/:page',
+  'GET /api/v1/me/notification-preferences',
+  'GET /api/v1/me/notifications',
+  'GET /api/v1/support/session',
+  'GET /api/v1/tenant/brand/:assetId',
+  'POST /api/v1/admin/branding/publish',
+  'POST /api/v1/admin/branding/rollback/:version',
+  'POST /api/v1/admin/branding/validate-colour',
+  'POST /api/v1/admin/domains',
+  'POST /api/v1/admin/domains/change-requests',
+  'POST /api/v1/admin/domains/change-requests/:id/cancel',
+  'POST /api/v1/admin/exports',
+  'POST /api/v1/admin/exports/tenant',
+  'POST /api/v1/admin/offboarding',
+  'POST /api/v1/admin/onboarding/go-live',
+  'POST /api/v1/admin/owners/transfer',
+  'POST /api/v1/admin/reconciliation/settlements',
+  'POST /api/v1/admin/reconciliation/settlements/:id/items/:itemId/resolve',
+  'POST /api/v1/admin/support-access/:id/decision',
+  'POST /api/v1/admin/support-access/:id/revoke',
+  'POST /api/v1/admin/users/:membershipId/resend-verification',
+  'POST /api/v1/admin/users/:membershipId/suspend',
+  'POST /api/v1/admin/users/:membershipId/unsuspend',
+  'POST /api/v1/me/notifications/read',
+  'POST /api/v1/support/end',
+  'POST /api/v1/support/handoff',
+  'PUT /api/v1/admin/branding/draft',
+  'PUT /api/v1/admin/features/:key',
+  'PUT /api/v1/admin/locales',
+  'PUT /api/v1/me/notification-preferences',
+];
+
 describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
   let database: TestDatabase;
   let migrator: Client;
@@ -268,11 +330,28 @@ describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
         fontPreset: 'COPPERLINE',
         showPoweredBy: true,
         terminology: {},
+        logoAssetId: null,
+        logoDarkAssetId: null,
+        faviconAssetId: null,
+        appIconAssetId: null,
+        homeLayout: { sections: HOME_SECTION_KEYS.map((key) => ({ key, visible: true })) },
+        footerLinks: [],
+        supportEmail: null,
+        supportPhone: null,
+        social: {},
       },
       locales: { defaultLocale: 'en', enabledLocales: ['en'], timeZone: 'Africa/Lusaka' },
       // Every feature is on until plans arrive (M9) or the school switches one off (F40, BR-48).
       // Every feature is on by default except instructor revenue share (M8 PROPOSED 4).
-      features: Object.fromEntries(FEATURE_KEYS.map((key) => [key, key !== 'instructorRevenueShare'])),
+      // Features not built yet (custom domains, certificates) are never effective (M9).
+      features: Object.fromEntries(
+        FEATURE_KEYS.map((key) => [
+          key,
+          !['instructorRevenueShare', 'customDomain', 'certificates'].includes(key),
+        ]),
+      ),
+      notice: null,
+      legal: { terms: false, privacy: false, refunds: false },
     });
     const beta = tenantBootstrapSchema.parse(
       (await get('/api/v1/tenant', { host: 'beta.localhost' })).json(),
@@ -344,6 +423,7 @@ describe('tenant resolution over HTTP (T-ISO-10..13)', () => {
         ...IDENTITY_ROUTES,
         ...CONTENT_ROUTES,
         ...COMMERCE_ROUTES,
+        ...ADMIN_ROUTES,
       ].sort(),
     );
   });

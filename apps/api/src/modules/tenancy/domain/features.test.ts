@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { featureEnabled, featureMap } from './features';
+import { featureAvailable, featureEnabled, featureMap, planGrants } from './features';
 
 describe('features (F40, BR-48)', () => {
   it('on by default; the school can switch it off; the platform can revoke or grant', () => {
@@ -19,6 +19,31 @@ describe('features (F40, BR-48)', () => {
     expect(map.practiceMode).toBe(false);
     expect(map.quizAnalytics).toBe(true);
     expect(Object.keys(map)).toHaveLength(10);
+  });
+
+  it('a plan grants only its listed features; a GRANT override adds one, REVOKE removes one (M9)', () => {
+    const plan = { practiceMode: true, paidCourses: false };
+    const map = featureMap(
+      [
+        { featureKey: 'quizAnalytics', enabledByTenant: true, platformOverride: 'GRANT' },
+        { featureKey: 'practiceMode', enabledByTenant: true, platformOverride: 'REVOKE' },
+      ],
+      plan,
+    );
+    expect(map.practiceMode).toBe(false);
+    expect(map.paidCourses).toBe(false);
+    expect(map.quizAnalytics).toBe(true);
+    expect(map.publicCatalog).toBe(false);
+    expect(featureAvailable(null, planGrants(plan, 'practiceMode'))).toBe(true);
+    expect(featureAvailable(null, planGrants(plan, 'paidCourses'))).toBe(false);
+  });
+
+  it('features not built yet are never effective, even when granted', () => {
+    const map = featureMap([
+      { featureKey: 'customDomain', enabledByTenant: true, platformOverride: 'GRANT' },
+    ]);
+    expect(map.customDomain).toBe(false);
+    expect(map.certificates).toBe(false);
   });
 
   it('instructor revenue share stays off until the school switches it on (M8)', () => {

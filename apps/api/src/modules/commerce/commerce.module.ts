@@ -8,11 +8,13 @@ import {
   FakePaymentDevController,
   PaymentWebhookController,
 } from './api/commerce.controller';
+import { ReconciliationController } from './api/reconciliation.controller';
 import { AdminOrdersService } from './application/admin-orders.service';
 import { CheckoutService } from './application/checkout.service';
 import { CommerceSettingsService } from './application/commerce-settings.service';
 import { EarningsService } from './application/earnings.service';
 import { PaymentAccountsService } from './application/payment-accounts.service';
+import { ReconciliationService } from './application/reconciliation.service';
 import { PaymentWebhookService } from './application/webhooks.service';
 import { createPaymentGateway, PAYMENT_GATEWAY } from './infra/payment-gateway';
 
@@ -25,6 +27,7 @@ import { createPaymentGateway, PAYMENT_GATEWAY } from './infra/payment-gateway';
     FakePaymentDevController,
     AdminCommerceController,
     InstructorEarningsController,
+    ReconciliationController,
   ],
   providers: [
     {
@@ -46,6 +49,8 @@ import { createPaymentGateway, PAYMENT_GATEWAY } from './infra/payment-gateway';
     CommerceSettingsService,
     AdminOrdersService,
     EarningsService,
+    ReconciliationService,
   ],
+  exports: [PAYMENT_GATEWAY],
 })
 export class CommerceModule {}

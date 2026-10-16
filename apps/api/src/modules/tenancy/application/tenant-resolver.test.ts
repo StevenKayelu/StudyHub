@@ -6,6 +6,7 @@ const ACME: ResolvedTenant = {
   tenantId: '0192a0c1-0000-7000-8000-00000000000a',
   status: 'ACTIVE',
   primaryHost: 'acme.localhost',
+  redirect: false,
 };
 
 function fakeLookup(known: Record<string, ResolvedTenant>) {

@@ -43,7 +43,14 @@ export async function generateMetadata({ params }: Pick<TenantLayoutProps, 'para
 }
 
 /** Paths a read-only school still serves (BR-52): sign-in and the learner space. */
-const READ_ONLY_PATHS = /^\/(sign-in|switch|learn)(\/|\?|$)/;
+const READ_ONLY_PATHS = /^\/(sign-in|switch|learn|legal|admin\/data)(\/|\?|$)/;
+
+/**
+ * Paths a school being set up serves (F37): visitors get "coming soon", while the owner accepts the
+ * invitation, signs in and prepares the school (S-AD11). Each space still checks who may enter.
+ */
+const PROVISIONING_PATHS =
+  /^\/(sign-in|switch|invitations|forgot-password|reset-password|verify-email|admin|studio|account|support|legal)(\/|\?|$)/;
 
 export default async function TenantLayout({ children, params }: TenantLayoutProps) {
   const tenant = await tenantFor(params);
@@ -68,7 +75,8 @@ export default async function TenantLayout({ children, params }: TenantLayoutPro
       </style>
       <ErrorTextsProvider texts={errorTexts}>
         {tenant.status === 'ACTIVE' ||
-        (isReadOnlySchool(tenant) && READ_ONLY_PATHS.test(await requestedPath())) ? (
+        (isReadOnlySchool(tenant) && READ_ONLY_PATHS.test(await requestedPath())) ||
+        (tenant.status === 'PROVISIONING' && PROVISIONING_PATHS.test(await requestedPath())) ? (
           children
         ) : (
           <SchoolStatusPage tenant={tenant} />

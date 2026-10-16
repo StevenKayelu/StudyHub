@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   type EnrolResponse,
+  generalSettingsFrom,
   type MyLearning,
   type Playback,
   type PlayerCourse,
@@ -110,6 +111,20 @@ export class LearningService {
     if (course.priceMinor > 0n) {
       // Paid courses are bought through checkout (M8, BR-09); only free enrolment exists here.
       throw new AppError('INVALID_STATE', { detail: 'This course is paid. Payments are coming soon.' });
+    }
+    // BR-02 (M9 setting): a school may require a verified email even for free courses.
+    const general = generalSettingsFrom(
+      await tx.tenantSetting.findMany({
+        where: { key: 'unverifiedFreeEnrolment' },
+        select: { key: true, value: true },
+      }),
+    );
+    if (!general.unverifiedFreeEnrolment) {
+      const account = await tx.userAccount.findUnique({
+        where: { id: actor.userId },
+        select: { emailVerifiedAt: true },
+      });
+      if (!account?.emailVerifiedAt) throw new AppError('EMAIL_NOT_VERIFIED');
     }
     const settings = await readContentSettings(tx);
     const days = course.accessDays ?? settings.defaultAccessDays;

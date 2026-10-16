@@ -37,7 +37,7 @@ export const ERROR_DEFINITIONS = {
   FEATURE_NOT_ENABLED: { status: 403, title: 'This feature is not enabled', active: true },
   LIMIT_REACHED: { status: 409, title: 'Plan limit reached', active: true },
   SLUG_TAKEN: { status: 409, title: 'That address is already taken', active: true },
-  SLUG_RESERVED: { status: 422, title: 'That address is reserved', active: false },
+  SLUG_RESERVED: { status: 422, title: 'That address is reserved', active: true },
   // Learning (M6)
   ENROLMENT_INACTIVE: { status: 403, title: 'Your access to this course is not active', active: true },
   ALREADY_ENROLLED: { status: 409, title: 'Already enrolled', active: true },
@@ -58,6 +58,13 @@ export const ERROR_DEFINITIONS = {
     active: true,
   },
   IDEMPOTENCY_IN_PROGRESS: { status: 409, title: 'The same request is still being processed', active: true },
+  // Tenant administration and console (M9)
+  SUPPORT_READ_ONLY: { status: 403, title: 'This support session is read-only', active: true },
+  SUPPORT_ACTION_EXCLUDED: { status: 403, title: 'Support sessions cannot do this', active: true },
+  COLOUR_NOT_COMPLIANT: { status: 422, title: 'This colour does not have enough contrast', active: true },
+  ONBOARDING_INCOMPLETE: { status: 422, title: 'Finish the required setup steps first', active: true },
+  CONFIRMATION_MISMATCH: { status: 422, title: 'The confirmation does not match', active: true },
+  TENANT_MOVED: { status: 421, title: 'This school has a new address', active: true },
 } as const satisfies Record<string, { status: number; title: string; active: boolean }>;
 
 export type ErrorCode = keyof typeof ERROR_DEFINITIONS;

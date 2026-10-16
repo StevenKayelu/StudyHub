@@ -4,7 +4,7 @@ import type { InstructorProfileView } from '@studyhub/contracts';
 import { AuditService } from '../../audit';
 import { can, type TenantActor } from '../../identity';
 import { AppError, requireTenantId, TenantDb, type TenantTx } from '../../platform';
-import { readContentSettings } from '../../tenancy';
+import { enforceLimit, readContentSettings } from '../../tenancy';
 import { nextFreeSlug, slugify } from '../domain/course-rules';
 
 const REAPPLY_AFTER_MS = 30 * 24 * 3600_000;
@@ -168,6 +168,8 @@ export class InstructorsService {
         },
       });
       if (input.decision === 'APPROVED') {
+        const already = await tx.membershipRole.findFirst({ where: { membershipId, role: 'INSTRUCTOR' } });
+        if (already === null) await enforceLimit(tx, 'instructors', { includeInvitations: true });
         await tx.membershipRole.upsert({
           where: {
             tenantId_membershipId_role: { tenantId: requireTenantId(), membershipId, role: 'INSTRUCTOR' },

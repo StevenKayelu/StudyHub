@@ -52,6 +52,29 @@ export const QUEUE_DEFINITIONS: ReadonlyArray<Omit<Queue, 'name'> & { name: stri
     retryBackoff: true,
     retentionSeconds: 14 * 24 * 3600,
   })),
+  // School administration (M9): exports (F32, F46), daily usage metering (F47) and offboarding purges
+  // (F46). Exports are heavy, so at most a few run at once (NFR-ISO-2).
+  {
+    name: 'admin.export',
+    retryLimit: 3,
+    retryDelay: 60,
+    retryBackoff: true,
+    retentionSeconds: 14 * 24 * 3600,
+  },
+  {
+    name: 'admin.usage-meter',
+    retryLimit: 3,
+    retryDelay: 60,
+    retryBackoff: true,
+    retentionSeconds: 3 * 24 * 3600,
+  },
+  {
+    name: 'admin.tenant-purge',
+    retryLimit: 3,
+    retryDelay: 300,
+    retryBackoff: true,
+    retentionSeconds: 30 * 24 * 3600,
+  },
 ];
 
 export type JobHandler = (envelope: JobEnvelope, logger: Logger) => Promise<unknown>;

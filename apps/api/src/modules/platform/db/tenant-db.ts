@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import type { Prisma, PrismaClient } from '../../../generated/prisma/client';
-import { currentContext, requireTenantId } from '../context/request-context';
+import { currentContext, requireTenantId, runWithContext } from '../context/request-context';
 import { AppError } from '../errors/app-error';
 import { PrismaService } from './prisma.service';
 
@@ -51,6 +51,30 @@ export async function runInPlatformTx<T>(prisma: PrismaClient, fn: (tx: TenantTx
   });
 }
 
+/**
+ * A console transaction that also enters ONE school's context (M9, design §1): used only for console
+ * actions that must write inside that school (provisioning, owner invitations, lifecycle emails,
+ * statement totals). Callers return ids, counts and sums, never the school's personal data.
+ */
+export async function runInPlatformTenantTx<T>(
+  prisma: PrismaClient,
+  tenantId: string,
+  fn: (tx: TenantTx) => Promise<T>,
+): Promise<T> {
+  if (!UUID.test(tenantId)) {
+    throw new AppError('TENANT_CONTEXT_MISSING', { detail: 'Tenant context is malformed.' });
+  }
+  // The school also enters the request context, so helpers that read it (outbox rows, emails, audit)
+  // write for this school; the caller's own context is untouched outside.
+  const context = { ...(currentContext() ?? { requestId: 'console' }), tenantId };
+  return runWithContext(context, () =>
+    prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.realm', 'platform', true), set_config('app.tenant_id', ${tenantId}, true)`;
+      return fn(tx);
+    }),
+  );
+}
+
 /** Nest-injectable access to tenant-scoped transactions. */
 @Injectable()
 export class TenantDb {
@@ -68,5 +92,10 @@ export class TenantDb {
   /** A console-realm transaction (platform tables only). */
   runPlatform<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
     return runInPlatformTx(this.prisma, fn);
+  }
+
+  /** A console transaction inside one school (see runInPlatformTenantTx). */
+  runPlatformIn<T>(tenantId: string, fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+    return runInPlatformTenantTx(this.prisma, tenantId, fn);
   }
 }

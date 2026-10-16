@@ -5,7 +5,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { provisionTenant } from '../../src/modules/tenancy';
 import { startTestDatabase, type TestDatabase } from '../setup/postgres-container';
-import { findRoleViolations, findTenancyViolations, tenantOwnedTables } from '../setup/tenancy-checks';
+import {
+  findPlatformPolicyViolations,
+  findRoleViolations,
+  findTenancyViolations,
+  PLATFORM_VISIBLE_TABLES,
+  tenantOwnedTables,
+} from '../setup/tenancy-checks';
 
 const INSUFFICIENT_PRIVILEGE = '42501'; // also raised for "new row violates row-level security policy"
 const FOREIGN_KEY_VIOLATION = '23503';
@@ -485,8 +491,108 @@ const FIXTURES: Readonly<
         [tenantId],
       ),
   },
+  // M9 (migration 0009): school administration and the console
+  support_access_grant: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'support_access_grant',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO support_access_grant (tenant_id, platform_user_id, staff_display_name, reason)
+           VALUES ($1, $2, 'Fixture Staff', 'Fixture support request for isolation tests') RETURNING id`,
+          [tenantId, randomUUID()],
+        ),
+      ),
+  },
+  support_session: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO support_session (tenant_id, grant_id, platform_user_id, token_hash, expires_at)
+         VALUES ($1, $2, $3, $4, now() + interval '1 hour')`,
+        [tenantId, ref('support_access_grant', tenantId), randomUUID(), fixtureHash()],
+      ),
+  },
+  tenant_usage_daily: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO tenant_usage_daily (tenant_id, date, active_learners) VALUES ($1, '2001-01-01', 1)
+         ON CONFLICT DO NOTHING`,
+        [tenantId],
+      ),
+  },
+  data_export: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(`INSERT INTO data_export (tenant_id, type, requested_by) VALUES ($1, 'ORDERS', $2)`, [
+        tenantId,
+        membershipOf[tenantId] ?? randomUUID(),
+      ]),
+  },
+  domain_change_request: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO domain_change_request (tenant_id, current_slug, requested_slug, reason, status, requested_by)
+         VALUES ($1, 'iso', $2, 'Fixture request', 'REJECTED', $3)`,
+        [tenantId, `iso-${randomUUID().slice(0, 8)}`, membershipOf[tenantId] ?? randomUUID()],
+      ),
+  },
+  settlement_report: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'settlement_report',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO settlement_report (tenant_id, payment_account_id, period_start, period_end, source, created_by)
+           VALUES ($1, $2, '2001-01-01', '2001-01-31', 'CSV', $3) RETURNING id`,
+          [tenantId, ref('payment_account', tenantId), membershipOf[tenantId] ?? randomUUID()],
+        ),
+      ),
+  },
+  settlement_item: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO settlement_item (tenant_id, report_id, reference, kind, currency)
+         VALUES ($1, $2, $3, 'MISSING_LOCAL', 'ZMW')`,
+        [tenantId, ref('settlement_report', tenantId), `ref-${randomUUID()}`],
+      ),
+  },
+  platform_statement: {
+    granted: false, // written only in the console realm (platform_statement_guard)
+    insert: (c, tenantId) =>
+      c.query(`INSERT INTO platform_statement (tenant_id, period) VALUES ($1, '2001-01')`, [tenantId]),
+  },
+  notification: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO notification (tenant_id, membership_id, kind, title) VALUES ($1, $2, 'iso', 'Fixture')`,
+        [tenantId, membershipOf[tenantId] ?? randomUUID()],
+      ),
+  },
+  notification_preference: {
+    granted: true,
+    insert: (c, tenantId) =>
+      c.query(
+        `INSERT INTO notification_preference (tenant_id, membership_id, category, email_enabled)
+         VALUES ($1, $2, 'earnings', false) ON CONFLICT DO NOTHING`,
+        [tenantId, membershipOf[tenantId] ?? randomUUID()],
+      ),
+  },
+  tenant_archive: {
+    granted: false, // no runtime grants at all: written only by purge_tenant()
+    insert: (c, tenantId) =>
+      c.query(`INSERT INTO tenant_archive (tenant_id, source_table, row_data) VALUES ($1, 'iso', '{}')`, [
+        tenantId,
+      ]),
+  },
   tenant_feature: {
-    granted: false, // read-only for the runtime role until the settings screens (M9)
+    granted: true, // schools switch features from M9 (F40); only the console sets overrides (trigger)
     insert: (c, tenantId) =>
       c.query(
         `INSERT INTO tenant_feature (tenant_id, feature_key, enabled_by_tenant) VALUES ($1, 'practiceMode', false)
@@ -495,14 +601,15 @@ const FIXTURES: Readonly<
       ),
   },
   tenant_branding: {
-    granted: false, // read-only for the runtime role until the branding editor (F39); provisioning writes it
+    granted: true, // the branding editor publishes it (F39, M9)
     insert: (c, tenantId) =>
-      c.query(`INSERT INTO tenant_branding (tenant_id, display_name) VALUES ($1, 'Forged School')`, [
-        tenantId,
-      ]),
+      c.query(
+        `INSERT INTO tenant_branding (tenant_id, display_name) VALUES ($1, 'Forged School') ON CONFLICT DO NOTHING`,
+        [tenantId],
+      ),
   },
   tenant_branding_version: {
-    granted: false,
+    granted: true,
     insert: (c, tenantId) =>
       c.query(`INSERT INTO tenant_branding_version (tenant_id, version, snapshot) VALUES ($1, 99, '{}')`, [
         tenantId,
@@ -518,7 +625,7 @@ const FIXTURES: Readonly<
       ),
   },
   tenant_domain: {
-    granted: false, // runtime code resolves hosts only through resolve_tenant()
+    granted: false, // a school reads its own hosts; only the console adds them (tenant_platform_guard, M9)
     insert: (c, tenantId) =>
       c.query(`INSERT INTO tenant_domain (tenant_id, hostname) VALUES ($1, $2)`, [
         tenantId,
@@ -582,6 +689,58 @@ describe('tenant isolation in PostgreSQL (T-ISO-01..09, 15, 16)', () => {
 
   it('T-ISO-03: every table follows the structural tenancy rules', async () => {
     expect(await findTenancyViolations(migrator)).toEqual([]);
+  });
+
+  it('T-ISO-21: console-realm policies only on the ADR-0020 allowlist, with no personal columns', async () => {
+    expect(await findPlatformPolicyViolations(migrator)).toEqual([]);
+  });
+
+  it('T-ISO-21: the console realm sees school metadata, and nothing of any other school table', async () => {
+    const asConsole = async (sql: string) => {
+      await app.query('BEGIN');
+      try {
+        await app.query(`SELECT set_config('app.realm', 'platform', true)`);
+        return await outcome(() => app.query(sql));
+      } finally {
+        await app.query('ROLLBACK');
+      }
+    };
+    expect(await asConsole('SELECT count(*) FROM tenant')).toBeGreaterThanOrEqual(2);
+    expect(await asConsole('SELECT count(*) FROM tenant_usage_daily')).toBeGreaterThanOrEqual(2);
+    for (const table of await tenantOwnedTables(migrator)) {
+      if (PLATFORM_VISIBLE_TABLES.has(table)) continue;
+      expect(await asConsole(`SELECT count(*) FROM "${table}"`), `${table} in the console realm`).toSatisfy(
+        (value: unknown) => value === 0 || value === 'denied',
+      );
+    }
+    // School members and accounts stay invisible too.
+    expect(await asConsole('SELECT count(*) FROM user_account')).toBe(0);
+  });
+
+  it('T-ISO-21: a school cannot create schools, add hosts, change its plan or forge statements', async () => {
+    expect(
+      await sqlState(
+        asTenant(app, tenantB, () =>
+          app.query(`UPDATE tenant SET slug = 'beta-new' WHERE id = $1`, [tenantB]),
+        ),
+      ),
+    ).toBe(INSUFFICIENT_PRIVILEGE);
+    expect(await sqlState(asTenant(app, tenantB, () => FIXTURES.tenant_domain!.insert(app, tenantB)))).toBe(
+      INSUFFICIENT_PRIVILEGE,
+    );
+    expect(
+      await sqlState(asTenant(app, tenantB, () => FIXTURES.platform_statement!.insert(app, tenantB))),
+    ).toBe(INSUFFICIENT_PRIVILEGE);
+    expect(
+      await sqlState(
+        asTenant(app, tenantB, () =>
+          app.query(
+            `INSERT INTO tenant_feature (tenant_id, feature_key, platform_override) VALUES ($1, 'whiteLabel', 'GRANT')`,
+            [tenantB],
+          ),
+        ),
+      ),
+    ).toBe(INSUFFICIENT_PRIVILEGE);
   });
 
   it('T-ISO-03 (meta): the check catches a tenant table without RLS', async () => {
@@ -664,12 +823,16 @@ describe('tenant isolation in PostgreSQL (T-ISO-01..09, 15, 16)', () => {
     expect(none.rows).toEqual([]);
   });
 
-  it('the app role reaches tenant_domain only through resolve_tenant()', async () => {
-    expect(await sqlState(app.query('SELECT * FROM tenant_domain'))).toBe(INSUFFICIENT_PRIVILEGE);
+  it('a school sees only its own hosts; host resolution goes through resolve_tenant() (M9)', async () => {
+    expect((await app.query('SELECT * FROM tenant_domain')).rows).toEqual([]);
+    const own = await asTenant(app, tenantB, () => app.query('SELECT hostname FROM tenant_domain'));
+    expect(own.rows).toEqual([{ hostname: 'beta.localhost' }]);
     const known = await app.query(
-      `SELECT tenant_id, status::text AS status, primary_host FROM resolve_tenant('ACME.localhost')`,
+      `SELECT tenant_id, status::text AS status, primary_host, is_redirect FROM resolve_tenant('ACME.localhost')`,
     );
-    expect(known.rows).toEqual([{ tenant_id: tenantA, status: 'ACTIVE', primary_host: 'acme.localhost' }]);
+    expect(known.rows).toEqual([
+      { tenant_id: tenantA, status: 'ACTIVE', primary_host: 'acme.localhost', is_redirect: false },
+    ]);
     const unknown = await app.query(`SELECT * FROM resolve_tenant('nope.localhost')`);
     expect(unknown.rows).toEqual([]);
   });

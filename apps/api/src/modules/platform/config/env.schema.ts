@@ -80,6 +80,17 @@ export const apiEnvSchema = z
       .refine((value) => /^https?:\/\/\{host\}(:\d{1,5})?$/.test(value), {
         message: 'must look like https://{host} (optionally with a port)',
       }),
+    /** The platform domain under which schools get `{slug}.<domain>` (F37, F38; Q-OPS-2 decides it). */
+    SCHOOL_HOST_SUFFIX: z
+      .string()
+      .default('localhost')
+      .transform((value) =>
+        value
+          .trim()
+          .toLowerCase()
+          .replace(/^\.+|\.+$/g, ''),
+      )
+      .pipe(z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/)),
     /** Hosts of the platform console; /api/console/* answers only on these (realm separation). */
     CONSOLE_HOSTS: z
       .string()

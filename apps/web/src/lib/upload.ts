@@ -13,7 +13,7 @@ export type UploadPhase = 'uploading' | 'checking' | 'ready' | 'rejected' | 'fai
  */
 export async function uploadFile(
   file: File,
-  purpose: 'COURSE_COVER' | 'AVATAR' | 'LESSON_FILE' | 'LESSON_IMAGE' | 'LESSON_VIDEO',
+  purpose: 'COURSE_COVER' | 'AVATAR' | 'BRANDING' | 'LESSON_FILE' | 'LESSON_IMAGE' | 'LESSON_VIDEO',
   onPhase: (phase: UploadPhase, detail?: string) => void,
 ): Promise<AssetStatus | null> {
   onPhase('uploading');

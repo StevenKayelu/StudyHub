@@ -53,16 +53,30 @@ enum DomainStatus {
 
 /// A school (tenant). RLS: visible only inside its own tenant context (policy tenant_self).
 model Tenant {
-  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  slug          String       @unique
-  name          String
-  kind          TenantKind
-  status        TenantStatus @default(PROVISIONING)
+  id                     String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug                   String       @unique
+  name                   String
+  kind                   TenantKind
+  status                 TenantStatus @default(PROVISIONING)
   /// BR-55 receipt prefix (2–8 of A–Z, 0–9); null: derived from the slug.
-  receiptPrefix String?      @map("receipt_prefix")
-  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime     @default(now()) @map("updated_at") @db.Timestamptz(3)
-  version       Int          @default(1)
+  receiptPrefix          String?      @map("receipt_prefix")
+  /// M9 lifecycle (F37, 05 §8.1).
+  planId                 String?      @map("plan_id") @db.Uuid
+  legalName              String?      @map("legal_name")
+  country                String       @default("ZM") @db.Char(2)
+  currency               String       @default("ZMW") @db.Char(3)
+  /// The contact staff entered at provisioning (S-C04); the only personal field the console shows.
+  ownerContactEmail      String?      @map("owner_contact_email")
+  suspendedReason        String?      @map("suspended_reason")
+  offboardingRequestedAt DateTime?    @map("offboarding_requested_at") @db.Timestamptz(3)
+  deleteAfter            DateTime?    @map("delete_after") @db.Timestamptz(3)
+  activatedAt            DateTime?    @map("activated_at") @db.Timestamptz(3)
+  createdBy              String?      @map("created_by") @db.Uuid
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime     @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version                Int          @default(1)
+
+  plan Plan? @relation(fields: [planId], references: [id], onDelete: Restrict)
 
   domains          TenantDomain[]
   auditLogs        AuditLog[]
@@ -81,14 +95,15 @@ model Tenant {
 
 /// Hosts that resolve to a school. Runtime code never reads this table; it calls resolve_tenant().
 model TenantDomain {
-  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId   String       @map("tenant_id") @db.Uuid
-  hostname   String       @unique
-  type       DomainType   @default(SUBDOMAIN)
-  status     DomainStatus @default(ACTIVE)
-  isPrimary  Boolean      @default(false) @map("is_primary")
-  verifiedAt DateTime?    @map("verified_at") @db.Timestamptz(3)
-  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String       @map("tenant_id") @db.Uuid
+  hostname      String       @unique
+  type          DomainType   @default(SUBDOMAIN)
+  status        DomainStatus @default(ACTIVE)
+  isPrimary     Boolean      @default(false) @map("is_primary")
+  verifiedAt    DateTime?    @map("verified_at") @db.Timestamptz(3)
+  redirectUntil DateTime?    @map("redirect_until") @db.Timestamptz(3)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
@@ -531,6 +546,7 @@ enum AssetPurpose {
   LESSON_FILE
   LESSON_IMAGE
   LESSON_VIDEO
+  BRANDING
 }
 
 enum AssetStatus {
@@ -1416,4 +1432,317 @@ model LedgerCheck {
 
   @@index([tenantId, checkedAt(sort: Desc)], map: "ledger_check_tenant_checked_idx")
   @@map("ledger_check")
+}
+
+// ---------------------------------------------------------------------------------------------
+// M9 tenant administration and console (migration 0009). Tables marked "platform_realm" are also
+// readable by the console (ADR-0020); every other school-owned table is tenant_isolation only.
+// ---------------------------------------------------------------------------------------------
+
+enum PlanStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum SupportScope {
+  READ_ONLY
+  READ_WRITE
+}
+
+enum SupportGrantStatus {
+  REQUESTED
+  APPROVED
+  DENIED
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum ExportType {
+  ORDERS
+  PAYMENTS
+  LEDGER
+  ENROLMENTS
+  TENANT_FULL
+}
+
+enum ExportStatus {
+  QUEUED
+  RUNNING
+  READY
+  FAILED
+  EXPIRED
+}
+
+enum DomainRequestStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum SettlementSource {
+  API
+  CSV
+}
+
+enum SettlementStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum SettlementKind {
+  MISSING_LOCAL
+  MISSING_PROVIDER
+  AMOUNT_MISMATCH
+}
+
+enum SettlementResolution {
+  RECHECKED
+  ACCEPTED
+  REFUND_STARTED
+  NOTED
+}
+
+enum StatementStatus {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+}
+
+/// Plans (05 §8.1): global; readable by everyone, written in the platform realm only.
+model Plan {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code      String     @unique
+  name      String
+  features  Json       @default("{}")
+  limits    Json       @default("{}")
+  pricing   Json       @default("{}")
+  isPublic  Boolean    @default(true) @map("is_public")
+  status    PlanStatus @default(ACTIVE)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime   @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version   Int        @default(1)
+
+  tenants Tenant[]
+
+  @@map("plan")
+}
+
+/// Support access (F44). RLS: tenant_isolation + platform_realm.
+model SupportAccessGrant {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  platformUserId   String             @map("platform_user_id") @db.Uuid
+  staffDisplayName String             @map("staff_display_name")
+  reason           String
+  scope            SupportScope       @default(READ_ONLY)
+  emergency        Boolean            @default(false)
+  status           SupportGrantStatus @default(REQUESTED)
+  durationMinutes  Int                @default(240) @map("duration_minutes")
+  requestedAt      DateTime           @default(now()) @map("requested_at") @db.Timestamptz(3)
+  decidedBy        String?            @map("decided_by") @db.Uuid
+  decidedAt        DateTime?          @map("decided_at") @db.Timestamptz(3)
+  startsAt         DateTime?          @map("starts_at") @db.Timestamptz(3)
+  expiresAt        DateTime?          @map("expires_at") @db.Timestamptz(3)
+  revokedBy        String?            @map("revoked_by") @db.Uuid
+  revokedByStaff   String?            @map("revoked_by_staff") @db.Uuid
+  revokedAt        DateTime?          @map("revoked_at") @db.Timestamptz(3)
+  handoffHash      Bytes?             @map("handoff_hash")
+  handoffExpiresAt DateTime?          @map("handoff_expires_at") @db.Timestamptz(3)
+
+  sessions SupportSession[]
+
+  @@unique([tenantId, id], map: "support_access_grant_tenant_id_id_key")
+  @@index([tenantId, requestedAt(sort: Desc)], map: "support_access_grant_tenant_requested_idx")
+  @@map("support_access_grant")
+}
+
+/// A platform staff member's session on a school host under a grant. RLS: tenant_isolation.
+model SupportSession {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  grantId        String   @map("grant_id") @db.Uuid
+  platformUserId String   @map("platform_user_id") @db.Uuid
+  tokenHash      Bytes    @map("token_hash")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz(3)
+  ip             String?  @db.Inet
+  userAgent      String?  @map("user_agent")
+
+  grant SupportAccessGrant @relation(fields: [tenantId, grantId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, tokenHash], map: "support_session_tenant_token_key")
+  @@index([tenantId, grantId], map: "support_session_tenant_grant_idx")
+  @@map("support_session")
+}
+
+/// Daily usage per school (F47). RLS: tenant_isolation + platform_realm.
+model TenantUsageDaily {
+  tenantId              String   @map("tenant_id") @db.Uuid
+  date                  DateTime @db.Date
+  activeLearners        Int      @default(0) @map("active_learners")
+  instructors           Int      @default(0)
+  admins                Int      @default(0)
+  storageBytes          BigInt   @default(0) @map("storage_bytes")
+  videoMinutesDelivered Int      @default(0) @map("video_minutes_delivered")
+  emailsSent            Int      @default(0) @map("emails_sent")
+  paymentsCount         Int      @default(0) @map("payments_count")
+  paymentsAmountMinor   BigInt   @default(0) @map("payments_amount_minor")
+  measuredAt            DateTime @default(now()) @map("measured_at") @db.Timestamptz(3)
+
+  @@id([tenantId, date])
+  @@map("tenant_usage_daily")
+}
+
+/// Report CSVs (F32) and the full school export (F46), produced by the worker. RLS: tenant_isolation.
+model DataExport {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String       @map("tenant_id") @db.Uuid
+  type        ExportType
+  params      Json         @default("{}")
+  status      ExportStatus @default(QUEUED)
+  requestedBy String       @map("requested_by") @db.Uuid
+  rowCount    Int?         @map("row_count")
+  storageKey  String?      @map("storage_key")
+  sizeBytes   BigInt?      @map("size_bytes")
+  error       String?
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt DateTime?    @map("completed_at") @db.Timestamptz(3)
+  expiresAt   DateTime?    @map("expires_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, id], map: "data_export_tenant_id_id_key")
+  @@index([tenantId, createdAt(sort: Desc)], map: "data_export_tenant_created_idx")
+  @@map("data_export")
+}
+
+/// Subdomain change requests (S-AD19). RLS: tenant_isolation + platform_realm.
+model DomainChangeRequest {
+  id            String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String              @map("tenant_id") @db.Uuid
+  currentSlug   String              @map("current_slug")
+  requestedSlug String              @map("requested_slug")
+  reason        String
+  status        DomainRequestStatus @default(REQUESTED)
+  requestedBy   String              @map("requested_by") @db.Uuid
+  decidedBy     String?             @map("decided_by") @db.Uuid
+  decisionNote  String?             @map("decision_note")
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  decidedAt     DateTime?           @map("decided_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, id], map: "domain_change_request_tenant_id_id_key")
+  @@index([tenantId, createdAt(sort: Desc)], map: "domain_change_request_tenant_created_idx")
+  @@map("domain_change_request")
+}
+
+/// Settlement reconciliation (W7). RLS: tenant_isolation.
+model SettlementReport {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String           @map("tenant_id") @db.Uuid
+  paymentAccountId String           @map("payment_account_id") @db.Uuid
+  periodStart      DateTime         @map("period_start") @db.Date
+  periodEnd        DateTime         @map("period_end") @db.Date
+  source           SettlementSource
+  status           SettlementStatus @default(PROCESSING)
+  providerCount    Int              @default(0) @map("provider_count")
+  localCount       Int              @default(0) @map("local_count")
+  matchedCount     Int              @default(0) @map("matched_count")
+  mismatchCount    Int              @default(0) @map("mismatch_count")
+  error            String?
+  createdBy        String           @map("created_by") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  items SettlementItem[]
+
+  @@unique([tenantId, id], map: "settlement_report_tenant_id_id_key")
+  @@index([tenantId, createdAt(sort: Desc)], map: "settlement_report_tenant_created_idx")
+  @@map("settlement_report")
+}
+
+model SettlementItem {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                @map("tenant_id") @db.Uuid
+  reportId            String                @map("report_id") @db.Uuid
+  reference           String
+  kind                SettlementKind
+  paymentId           String?               @map("payment_id") @db.Uuid
+  localAmountMinor    BigInt?               @map("local_amount_minor")
+  providerAmountMinor BigInt?               @map("provider_amount_minor")
+  currency            String                @db.Char(3)
+  resolution          SettlementResolution?
+  note                String?
+  resolvedBy          String?               @map("resolved_by") @db.Uuid
+  resolvedAt          DateTime?             @map("resolved_at") @db.Timestamptz(3)
+
+  report SettlementReport @relation(fields: [tenantId, reportId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, reportId, reference], map: "settlement_item_report_reference_key")
+  @@map("settlement_item")
+}
+
+/// Monthly platform statements (W8). RLS: tenant_isolation (read) + platform_realm; written by the console only.
+model PlatformStatement {
+  id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                String          @map("tenant_id") @db.Uuid
+  period                  String
+  planCode                String?         @map("plan_code")
+  subscriptionFeeMinor    BigInt          @default(0) @map("subscription_fee_minor")
+  salesGrossMinor         BigInt          @default(0) @map("sales_gross_minor")
+  refundsMinor            BigInt          @default(0) @map("refunds_minor")
+  platformCommissionBps   Int             @default(0) @map("platform_commission_bps")
+  platformCommissionMinor BigInt          @default(0) @map("platform_commission_minor")
+  totalDueMinor           BigInt          @default(0) @map("total_due_minor")
+  currency                String          @default("ZMW") @db.Char(3)
+  status                  StatementStatus @default(DRAFT)
+  issuedAt                DateTime?       @map("issued_at") @db.Timestamptz(3)
+  paidAt                  DateTime?       @map("paid_at") @db.Timestamptz(3)
+  voidedAt                DateTime?       @map("voided_at") @db.Timestamptz(3)
+  externalReference       String?         @map("external_reference")
+  createdBy               String?         @map("created_by") @db.Uuid
+  createdAt               DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime        @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([tenantId, period(sort: Desc)], map: "platform_statement_tenant_period_idx")
+  @@map("platform_statement")
+}
+
+/// In-app notifications (F33). RLS: tenant_isolation.
+model Notification {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  membershipId String    @map("membership_id") @db.Uuid
+  kind         String
+  title        String
+  body         String?
+  link         String?
+  readAt       DateTime? @map("read_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([tenantId, membershipId, createdAt(sort: Desc)], map: "notification_tenant_member_idx")
+  @@map("notification")
+}
+
+model NotificationPreference {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  category     String
+  emailEnabled Boolean  @default(true) @map("email_enabled")
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@id([tenantId, membershipId, category])
+  @@map("notification_preference")
+}
+
+/// Archived rows of a purged school (BR-53). No runtime grants.
+model TenantArchive {
+  id          BigInt   @id @default(autoincrement())
+  tenantId    String   @map("tenant_id") @db.Uuid
+  sourceTable String   @map("source_table")
+  rowData     Json     @map("row_data")
+  archivedAt  DateTime @default(now()) @map("archived_at") @db.Timestamptz(3)
+
+  @@index([tenantId, sourceTable], map: "tenant_archive_tenant_table_idx")
+  @@map("tenant_archive")
 }

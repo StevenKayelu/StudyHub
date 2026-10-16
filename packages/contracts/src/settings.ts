@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { generalSettingsSchema, legalPagesSchema } from './admin';
+
 /**
  * Typed school settings used from M5 to M7 (blueprint 05 §8.2 tenant_setting; BR-56, BR-57, BR-64). Each key
  * is stored as its own tenant_setting row; missing keys take these defaults. The settings screen
@@ -114,9 +116,33 @@ export function commerceSettingsFrom(rows: { key: string; value: unknown }[]): C
   return commerceSettingsSchema.parse(values);
 }
 
-/** PATCH /admin/settings (M8: the commerce group; M9 adds the others). Every change needs a reason (S-AD09). */
+/**
+ * PATCH /admin/settings (S-AD09): every group (M8 commerce, M9 learners, catalogue, instructors, courses
+ * and materials, legal). Every change needs a reason; content settings are defaults for new content only
+ * (BR-64), and upload sizes are capped by the plan.
+ */
 export const settingsPatchSchema = z
   .object({
+    // Learners and catalogue (BR-02, BR-57)
+    learnerRegistrationMode: generalSettingsSchema.shape.learnerRegistrationMode.unwrap().optional(),
+    allowedEmailDomains: generalSettingsSchema.shape.allowedEmailDomains.unwrap().optional(),
+    unverifiedFreeEnrolment: z.boolean().optional(),
+    catalogVisibility: z.enum(['PUBLIC', 'MEMBERS_ONLY']).optional(),
+    // Instructors and review (BR-05, BR-56)
+    instructorOnboardingMode: z.enum(['INVITE_ONLY', 'APPLICATION']).optional(),
+    courseReviewRequired: z.boolean().optional(),
+    // Courses and materials (BR-64)
+    allowedUploadTypes: z.array(z.enum(DOCUMENT_TYPES)).max(DOCUMENT_TYPES.length).optional(),
+    maxDocumentMb: z.number().int().min(1).max(500).optional(),
+    maxVideoGb: z.number().min(0.1).max(20).optional(),
+    downloadsAllowedDefault: z.boolean().optional(),
+    videoCompletionThresholdPct: z.number().int().min(50).max(100).optional(),
+    defaultAccessDays: z.number().int().min(1).max(3650).nullable().optional(),
+    quizDefaults: contentSettingsSchema.shape.quizDefaults.unwrap().optional(),
+    practiceDefaults: contentSettingsSchema.shape.practiceDefaults.unwrap().optional(),
+    // Legal pages, per enabled locale (F36 per school)
+    legalPages: legalPagesSchema.optional(),
+    // Commerce (M8)
     enabledPaymentMethods: z
       .array(z.enum(['MOBILE_MONEY', 'CARD']))
       .max(2)
@@ -139,9 +165,14 @@ export const settingsPatchSchema = z
   .strict();
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
 
-/** GET /admin/settings (M8: commerce). */
+/** GET /admin/settings (S-AD09): every group, the plan's upload caps and the last change. */
 export const adminSettingsSchema = z.object({
   commerce: commerceSettingsSchema.extend({ minPaidPriceMinor: z.number().int() }),
+  general: generalSettingsSchema,
+  content: contentSettingsSchema.omit({ minPaidPriceMinor: true }),
+  /** The plan's caps for upload sizes (min(platform, plan, school), 04 §17.8). */
+  planCaps: z.object({ maxDocumentMb: z.number().int(), maxVideoGb: z.number() }),
+  currency: z.string(),
   /** What the active payment account supports (null: no active account), for BR-62 in the form. */
   supported: z
     .object({

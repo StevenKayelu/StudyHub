@@ -14,7 +14,7 @@ import {
   type VideoEvent,
   type VideoProvider,
 } from '../../platform';
-import { readContentSettings } from '../../tenancy';
+import { capUploadSettings, limitOf, readContentSettings, readPlan } from '../../tenancy';
 import { type AssetPurpose, cleanFileName, uploadProblem, uploadRule } from '../domain/upload-policy';
 import { adjustUsage } from './usage';
 
@@ -50,7 +50,9 @@ export interface AssetStatusView {
 
 /** Who may upload for which purpose: course media is for instructors; avatars for any member. */
 function mayUpload(actor: TenantActor, purpose: AssetPurpose): boolean {
-  return purpose === 'AVATAR' ? can(actor, 'learn.access') : can(actor, 'studio.access');
+  if (purpose === 'AVATAR') return can(actor, 'learn.access');
+  if (purpose === 'BRANDING') return can(actor, 'admin.access');
+  return can(actor, 'studio.access');
 }
 
 /**
@@ -79,7 +81,10 @@ export class MediaService {
     if (!mayUpload(actor, input.purpose)) throw new AppError('FORBIDDEN');
     const tenantId = requireTenantId();
     const { assetId, key } = await this.db.run(async (tx) => {
-      const rule = uploadRule(input.purpose, await readContentSettings(tx));
+      const rule = uploadRule(
+        input.purpose,
+        capUploadSettings(await readContentSettings(tx), (await readPlan(tx)).limits),
+      );
       this.assertAllowed(rule, input.mime, input.sizeBytes);
       await this.reserve(tx, input.sizeBytes);
       const asset = await tx.asset.create({
@@ -135,7 +140,10 @@ export class MediaService {
     if (!mayUpload(actor, 'LESSON_VIDEO')) throw new AppError('FORBIDDEN');
     const tenantId = requireTenantId();
     return this.db.run(async (tx) => {
-      const rule = uploadRule('LESSON_VIDEO', await readContentSettings(tx));
+      const rule = uploadRule(
+        'LESSON_VIDEO',
+        capUploadSettings(await readContentSettings(tx), (await readPlan(tx)).limits),
+      );
       this.assertAllowed(rule, input.mime, input.sizeBytes);
       await this.reserve(tx, input.sizeBytes);
       const asset = await tx.asset.create({
@@ -302,7 +310,12 @@ export class MediaService {
       });
       reserved = Math.max(0, reserved - released);
     }
-    const quota = this.config.get('DEFAULT_STORAGE_QUOTA_MB') * 1024 * 1024;
+    // M9: the plan's storage (BR-49); DEFAULT_STORAGE_QUOTA_MB is only the fallback for tests and tools.
+    const plan = await readPlan(tx);
+    const quota =
+      plan.id === null
+        ? this.config.get('DEFAULT_STORAGE_QUOTA_MB') * 1024 * 1024
+        : (limitOf(plan.limits, 'storage') ?? Number.MAX_SAFE_INTEGER);
     const used = Number(usage?.storage_bytes ?? 0);
     if (used + reserved + sizeBytes > quota) {
       throw new AppError('LIMIT_REACHED', {

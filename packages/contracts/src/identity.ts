@@ -75,6 +75,15 @@ export const meResponseSchema = z.object({
   }),
   membership: z.object({ id: z.uuid(), roles: z.array(tenantRoleSchema) }),
   allowedActions: z.array(z.string()),
+  /** M9 (F44): set when platform staff use this school under a support grant (banner). */
+  support: z
+    .object({
+      staffName: z.string(),
+      scope: z.enum(['READ_ONLY', 'READ_WRITE']),
+      expiresAt: z.iso.datetime(),
+    })
+    .nullable()
+    .default(null),
 });
 
 export const sessionListSchema = z.object({

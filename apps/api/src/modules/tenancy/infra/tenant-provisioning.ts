@@ -99,7 +99,11 @@ export async function provisionTenant(
   const tenantId = randomUUID();
   await client.query('BEGIN');
   try {
-    await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenantId]);
+    // Creating a school and its host is a platform action (tenant_platform_guard, M9).
+    await client.query(
+      `SELECT set_config('app.tenant_id', $1, true), set_config('app.realm', 'platform', true)`,
+      [tenantId],
+    );
     await client.query(
       `INSERT INTO tenant (id, slug, name, kind, status) VALUES ($1, $2, $3, $4::"TenantKind", $5::"TenantStatus")`,
       [tenantId, input.slug, name, input.kind, input.status],

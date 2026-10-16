@@ -20,6 +20,33 @@ export {
 } from './infra/tenant-provisioning';
 export { readCommerceSettings } from './infra/commerce-settings';
 export { readContentSettings } from './infra/content-settings';
-export { featureEnabled, featureMap, TENANT_SWITCH_DEFAULTS } from './domain/features';
+export {
+  featureAvailable,
+  featureEnabled,
+  featureMap,
+  LATER_FEATURES,
+  type PlanGrants,
+  planGrants,
+  TENANT_SWITCH_DEFAULTS,
+} from './domain/features';
+export {
+  capUploadSettings,
+  crossedLevel,
+  type LimitKind,
+  limitOf,
+  limitsFrom,
+  meterPercent,
+  meterState,
+} from './domain/limits';
 export { readFeatures, requireFeature } from './infra/features';
+export {
+  countUsage,
+  type EffectivePlan,
+  enforceLimit,
+  noteUsageLevel,
+  ownerContacts,
+  planFromRow,
+  readPlan,
+} from './infra/plans';
+export { MAINTENANCE_BANNER_KEY, TenantRepository, toBranding } from './infra/tenant.repository';
 export { TenancyModule } from './tenancy.module';

@@ -18,7 +18,8 @@ async function SpaceGuard({ children }: { children: ReactNode }) {
 /** A read-only school (BR-52) shows S-X07 here, also when this space is reached by client navigation. */
 export default function Guard({ children }: { children: ReactNode }) {
   return (
-    <ReadOnlyGate>
+    // BR-53: during offboarding the owner can still export and cancel from Data & offboarding.
+    <ReadOnlyGate allow={/^\/admin\/data(\/|\?|$)/}>
       <SpaceGuard>{children}</SpaceGuard>
     </ReadOnlyGate>
   );

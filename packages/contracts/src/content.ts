@@ -14,6 +14,7 @@ export const assetPurposeSchema = z.enum([
   'LESSON_FILE',
   'LESSON_IMAGE',
   'LESSON_VIDEO',
+  'BRANDING',
 ]);
 
 const fileFields = {

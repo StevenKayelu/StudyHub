@@ -48,6 +48,17 @@ function RailLinks({ items, compactRail }: { items: ShellNavItem[]; compactRail:
           >
             {item.icon}
             <span>{item.label}</span>
+            {item.badge !== undefined ? (
+              <span
+                className={cx(
+                  'ml-auto rounded-full px-2 text-caption tabular',
+                  compactRail && 'md:max-lg:ml-0',
+                  item.badgeTone === 'warning' ? 'bg-warning-soft text-ink' : 'bg-sunken text-ink',
+                )}
+              >
+                {item.badge}
+              </span>
+            ) : null}
           </Link>
         </li>
       ))}

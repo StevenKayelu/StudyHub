@@ -1,5 +1,6 @@
 import { type DynamicModule, Module, type Type } from '@nestjs/common';
 
+import { AdminModule } from './modules/admin';
 import { AssessmentModule } from './modules/assessment';
 import { AuditModule } from './modules/audit';
 import { CommerceModule } from './modules/commerce';
@@ -33,6 +34,7 @@ export class AppModule {
         LearningModule,
         AssessmentModule,
         CommerceModule,
+        AdminModule,
         ...(options.imports ?? []),
       ],
     };

@@ -19,7 +19,12 @@ import {
   registerRequestIdHook,
 } from './modules/platform';
 import { ConsoleAuthService, registerConsoleHook } from './modules/console';
-import { registerOriginCheckHook, registerSessionHook, SessionService } from './modules/identity';
+import {
+  registerOriginCheckHook,
+  registerSessionHook,
+  SessionService,
+  SupportSessionService,
+} from './modules/identity';
 import { registerTenantContextHook, TenantResolver } from './modules/tenancy';
 
 /** JSON bodies above 1 MB are rejected; uploads never pass through the API (blueprint 04 §7.4). */
@@ -62,7 +67,7 @@ export async function createApp(options: CreateAppOptions): Promise<NestFastifyA
   // Order matters: CSRF origin check, then the school (from the host), then who is signed in.
   registerOriginCheckHook(fastify);
   registerTenantContextHook(fastify, app.get(TenantResolver));
-  registerSessionHook(fastify, app.get(SessionService));
+  registerSessionHook(fastify, app.get(SessionService), app.get(SupportSessionService));
   registerConsoleHook(fastify, app.get(ConsoleAuthService), options.env.CONSOLE_HOSTS);
   app.useGlobalFilters(new ProblemFilter(logger));
   app.enableShutdownHooks();

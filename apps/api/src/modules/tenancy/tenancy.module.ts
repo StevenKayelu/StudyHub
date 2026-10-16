@@ -15,6 +15,6 @@ import { TenantRepository } from './infra/tenant.repository';
       useFactory: (repository: TenantRepository) => new TenantResolver(repository),
     },
   ],
-  exports: [TenantResolver],
+  exports: [TenantResolver, TenantRepository],
 })
 export class TenancyModule {}

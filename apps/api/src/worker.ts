@@ -12,6 +12,15 @@ import {
   SecretBox,
   startWorker,
 } from './modules/platform';
+import {
+  createExportHandler,
+  createPurgeHandler,
+  createUsageMeterHandler,
+  EXPORT_JOB,
+  PURGE_JOB,
+  sweepTenants,
+  USAGE_METER_JOB,
+} from './modules/admin';
 import { AUTO_SUBMIT_JOB, createAutoSubmitHandler } from './modules/assessment';
 import { AuditService } from './modules/audit';
 import {
@@ -64,6 +73,14 @@ async function main(): Promise<void> {
     [ORDER_EXPIRE_JOB]: createOrderExpireHandler(commerce),
     [LEDGER_RELEASE_JOB]: createLedgerReleaseHandler(commerce),
     [LEDGER_CHECK_JOB]: createLedgerCheckHandler(commerce),
+    [EXPORT_JOB]: createExportHandler({
+      prisma,
+      storage: media.storage,
+      box,
+      schoolUrlTemplate: env.SCHOOL_URL_TEMPLATE,
+    }),
+    [USAGE_METER_JOB]: createUsageMeterHandler({ prisma, box }),
+    [PURGE_JOB]: createPurgeHandler({ prisma, storage: media.storage }),
   };
   const boss = await startWorker({ connectionString: env.DATABASE_URL_APP, logger, handlers });
 
@@ -85,6 +102,14 @@ async function main(): Promise<void> {
   };
   sweepLedgers();
   const ledgerTimer = setInterval(sweepLedgers, LEDGER_CHECK_INTERVAL_MS);
+  // M9: usage metering (F47) and offboarding purges (F46), discovered hourly in the console realm.
+  const sweepSchools = (): void => {
+    sweepTenants({ prisma, boss }).catch((error: unknown) =>
+      logger.error({ err: error }, 'School sweep failed'),
+    );
+  };
+  sweepSchools();
+  const schoolTimer = setInterval(sweepSchools, LEDGER_CHECK_INTERVAL_MS);
   logger.info('Worker started');
 
   let stopping = false;
@@ -93,6 +118,7 @@ async function main(): Promise<void> {
     stopping = true;
     clearInterval(outboxTimer);
     clearInterval(ledgerTimer);
+    clearInterval(schoolTimer);
     logger.info({ signal }, 'Worker stopping');
     boss
       .stop({ graceful: true, timeout: 10_000 })

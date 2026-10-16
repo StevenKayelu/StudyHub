@@ -283,9 +283,102 @@ export const TENANT_AUTHZ_MATRIX: readonly MatrixRow<TenantMatrixActor>[] = [
       staff: 401,
     },
   },
+  // M9 school administration: owners and administrators; exports of the whole school, domains,
+  // offboarding, billing and go-live are the owner's. Missing or other schools' ids are 404.
+  { method: 'GET', path: '/api/v1/admin/branding', expect: adminOnly(200) },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/branding/validate-colour',
+    body: { accentHex: '#1d5da6' },
+    expect: adminOnly(200),
+  },
+  { method: 'GET', path: '/api/v1/admin/features', expect: adminOnly(200) },
+  {
+    method: 'PUT',
+    path: '/api/v1/admin/features/practiceMode',
+    body: { enabled: true },
+    expect: adminOnly(204),
+  },
+  { method: 'GET', path: '/api/v1/admin/locales', expect: adminOnly(200) },
+  { method: 'GET', path: '/api/v1/admin/users', expect: adminOnly(200) },
+  { method: 'GET', path: '/api/v1/admin/users/{otherMembership}', expect: adminOnly(404) },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/users/{missing}/suspend',
+    body: { reason: 'Matrix check' },
+    expect: adminOnly(404),
+  },
+  { method: 'GET', path: '/api/v1/admin/queues/summary', expect: adminOnly(200) },
+  {
+    method: 'GET',
+    path: '/api/v1/admin/reports/overview?from=2026-01-01&to=2026-01-31',
+    expect: adminOnly(200),
+  },
+  { method: 'GET', path: '/api/v1/admin/exports', expect: adminOnly(200) },
+  { method: 'GET', path: '/api/v1/admin/exports/{missing}', expect: adminOnly(404) },
+  { method: 'POST', path: '/api/v1/admin/exports/tenant', expect: ownerOnly(201) },
+  { method: 'GET', path: '/api/v1/admin/audit-log', expect: adminOnly(200) },
+  { method: 'GET', path: '/api/v1/admin/support-access', expect: adminOnly(200) },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/support-access/{missing}/decision',
+    body: { decision: 'APPROVE' },
+    expect: adminOnly(404),
+  },
+  { method: 'GET', path: '/api/v1/admin/usage', expect: adminOnly(200) },
+  { method: 'GET', path: '/api/v1/admin/onboarding', expect: adminOnly(200) },
+  // The school is already live: the owner gets 409 INVALID_STATE, everyone else is refused first.
+  { method: 'POST', path: '/api/v1/admin/onboarding/go-live', expect: ownerOnly(409) },
+  { method: 'GET', path: '/api/v1/admin/domains', expect: adminOnly(200) },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/domains/change-requests',
+    body: { requestedSlug: 'admin', reason: 'Matrix check' },
+    expect: ownerOnly(422),
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/owners/transfer',
+    body: { membershipId: MISSING_ID },
+    expect: ownerOnly(404),
+  },
+  { method: 'GET', path: '/api/v1/admin/offboarding', expect: adminOnly(200) },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/offboarding',
+    body: { confirmName: 'Not the school name' },
+    expect: ownerOnly(422),
+  },
+  { method: 'GET', path: '/api/v1/admin/billing/statements', expect: ownerOnly(200) },
+  { method: 'GET', path: '/api/v1/admin/reconciliation/settlements', expect: adminOnly(200) },
+  { method: 'GET', path: '/api/v1/me/notifications', expect: signedInOnly(200) },
 ];
 
+/** Console rows (M9): `manager` = owners and operators; `ownerConsole` = platform owners only. */
+const manager = (status: number) =>
+  ({ anonymous: 401, schoolSession: 401, partialStaff: 401, operator: status, owner: status }) as const;
+const ownerConsole = (status: number) =>
+  ({ anonymous: 401, schoolSession: 401, partialStaff: 401, operator: 403, owner: status }) as const;
+
 export const CONSOLE_AUTHZ_MATRIX: readonly MatrixRow<ConsoleMatrixActor>[] = [
+  { method: 'GET', path: '/console/overview', expect: manager(200) },
+  { method: 'GET', path: '/console/metrics', expect: manager(200) },
+  { method: 'GET', path: '/console/tenants', expect: manager(200) },
+  { method: 'GET', path: '/console/tenants/{missing}', expect: manager(404) },
+  {
+    method: 'POST',
+    path: '/console/tenants/{missing}/suspend',
+    body: { reason: 'Matrix check' },
+    expect: manager(404),
+  },
+  { method: 'GET', path: '/console/plans', expect: manager(200) },
+  { method: 'POST', path: '/console/plans', body: {}, expect: ownerConsole(422) },
+  { method: 'GET', path: '/console/settings', expect: ownerConsole(200) },
+  { method: 'GET', path: '/console/audit-log', expect: ownerConsole(200) },
+  { method: 'GET', path: '/console/statements', expect: manager(200) },
+  { method: 'GET', path: '/console/domain-change-requests', expect: manager(200) },
+  { method: 'GET', path: '/console/support-access', expect: manager(200) },
+  { method: 'POST', path: '/console/support-access/emergency', body: {}, expect: ownerConsole(422) },
   {
     method: 'GET',
     path: '/console/me',

@@ -18,6 +18,7 @@ export const GLOBAL_TABLES: Readonly<Record<string, string>> = {
   platform_credential: 'console realm; RLS platform_realm',
   platform_session: 'console realm; RLS platform_realm',
   platform_audit_log: 'console realm; RLS platform_realm',
+  plan: 'plans (M9); readable by every school (plan_read), written in the console realm (platform_realm)',
 };
 
 /**
@@ -33,6 +34,7 @@ export const GLOBAL_RLS_TABLES: Readonly<Record<string, string>> = {
   platform_credential: 'platform_realm',
   platform_session: 'platform_realm',
   platform_audit_log: 'platform_realm',
+  plan: 'platform_realm',
 };
 
 /** Tables that carry RLS with a non-standard policy instead of tenant_isolation. */
@@ -56,7 +58,57 @@ export const DEFINER_INVENTORY: ReadonlySet<string> = new Set([
   'resolve_payment_account',
   'due_ledger_checks',
   'current_school_host',
+  // M9 (ADR-0020): the offboarding purge and subdomain availability (a boolean only)
+  'purge_tenant',
+  'slug_available',
 ]);
+
+/**
+ * ADR-0020 (M9): school tables the console realm may read through a platform_realm policy. They hold
+ * metadata only; none may gain a column on the personal-data denylist below (T-ISO-21).
+ */
+export const PLATFORM_VISIBLE_TABLES: ReadonlySet<string> = new Set([
+  'tenant',
+  'tenant_domain',
+  'tenant_feature',
+  'tenant_usage_daily',
+  'support_access_grant',
+  'domain_change_request',
+  'platform_statement',
+]);
+
+/** Column names that would mean personal data (F43 AC 1); owner_contact_email is the documented exception. */
+export const PERSONAL_COLUMN_PATTERN =
+  /(^|_)(email|phone|msisdn|display_name|first_name|last_name|full_name|address|birth)(_|$)/;
+export const PERSONAL_COLUMN_EXCEPTIONS: ReadonlySet<string> = new Set([
+  'tenant.owner_contact_email',
+  'support_access_grant.staff_display_name',
+]);
+
+/** T-ISO-21: console-realm policies only on the allowlist, and those tables carry no personal columns. */
+export async function findPlatformPolicyViolations(client: Client): Promise<string[]> {
+  const violations: string[] = [];
+  const { rows } = await client.query<{ tablename: string }>(
+    "SELECT DISTINCT tablename FROM pg_policies WHERE schemaname = 'public' AND policyname = 'platform_realm'",
+  );
+  for (const { tablename } of rows) {
+    if (tablename.startsWith('platform_') && tablename !== 'platform_statement') continue;
+    if (tablename === 'plan') continue;
+    if (!PLATFORM_VISIBLE_TABLES.has(tablename))
+      violations.push(tablename + ': platform_realm policy on a table outside the ADR-0020 allowlist');
+  }
+  const columns = await client.query<{ table_name: string; column_name: string }>(
+    "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ANY($1::text[])",
+    [[...PLATFORM_VISIBLE_TABLES]],
+  );
+  for (const { table_name, column_name } of columns.rows) {
+    const key = table_name + '.' + column_name;
+    if (PERSONAL_COLUMN_PATTERN.test(column_name) && !PERSONAL_COLUMN_EXCEPTIONS.has(key)) {
+      violations.push(key + ': personal-looking column on a console-visible table');
+    }
+  }
+  return violations;
+}
 
 /** Indexes on tenant tables that may not lead with tenant_id, and why. */
 export const INDEX_EXCEPTIONS: Readonly<Record<string, string>> = {

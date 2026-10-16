@@ -6,6 +6,8 @@ export interface ResolvedTenant {
   tenantId: string;
   status: ResolvedTenantStatus;
   primaryHost: string | null;
+  /** The host was retired by an address change and now only redirects to primaryHost (BR-50). */
+  redirect: boolean;
 }
 
 /** Looks a normalised host up in the database (implemented with the resolve_tenant() function). */

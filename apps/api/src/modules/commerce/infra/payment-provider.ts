@@ -54,6 +54,15 @@ export type ProviderStatus =
       refundedMinor: number;
     };
 
+/** One settled transaction from the provider's list or statement (W7). */
+export interface ProviderTransaction {
+  reference: string;
+  amountMinor: number;
+  currency: string;
+  status: 'SUCCEEDED' | 'REFUNDED';
+  settledAt: Date;
+}
+
 export type RefundResult = { ok: true; providerRefundId: string } | { ok: false; message: string };
 
 /** A verified webhook event: only what routing needs. Its claims are re-checked with getStatus. */
@@ -92,6 +101,14 @@ export interface PaymentProvider {
     headers: Record<string, string | string[] | undefined>,
     webhookSecret: string,
   ): ProviderEvent | null;
+  /**
+   * W7: settled transactions in a period, only for accounts whose capabilities include
+   * transactionListApi. Otherwise the school uploads the provider's CSV statement.
+   */
+  listTransactions?(
+    account: ProviderAccount,
+    range: { start: Date; end: Date },
+  ): Promise<ProviderTransaction[]>;
   /** Development only: true when the payer approves on a simulated phone (the fake adapter). */
   readonly simulated: boolean;
 }

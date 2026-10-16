@@ -7,6 +7,8 @@ import type { TenantActor } from '../domain/policy';
 export const SESSION_COOKIE = '__Host-sh_session';
 /** Console-realm session cookie, set only on the console host (04 §17.5). */
 export const CONSOLE_COOKIE = '__Host-sh_console';
+/** A platform staff member's support session on ONE school host (F44, M9). */
+export const SUPPORT_COOKIE = '__Host-sh_support';
 
 /** Tenant routes and console routes: the two realms' API prefixes. */
 export const TENANT_API_PREFIX = '/api/v1/';

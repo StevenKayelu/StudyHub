@@ -650,6 +650,111 @@ async function seedCommerce(client: Client, tenantId: string, kek: string): Prom
   });
 }
 
+/**
+ * Demo plans (M9, S-C06). Prices and limits are placeholders until Q-BIZ-8/Q-BIZ-9 are answered;
+ * platform commission is 0 by default (BR-63). The live demo schools get "school-standard".
+ */
+const ALL_FEATURES = {
+  paidCourses: true,
+  practiceMode: true,
+  quizAnalytics: true,
+  instructorApplications: true,
+  instructorRevenueShare: true,
+  publicCatalog: true,
+  whiteLabel: true,
+  dataExport: true,
+};
+export const DEMO_PLANS = [
+  {
+    code: 'starter',
+    name: 'Starter',
+    features: {
+      ...ALL_FEATURES,
+      practiceMode: false,
+      quizAnalytics: false,
+      whiteLabel: false,
+      instructorRevenueShare: false,
+    },
+    limits: {
+      maxActiveLearners: 200,
+      maxInstructors: 5,
+      maxAdmins: 2,
+      storageGb: 10,
+      videoMinutesPerMonth: 5000,
+      hardBlockVideo: false,
+      maxDocumentMb: 50,
+      maxVideoGb: 2,
+    },
+    pricing: { subscriptionFeeMinor: 50_000, currency: 'ZMW', platformCommissionBps: 0 },
+  },
+  {
+    code: 'school-standard',
+    name: 'School standard',
+    features: ALL_FEATURES,
+    limits: {
+      maxActiveLearners: 2000,
+      maxInstructors: 50,
+      maxAdmins: 10,
+      storageGb: 100,
+      videoMinutesPerMonth: 50_000,
+      hardBlockVideo: false,
+      maxDocumentMb: 200,
+      maxVideoGb: 4,
+    },
+    pricing: { subscriptionFeeMinor: 250_000, currency: 'ZMW', platformCommissionBps: 0 },
+  },
+  {
+    code: 'marketplace',
+    name: 'Marketplace',
+    features: ALL_FEATURES,
+    limits: {
+      maxActiveLearners: null,
+      maxInstructors: null,
+      maxAdmins: 25,
+      storageGb: 500,
+      videoMinutesPerMonth: null,
+      hardBlockVideo: false,
+      maxDocumentMb: 500,
+      maxVideoGb: 10,
+    },
+    pricing: { subscriptionFeeMinor: 0, currency: 'ZMW', platformCommissionBps: 500 },
+  },
+] as const;
+
+async function seedPlans(client: Client, tenantIds: Partial<Record<string, string>>): Promise<void> {
+  await withContext(client, { 'app.realm': 'platform' }, async () => {
+    for (const plan of DEMO_PLANS) {
+      await client.query(
+        `INSERT INTO plan (code, name, features, limits, pricing) VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb)
+         ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, features = EXCLUDED.features,
+           limits = EXCLUDED.limits, pricing = EXCLUDED.pricing, status = 'ACTIVE', updated_at = now()`,
+        [
+          plan.code,
+          plan.name,
+          JSON.stringify(plan.features),
+          JSON.stringify(plan.limits),
+          JSON.stringify(plan.pricing),
+        ],
+      );
+    }
+    for (const [slug, code] of [
+      ['acme', 'school-standard'],
+      ['beta', 'school-standard'],
+      ['gamma', 'starter'],
+      ['delta', 'starter'],
+    ] as const) {
+      const tenantId = tenantIds[slug];
+      if (tenantId === undefined) continue;
+      await client.query(
+        `UPDATE tenant SET plan_id = (SELECT id FROM plan WHERE code = $2),
+           owner_contact_email = coalesce(owner_contact_email, $3)
+         WHERE id = $1`,
+        [tenantId, code, `owner@${slug}.test`],
+      );
+    }
+  });
+}
+
 async function main(): Promise<void> {
   const env = loadMigratorEnv();
   if (env.NODE_ENV === 'production') throw new Error('Refusing to seed demo schools in production.');
@@ -680,6 +785,8 @@ async function main(): Promise<void> {
       console.log(`${tenant.hostname}: already present (branding refreshed)`);
     }
     await seedAccounts(client, tenantIds);
+    await seedPlans(client, tenantIds);
+    console.log(`plans: ${DEMO_PLANS.map((plan) => plan.code).join(', ')}`);
     if (tenantIds.acme !== undefined) {
       await seedCatalogue(client, tenantIds.acme);
       await seedLearning(client, tenantIds.acme);

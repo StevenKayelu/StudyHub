@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common';
 import type { InvitationPreview, TeamResponse } from '@studyhub/contracts';
 
 import { AuditService } from '../../audit';
+import { enforceLimit, type LimitKind } from '../../tenancy';
 import {
   AppError,
   hashPassword,
@@ -40,6 +41,13 @@ const ROLE_LABELS: Record<TenantRole, string> = {
 };
 
 const isRole = (value: string): value is TenantRole => (TENANT_ROLES as readonly string[]).includes(value);
+
+/** The plan limit a role counts against (BR-49). */
+export function limitForRole(role: TenantRole): LimitKind {
+  if (role === 'INSTRUCTOR') return 'instructors';
+  if (role === 'TENANT_ADMIN' || role === 'TENANT_OWNER') return 'admins';
+  return 'activeLearners';
+}
 
 /** A database rejection from the BR-58 owner trigger (checked at commit). */
 function isLastOwnerViolation(error: unknown): boolean {
@@ -116,6 +124,8 @@ export class TeamService {
         where: { email: input.email, role: input.role, acceptedAt: null, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      // BR-49: an open invitation holds a seat, so invitations can't overshoot the plan.
+      await enforceLimit(tx, limitForRole(input.role), { box: this.box });
       const created = await tx.invitation.create({
         data: {
           tenantId,
@@ -145,6 +155,32 @@ export class TeamService {
       });
       return created;
     });
+  }
+
+  /**
+   * Ownership transfer (S-AD14): an owner invites an existing administrator to become an owner; the new
+   * owner must accept. The current owner stays an owner until removed (M9 PROPOSED, BR-58 keeps one).
+   */
+  async transferOwnership(
+    actor: TenantActor,
+    membershipId: string,
+    meta: RequestMeta,
+  ): Promise<{ id: string }> {
+    if (!actor.roles.includes('TENANT_OWNER')) throw new AppError('FORBIDDEN');
+    const target = await this.tenantDb.run((tx) =>
+      tx.tenantMembership.findFirst({
+        where: { id: membershipId, status: 'ACTIVE' },
+        select: { roles: { select: { role: true } }, user: { select: { email: true } } },
+      }),
+    );
+    if (target === null) throw new AppError('NOT_FOUND');
+    const roles = target.roles.map((r) => r.role);
+    if (roles.includes('TENANT_OWNER'))
+      throw new AppError('INVALID_STATE', { detail: 'This person is already an owner.' });
+    if (!roles.includes('TENANT_ADMIN')) {
+      throw new AppError('INVALID_STATE', { detail: 'Make this person an administrator first.' });
+    }
+    return this.invite(actor, { email: target.user.email, role: 'TENANT_OWNER' }, meta);
   }
 
   async revokeInvitation(actor: TenantActor, invitationId: string): Promise<void> {
@@ -181,6 +217,9 @@ export class TeamService {
           throw new AppError('LAST_OWNER');
         }
         await tx.membershipRole.deleteMany({ where: { membershipId, role: { in: removed } } });
+        for (const kind of new Set(added.filter((r) => r !== 'LEARNER').map(limitForRole))) {
+          await enforceLimit(tx, kind, { box: this.box, includeInvitations: true });
+        }
         for (const role of added) {
           await tx.membershipRole.create({
             data: { tenantId: requireTenantId(), membershipId, role, grantedBy: actor.userId },
@@ -316,6 +355,10 @@ export class TeamService {
         where: { userId },
         select: { id: true, status: true, roles: { select: { role: true } } },
       });
+      // Staff invitations held their seat; a new learner takes one now (BR-49).
+      if (invitation.role === 'LEARNER' && membership?.status !== 'ACTIVE') {
+        await enforceLimit(tx, 'activeLearners', { box: this.box });
+      }
       if (membership === null) {
         const created = await tx.tenantMembership.create({
           data: { tenantId, userId, status: 'ACTIVE', joinedAt: new Date() },

@@ -4,6 +4,8 @@ import {
   type TenantBootstrap,
   tenantBootstrapSchema,
 } from '@studyhub/contracts';
+import { headers } from 'next/headers';
+import { permanentRedirect } from 'next/navigation';
 
 export interface SystemStatus {
   api: 'ok' | 'unreachable';
@@ -69,6 +71,21 @@ export async function getTenantBootstrap(host: string): Promise<TenantBootstrap 
     throw new Error('The API is unreachable.');
   }
   if (response.status === 404) return null;
+  if (response.status === 421) {
+    // BR-50: a retired address redirects permanently to the school's new one for 90 days.
+    const moved = problemSchema.safeParse(await response.json().catch(() => null));
+    const primary = moved.success ? (moved.data as { primaryHost?: unknown }).primaryHost : undefined;
+    if (typeof primary === 'string' && SCHOOL_HOST.test(primary)) {
+      const incoming = await headers();
+      const path = incoming.get('x-studyhub-path') ?? '/';
+      const port = /:(\d{1,5})$/.exec(incoming.get('host') ?? '')?.[1];
+      const scheme = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+      permanentRedirect(
+        `${scheme}://${primary}${port === undefined ? '' : `:${port}`}${path.startsWith('/') ? path : '/'}`,
+      );
+    }
+    return null;
+  }
   if (!response.ok) throw new Error(`The API returned ${response.status} for the school bootstrap.`);
   return tenantBootstrapSchema.parse(await response.json());
 }

@@ -5,7 +5,14 @@
  */
 import type { ContentSettings } from '@studyhub/contracts';
 
-export type AssetPurpose = 'COURSE_COVER' | 'AVATAR' | 'LESSON_FILE' | 'LESSON_IMAGE' | 'LESSON_VIDEO';
+export type AssetPurpose =
+  | 'COURSE_COVER'
+  | 'AVATAR'
+  | 'LESSON_FILE'
+  | 'LESSON_IMAGE'
+  | 'LESSON_VIDEO'
+  // M9 (F39): logos and icons; PNG/JPEG/WebP only (SVG rejected, Q-TEN-13), re-encoded by the pipeline.
+  | 'BRANDING';
 export type AssetKind = 'IMAGE' | 'DOCUMENT' | 'VIDEO';
 
 const MB = 1024 * 1024;
@@ -19,6 +26,7 @@ const PLATFORM: Record<AssetPurpose, { kind: AssetKind; maxBytes: number }> = {
   COURSE_COVER: { kind: 'IMAGE', maxBytes: 5 * MB },
   AVATAR: { kind: 'IMAGE', maxBytes: 5 * MB },
   LESSON_IMAGE: { kind: 'IMAGE', maxBytes: 5 * MB },
+  BRANDING: { kind: 'IMAGE', maxBytes: 2 * MB },
   LESSON_FILE: { kind: 'DOCUMENT', maxBytes: 500 * MB },
   LESSON_VIDEO: { kind: 'VIDEO', maxBytes: 20 * GB },
 };

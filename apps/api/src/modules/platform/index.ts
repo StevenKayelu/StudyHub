@@ -20,7 +20,13 @@ export {
   runWithContext,
 } from './context/request-context';
 export { PrismaService } from './db/prisma.service';
-export { runInPlatformTx, runInTenantTx, TenantDb, type TenantTx } from './db/tenant-db';
+export {
+  runInPlatformTenantTx,
+  runInPlatformTx,
+  runInTenantTx,
+  TenantDb,
+  type TenantTx,
+} from './db/tenant-db';
 export { AppError, parseOrThrow, zodIssuesToFieldErrors } from './errors/app-error';
 export { buildProblem, ProblemFilter, sendProblem } from './errors/problem.filter';
 export {
@@ -101,3 +107,4 @@ export {
 } from './security/totp';
 export { genReqId, registerRequestIdHook, REQUEST_ID_HEADER } from './logging/request-id.hook';
 export { PlatformModule, type PlatformModuleOptions } from './platform.module';
+export { csvCell, parseCsv, toCsv } from './text/csv';

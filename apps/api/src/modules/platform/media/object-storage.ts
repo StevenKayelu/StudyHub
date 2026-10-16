@@ -3,9 +3,11 @@ import type { Readable } from 'node:stream';
 import {
   CreateBucketCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -30,6 +32,8 @@ export interface ObjectStorage {
   stream(key: string): Promise<Readable>;
   put(key: string, body: Buffer, contentType: string): Promise<void>;
   delete(key: string): Promise<void>;
+  /** Deletes every object under a prefix (offboarding purge, F46); returns how many were deleted. */
+  deletePrefix(prefix: string): Promise<number>;
 }
 
 export interface S3StorageOptions {
@@ -145,5 +149,29 @@ export class S3ObjectStorage implements ObjectStorage {
   async delete(key: string): Promise<void> {
     await this.ready();
     await this.client.send(new DeleteObjectCommand({ Bucket: this.options.bucket, Key: key }));
+  }
+
+  async deletePrefix(prefix: string): Promise<number> {
+    if (!/^t\/[0-9a-f-]{36}\/$/.test(prefix))
+      throw new Error('deletePrefix only removes a school prefix t/{tenantId}/');
+    await this.ready();
+    let deleted = 0;
+    let token: string | undefined;
+    do {
+      const page = await this.client.send(
+        new ListObjectsV2Command({ Bucket: this.options.bucket, Prefix: prefix, ContinuationToken: token }),
+      );
+      const keys = (page.Contents ?? []).flatMap((object) =>
+        object.Key === undefined ? [] : [{ Key: object.Key }],
+      );
+      if (keys.length > 0) {
+        await this.client.send(
+          new DeleteObjectsCommand({ Bucket: this.options.bucket, Delete: { Objects: keys } }),
+        );
+        deleted += keys.length;
+      }
+      token = page.IsTruncated === true ? page.NextContinuationToken : undefined;
+    } while (token !== undefined);
+    return deleted;
   }
 }

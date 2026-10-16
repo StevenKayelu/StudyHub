@@ -1647,12 +1647,47 @@
             "items": {
               "type": "string"
             }
+          },
+          "support": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "staffName": {
+                    "type": "string"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "READ_ONLY",
+                      "READ_WRITE"
+                    ]
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "staffName",
+                  "scope",
+                  "expiresAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "user",
           "membership",
-          "allowedActions"
+          "allowedActions",
+          "support"
         ],
         "additionalProperties": false
       },
@@ -2233,7 +2268,13 @@
               "COURSE_NOT_PURCHASABLE",
               "ORDER_NOT_PAYABLE",
               "IDEMPOTENCY_KEY_REUSED",
-              "IDEMPOTENCY_IN_PROGRESS"
+              "IDEMPOTENCY_IN_PROGRESS",
+              "SUPPORT_READ_ONLY",
+              "SUPPORT_ACTION_EXCLUDED",
+              "COLOUR_NOT_COMPLIANT",
+              "ONBOARDING_INCOMPLETE",
+              "CONFIRMATION_MISMATCH",
+              "TENANT_MOVED"
             ]
           },
           "detail": {
@@ -2398,6 +2439,219 @@
                   }
                 },
                 "additionalProperties": false
+              },
+              "logoAssetId": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "logoDarkAssetId": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "faviconAssetId": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "appIconAssetId": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "homeLayout": {
+                "default": {
+                  "sections": [
+                    {
+                      "key": "featured",
+                      "visible": true
+                    },
+                    {
+                      "key": "categories",
+                      "visible": true
+                    },
+                    {
+                      "key": "instructors",
+                      "visible": true
+                    },
+                    {
+                      "key": "newest",
+                      "visible": true
+                    }
+                  ]
+                },
+                "type": "object",
+                "properties": {
+                  "heroTitle": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "heroSubtitle": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "sections": {
+                    "default": [
+                      {
+                        "key": "featured",
+                        "visible": true
+                      },
+                      {
+                        "key": "categories",
+                        "visible": true
+                      },
+                      {
+                        "key": "instructors",
+                        "visible": true
+                      },
+                      {
+                        "key": "newest",
+                        "visible": true
+                      }
+                    ],
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "enum": [
+                            "featured",
+                            "categories",
+                            "instructors",
+                            "newest"
+                          ]
+                        },
+                        "visible": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "visible"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "sections"
+                ],
+                "additionalProperties": false
+              },
+              "footerLinks": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "url": {
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "supportEmail": {
+                "default": null,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "supportPhone": {
+                "default": null,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "social": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "enum": [
+                    "facebook",
+                    "x",
+                    "instagram",
+                    "linkedin",
+                    "youtube",
+                    "tiktok"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "maxLength": 300,
+                  "pattern": "^https:\\/\\/[^\\s]+$"
+                }
               }
             },
             "required": [
@@ -2406,7 +2660,16 @@
               "accentHex",
               "fontPreset",
               "showPoweredBy",
-              "terminology"
+              "terminology",
+              "logoAssetId",
+              "logoDarkAssetId",
+              "faviconAssetId",
+              "appIconAssetId",
+              "homeLayout",
+              "footerLinks",
+              "supportEmail",
+              "supportPhone",
+              "social"
             ],
             "additionalProperties": false
           },
@@ -2471,6 +2734,38 @@
               "dataExport",
               "certificates"
             ]
+          },
+          "notice": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "legal": {
+            "default": {
+              "terms": false,
+              "privacy": false,
+              "refunds": false
+            },
+            "type": "object",
+            "properties": {
+              "terms": {
+                "type": "boolean"
+              },
+              "privacy": {
+                "type": "boolean"
+              },
+              "refunds": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "terms",
+              "privacy",
+              "refunds"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -2480,7 +2775,9 @@
           "status",
           "branding",
           "locales",
-          "features"
+          "features",
+          "notice",
+          "legal"
         ],
         "additionalProperties": false
       }

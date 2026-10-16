@@ -1,4 +1,7 @@
 import { createHmac } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 
 import { expect, type Page } from '@playwright/test';
@@ -60,6 +63,65 @@ export function totp(secretBase32: string, offsetSteps = 0): string {
   const mac = createHmac('sha1', Buffer.from(bytes)).update(counter).digest();
   const offset = mac[mac.length - 1]! & 0x0f;
   return ((mac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0');
+}
+
+/**
+ * The demo staff member's TOTP secret, shared between test files (workers run in parallel and the seed
+ * resets enrolment): whoever enrols writes it here. The API refuses a code whose step was already used,
+ * so every code comes from a step later than the last one handed out.
+ */
+const STAFF_TOTP_FILE = join(tmpdir(), 'studyhub-e2e-staff-totp.json');
+const currentStep = () => Math.floor(Date.now() / 30_000);
+
+function readStaffTotp(): { secret: string; lastStep: number } | null {
+  if (!existsSync(STAFF_TOTP_FILE)) return null;
+  return JSON.parse(readFileSync(STAFF_TOTP_FILE, 'utf8')) as { secret: string; lastStep: number };
+}
+
+export function saveStaffSecret(secret: string): void {
+  writeFileSync(STAFF_TOTP_FILE, JSON.stringify({ secret, lastStep: currentStep() }));
+}
+
+/** A not-yet-used code for the demo staff member, or null when no secret is known. */
+export async function nextStaffCode(): Promise<string | null> {
+  const state = readStaffTotp();
+  if (state === null) return null;
+  const step = Math.max(currentStep(), state.lastStep + 1);
+  // The API accepts one step of drift: wait until the chosen step is at most one ahead.
+  while (step > currentStep() + 1) await new Promise((resolve) => setTimeout(resolve, 1000));
+  writeFileSync(STAFF_TOTP_FILE, JSON.stringify({ secret: state.secret, lastStep: step }));
+  return totp(state.secret, step - currentStep());
+}
+
+/**
+ * Signs the demo staff member in on the console host (enrolling TOTP on first use). Returns false when
+ * the account is enrolled but its secret is unknown to this run (re-seed to reset it).
+ */
+export async function consoleSignIn(page: Page): Promise<boolean> {
+  await page.context().clearCookies();
+  await page.goto(school('console.localhost', '/sign-in'));
+  // The forms are client components: a click before hydration would submit natively and do nothing.
+  await page.waitForLoadState('networkidle');
+  await page.getByLabel('Email').fill(DEMO.staff);
+  await page.getByLabel('Password').fill(DEMO_PASSWORD);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.waitForURL(/\/(enrol|verify)$/);
+  await page.waitForLoadState('networkidle');
+  if (page.url().endsWith('/enrol')) {
+    const secret = (await page.getByTestId('totp-secret').textContent())!.replace(/\s/g, '');
+    await page.getByLabel('6-digit code').fill(totp(secret));
+    await page.getByRole('button', { name: 'Turn on' }).click();
+    await expect(page.getByTestId('recovery-codes').locator('li')).toHaveCount(8);
+    saveStaffSecret(secret);
+    await page.getByRole('button', { name: 'I have saved them' }).click();
+  } else {
+    const code = await nextStaffCode();
+    if (code === null) return false;
+    await page.getByLabel('Code').fill(code);
+    await page.getByRole('button', { name: 'Verify' }).click();
+  }
+  await page.waitForURL(school('console.localhost', '/'));
+  return true;
 }
 
 /** Signs in on a school host through the real form and waits for the landing page. */

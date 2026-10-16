@@ -805,6 +805,7 @@ describe('identity realms (M4)', () => {
             const response = await call(row.method, row.path.replace('{missing}', MISSING), {
               host: CONSOLE,
               cookie: actor === 'schoolSession' ? cookie?.replace(SESSION, CONSOLE_COOKIE) : cookie,
+              body: row.body,
             });
             expect(response.statusCode, response.body).toBe(expected);
           });

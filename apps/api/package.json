@@ -38,6 +38,7 @@
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "@studyhub/contracts": "workspace:*",
+    "@studyhub/ui": "workspace:*",
     "fastify": "5.12.5",
     "nodemailer": "10.1.0",
     "pg": "8.23.1",

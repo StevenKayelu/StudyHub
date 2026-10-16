@@ -6,12 +6,27 @@
 export const TENANT_ROLES = ['LEARNER', 'INSTRUCTOR', 'TENANT_ADMIN', 'TENANT_OWNER'] as const;
 export type TenantRole = (typeof TENANT_ROLES)[number];
 
+/** Platform staff working in a school under an approved grant (F44, BR-47). */
+export interface SupportContext {
+  grantId: string;
+  platformUserId: string;
+  staffName: string;
+  scope: 'READ_ONLY' | 'READ_WRITE';
+  expiresAt: Date;
+}
+
 export interface TenantActor {
+  /** The global account; for a support session, the staff member's platform user id. */
   userId: string;
+  /** For a support session, SUPPORT_MEMBERSHIP_ID (no membership exists). */
   membershipId: string;
   sessionId: string;
   roles: readonly TenantRole[];
+  support?: SupportContext;
 }
+
+/** The placeholder membership of a support session: matches no row, so member-only data stays empty. */
+export const SUPPORT_MEMBERSHIP_ID = '00000000-0000-4000-8000-000000000000';
 
 export type TenantAction =
   | 'learn.access'

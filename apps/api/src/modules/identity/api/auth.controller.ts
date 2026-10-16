@@ -31,6 +31,7 @@ import {
   tokenRequestSchema,
 } from '@studyhub/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 
 import { AppError, parseOrThrow } from '../../platform';
 import { AuthService, type RequestMeta, type SignedIn } from '../application/auth.service';
@@ -249,6 +250,13 @@ export class AuthController {
   @HttpCode(201)
   invite(@Body() body: unknown, @Req() request: FastifyRequest) {
     return this.team.invite(requireActor(), parseOrThrow(inviteRequestSchema, body), meta(request));
+  }
+
+  @Post('admin/owners/transfer')
+  @HttpCode(201)
+  transferOwnership(@Body() body: unknown, @Req() request: FastifyRequest) {
+    const { membershipId } = parseOrThrow(z.object({ membershipId: z.uuid() }), body);
+    return this.team.transferOwnership(requireActor(), membershipId, meta(request));
   }
 
   @Delete('admin/invitations/:id')

@@ -14,7 +14,14 @@ export type EmailTemplate =
   | 'refund-learner'
   | 'refund-instructor'
   | 'payout-recorded'
-  | 'ledger-mismatch';
+  | 'ledger-mismatch'
+  // Tenant administration and console (M9)
+  | 'usage-alert'
+  | 'school-status'
+  | 'support-request'
+  | 'domain-decision'
+  | 'export-ready'
+  | 'statement-issued';
 
 export interface EmailVariables {
   schoolName: string;
@@ -27,6 +34,16 @@ export interface EmailVariables {
   amount?: string;
   number?: string;
   reference?: string;
+  /** M9: limit alerts, lifecycle and support emails (plain words, already formatted). */
+  meter?: string;
+  level?: string;
+  status?: string;
+  reason?: string;
+  detail?: string;
+  /** F48: the school's support address, used as Reply-To. */
+  replyTo?: string;
+  /** F48: the school's own sender display name, when it set one. */
+  fromName?: string;
 }
 
 export interface RenderedEmail {
@@ -144,6 +161,69 @@ export function renderEmail(template: EmailTemplate, vars: EmailVariables): Rend
           vars.reference ?? '',
         ].filter((p) => p !== ''),
         { label: 'Open orders and payments', href: link },
+      );
+    case 'usage-alert':
+      return render(
+        `${school} has used ${vars.level ?? ''}% of its ${vars.meter ?? 'plan'} limit`,
+        [
+          hello,
+          vars.level === '100'
+            ? `${school} has reached its plan limit for ${vars.meter ?? 'this item'}. New ${vars.meter ?? 'items'} can't be added until usage goes down or the plan changes.`
+            : `${school} has used ${vars.level ?? '80'}% of its plan limit for ${vars.meter ?? 'this item'}.`,
+          'Contact the platform team if you need a larger plan.',
+        ],
+        link === '' ? undefined : { label: 'See usage and plan', href: link },
+      );
+    case 'school-status':
+      return render(
+        `${school}: ${vars.status ?? 'status changed'}`,
+        [
+          hello,
+          vars.detail ?? `The status of ${school} has changed.`,
+          ...(vars.reason ? [`Reason: ${vars.reason}`] : []),
+        ],
+        link === '' ? undefined : { label: `Open ${school}`, href: link },
+      );
+    case 'support-request':
+      return render(
+        vars.status === 'EMERGENCY'
+          ? `Emergency support access to ${school} has started`
+          : `Platform support asks for access to ${school}`,
+        [
+          hello,
+          vars.status === 'EMERGENCY'
+            ? `The platform owner opened emergency support access to ${school}. Every action is recorded in your audit log, and you can revoke the access at any time.`
+            : `The platform support team asks for temporary access to ${school}. Nothing is shared until an owner or administrator approves it.`,
+          ...(vars.reason ? [`Reason given: ${vars.reason}`] : []),
+        ],
+        link === '' ? undefined : { label: 'Review support access', href: link },
+      );
+    case 'domain-decision':
+      return render(
+        `Your address change for ${school} was ${vars.status === 'APPROVED' ? 'approved' : 'not approved'}`,
+        [
+          hello,
+          vars.status === 'APPROVED'
+            ? `${school} now lives at ${vars.detail ?? 'its new address'}. The old address redirects there for 90 days.`
+            : `The platform team did not approve the requested address for ${school}.`,
+          ...(vars.reason ? [`Note: ${vars.reason}`] : []),
+        ],
+        link === '' ? undefined : { label: 'Open the Domain page', href: link },
+      );
+    case 'export-ready':
+      return render(
+        `Your ${school} export is ready`,
+        [hello, `The export you requested at ${school} is ready. The download link works for 7 days.`],
+        link === '' ? undefined : { label: 'Open exports', href: link },
+      );
+    case 'statement-issued':
+      return render(
+        `New platform statement for ${school}: ${vars.number ?? ''}`.trim(),
+        [
+          hello,
+          `A platform statement for ${vars.number ?? 'last month'} is available. Total due: ${vars.amount ?? ''}.`,
+        ],
+        link === '' ? undefined : { label: 'Open Billing', href: link },
       );
   }
 }
