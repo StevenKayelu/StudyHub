@@ -161,7 +161,7 @@ export function Checkout({
       {item !== undefined ? (
         <Card className="flex flex-col gap-1 p-5">
           <h2 className="text-h3">{t.summary}</h2>
-          <p className="text-label">{item.title}</p>
+          <p className="text-label">{fill(texts.commerce.parts[item.part], { title: item.title })}</p>
           {item.instructorName !== '' ? (
             <p className="text-body-sm text-muted">{fill(t.by, { name: item.instructorName })}</p>
           ) : null}

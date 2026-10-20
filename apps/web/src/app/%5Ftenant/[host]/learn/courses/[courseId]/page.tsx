@@ -23,7 +23,7 @@ export default async function CoursePlayerEntry({ params }: { params: Promise<{ 
   if (course !== 'locked') {
     const target =
       course.resume?.lessonId ??
-      lessons.find((lesson) => lesson.status !== 'COMPLETED')?.id ??
+      lessons.find((lesson) => lesson.status !== 'COMPLETED' && !lesson.locked)?.id ??
       lessons[0]?.id;
     if (target !== undefined) redirect(`/learn/courses/${courseId}/lessons/${target}`);
   }

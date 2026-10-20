@@ -4,7 +4,7 @@ import { CircleCheck, FileText, ListChecks, PlayCircle } from 'lucide-react';
 import type { Metadata } from 'next';
 import NextLink from 'next/link';
 import { notFound } from 'next/navigation';
-import { getLocale, getTranslations } from 'next-intl/server';
+import { getFormatter, getLocale, getTranslations } from 'next-intl/server';
 import { cache } from 'react';
 
 import { CourseAction } from '../../../../../../components/course-action';
@@ -207,6 +207,27 @@ export default async function CourseLandingPage({ params }: { params: Params }) 
               viewer={course.viewer}
               texts={await learnTexts(terms)}
               priceLabel={await formatPrice(course.priceMinor, course.currency)}
+              {...(course.depositPlan !== null && {
+                deposit: {
+                  amount: await formatPrice(course.depositPlan.depositMinor, course.currency),
+                  balance: await formatPrice(course.depositPlan.balanceMinor, course.currency),
+                  lessonPct: course.depositPlan.lessonPct,
+                  days: course.depositPlan.balanceDueDays,
+                },
+              })}
+              {...(course.viewer.balance !== null && {
+                balance: {
+                  amount: await formatPrice(
+                    course.viewer.balance.amount.amountMinor,
+                    course.viewer.balance.amount.currency,
+                  ),
+                  dueDate: (await getFormatter()).dateTime(new Date(course.viewer.balance.dueAt), {
+                    dateStyle: 'long',
+                  }),
+                  overdue: course.viewer.balance.overdue,
+                  lessonPct: course.viewer.balance.lessonPct,
+                },
+              })}
             />
           </Card>
         </aside>

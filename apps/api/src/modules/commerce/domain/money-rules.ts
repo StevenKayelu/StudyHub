@@ -188,6 +188,7 @@ export function prefixFromSlug(slug: string): string {
 
 /**
  * BR-10 / BR-11: what a provider-confirmed success means for this order. `null` when it can be granted.
+ * A BALANCE order needs the learner's deposit enrolment to still owe it (docs/design/payment-plans.md).
  */
 export function successProblem(input: {
   orderStatus: OrderState;
@@ -196,12 +197,18 @@ export function successProblem(input: {
   paidAmountMinor: number;
   paidCurrency: string;
   alreadyEnrolled: boolean;
-}): 'AMOUNT_MISMATCH' | 'ALREADY_PAID' | 'ALREADY_ENROLLED' | 'ORDER_CLOSED' | null {
+  part?: 'FULL' | 'DEPOSIT' | 'BALANCE';
+  owesBalance?: boolean;
+}): 'AMOUNT_MISMATCH' | 'ALREADY_PAID' | 'ALREADY_ENROLLED' | 'NOTHING_OWED' | 'ORDER_CLOSED' | null {
   if (input.paidAmountMinor !== input.orderAmountMinor || input.paidCurrency !== input.orderCurrency) {
     return 'AMOUNT_MISMATCH';
   }
   if (input.orderStatus === 'PAID' || input.orderStatus === 'REFUNDED') return 'ALREADY_PAID';
-  if (input.alreadyEnrolled) return 'ALREADY_ENROLLED';
+  if (input.part === 'BALANCE') {
+    if (input.owesBalance !== true) return 'NOTHING_OWED';
+  } else if (input.alreadyEnrolled) {
+    return 'ALREADY_ENROLLED';
+  }
   // A cancelled order whose payment still went through: the learner paid, so it is reviewed.
   if (input.orderStatus === 'CANCELLED') return 'ORDER_CLOSED';
   return null;

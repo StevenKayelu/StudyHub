@@ -73,7 +73,7 @@ export default async function ReceiptPage({ params }: { params: Params }) {
             <tbody className="divide-y divide-line border-y border-line">
               {receipt.items.map((item) => (
                 <tr key={item.title}>
-                  <td className="py-2">{item.title}</td>
+                  <td className="py-2">{t(`parts.${item.part}`, { title: item.title })}</td>
                   <td className="tabular py-2 text-right">{money(item.unitPrice)}</td>
                 </tr>
               ))}

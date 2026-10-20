@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { richTextSchema } from './rich-text';
+import { depositPlanRulesSchema } from './settings';
 
 /**
  * Catalogue and authoring contracts (M5; blueprint 05 §4.2–4.5). Shared by the API and the web app.
@@ -150,6 +151,17 @@ export const createCourseSchema = z.object({
   subjectId: z.uuid().optional(),
 });
 
+/**
+ * A tutor's deposit plan (docs/design/payment-plans.md): the deposit opens `lessonPct` % of the lessons
+ * and the balance (price − deposit) is due `balanceDueDays` after the deposit is paid.
+ */
+export const depositPlanSchema = z.object({
+  depositMinor: z.number().int().min(1).max(100_000_000),
+  lessonPct: z.number().int().min(1).max(99),
+  balanceDueDays: z.number().int().min(1).max(365),
+});
+export type DepositPlan = z.infer<typeof depositPlanSchema>;
+
 /** PATCH /studio/courses/{id}: only the fields sent change; `version` is the If-Match guard. */
 export const updateCourseSchema = z.object({
   version: z.number().int().min(1),
@@ -168,6 +180,8 @@ export const updateCourseSchema = z.object({
   coverAssetId: z.uuid().nullable().optional(),
   priceMinor: z.number().int().min(0).max(100_000_000).optional(),
   accessDays: z.number().int().min(1).max(3650).nullable().optional(),
+  /** null removes the plan. */
+  depositPlan: depositPlanSchema.nullable().optional(),
 });
 
 export const lessonSummarySchema = z.object({
@@ -261,6 +275,9 @@ export const studioCourseSchema = z.object({
   priceMinor: z.number(),
   currency: z.string(),
   accessDays: z.number().nullable(),
+  depositPlan: depositPlanSchema.nullable(),
+  /** The school's rules for deposit plans (the pricing form's limits). */
+  depositRules: depositPlanRulesSchema,
   status: courseStatusSchema,
   version: z.number(),
   publishedAt: z.iso.datetime().nullable(),
@@ -372,10 +389,23 @@ export const courseViewerSchema = z.object({
    * (BR-54): "Buy" is offered (sign-in first if needed). M8.
    */
   purchasable: z.boolean(),
+  /** Purchasable and the course offers a deposit plan the school allows: "Pay a deposit" is offered too. */
+  depositAvailable: z.boolean(),
+  /** The viewer's unpaid balance on this course (a deposit enrolment), or null. */
+  balance: z
+    .object({
+      amount: z.object({ amountMinor: z.number().int(), currency: z.string().length(3) }),
+      dueAt: z.iso.datetime(),
+      overdue: z.boolean(),
+      lessonPct: z.number().int(),
+    })
+    .nullable(),
 });
 
 export const courseLandingSchema = courseCardSchema.extend({
   id: z.uuid(),
+  /** Offered only while the school allows deposit plans. `balanceMinor` = price − deposit. */
+  depositPlan: depositPlanSchema.extend({ balanceMinor: z.number().int() }).nullable(),
   description: z.unknown().nullable(),
   outcomes: z.array(z.string()),
   requirements: z.array(z.string()),

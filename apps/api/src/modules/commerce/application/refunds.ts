@@ -56,6 +56,7 @@ export async function refundOrder(
     });
     if (inFlight !== null)
       throw new AppError('INVALID_STATE', { detail: 'This payment is already refunded.' });
+    if (paymentId === undefined) await requireDepositRefundable(tx, orderId);
 
     const account = await accountById(tx, payment.paymentAccountId);
     if (input.mode === 'PROVIDER' && refundModeFor('PROVIDER_API', account.capabilities) !== 'PROVIDER') {
@@ -177,10 +178,17 @@ export async function completeRefund(
       where: { id: payment.orderId },
       data: { status: 'REFUNDED', refundedAt: now, updatedAt: now, version: { increment: 1 } },
     });
-    await tx.enrollment.updateMany({
-      where: { orderItemId: item.id, status: 'ACTIVE' },
-      data: { status: 'REVOKED', revokedAt: now, revokeReason: 'Refunded', updatedAt: now },
-    });
+    if (item.part === 'BALANCE') {
+      // A refunded balance locks the rest again: the deposit's lessons stay open and the balance is owed.
+      await tx.$executeRaw`
+        UPDATE enrollment SET access_limit_pct = plan_lesson_pct, balance_order_item_id = NULL, updated_at = ${now}
+         WHERE balance_order_item_id = ${item.id}::uuid AND status = 'ACTIVE'`;
+    } else {
+      await tx.enrollment.updateMany({
+        where: { orderItemId: item.id, status: 'ACTIVE' },
+        data: { status: 'REVOKED', revokedAt: now, revokeReason: 'Refunded', updatedAt: now },
+      });
+    }
     const sale = await tx.ledgerEntry.findFirst({ where: { orderItemId: item.id, type: 'SALE' } });
     if (sale !== null) {
       const amounts = reversalOf({
@@ -228,6 +236,7 @@ export async function completeRefund(
         courseTitle: title,
         amount: formatAmount(Number(refund.amountMinor), refund.currency),
         ...(refund.manualReference !== null && { reference: refund.manualReference }),
+        ...(paidTheOrder && item?.part === 'BALANCE' && { part: 'BALANCE' }),
       },
     });
   }
@@ -261,4 +270,22 @@ export async function completeRefund(
       ...(refund.manualReference !== null && { reference: refund.manualReference }),
     },
   });
+}
+
+/**
+ * PROPOSED 4 (docs/design/payment-plans.md): a deposit is refunded only while its balance is unpaid, so a
+ * learner is never left with a paid balance and no access. Refund the balance first.
+ */
+async function requireDepositRefundable(tx: TenantTx, orderId: string): Promise<void> {
+  const item = await tx.orderItem.findFirst({ where: { orderId }, select: { id: true, part: true } });
+  if (item?.part !== 'DEPOSIT') return;
+  const paidBalance = await tx.enrollment.findFirst({
+    where: { orderItemId: item.id, status: 'ACTIVE', balanceOrderItemId: { not: null } },
+    select: { id: true },
+  });
+  if (paidBalance !== null) {
+    throw new AppError('INVALID_STATE', {
+      detail: 'The balance of this course is paid. Refund the balance order first, then the deposit.',
+    });
+  }
 }

@@ -151,7 +151,11 @@ export type PaymentFailureCode = z.infer<typeof paymentFailureCodeSchema>;
 export const moneySchema = z.object({ amountMinor: z.number().int(), currency: z.string().length(3) });
 export type Money = z.infer<typeof moneySchema>;
 
-export const createOrderSchema = z.object({ courseId: z.uuid() });
+/** Which part of the price an order charges (docs/design/payment-plans.md). */
+export const orderPartSchema = z.enum(['FULL', 'DEPOSIT', 'BALANCE']);
+export type OrderPart = z.infer<typeof orderPartSchema>;
+
+export const createOrderSchema = z.object({ courseId: z.uuid(), part: orderPartSchema.default('FULL') });
 
 export const startPaymentSchema = z.discriminatedUnion('method', [
   z.object({
@@ -197,6 +201,7 @@ export const orderViewSchema = z.object({
       instructorName: z.string(),
       accessDays: z.number().int().nullable(),
       unitPrice: moneySchema,
+      part: orderPartSchema,
     }),
   ),
   /** The latest payment of the order, if any (the page shows its state). */
@@ -230,6 +235,7 @@ export const myOrdersSchema = z.object({
       status: orderStatusSchema,
       courseId: z.uuid(),
       courseTitle: z.string(),
+      part: orderPartSchema,
       total: moneySchema,
       receiptNumber: z.string().nullable(),
     }),
@@ -247,7 +253,7 @@ export const receiptViewSchema = z.object({
     taxId: z.string().nullable(),
   }),
   buyer: z.object({ name: z.string(), email: z.string() }),
-  items: z.array(z.object({ title: z.string(), unitPrice: moneySchema })),
+  items: z.array(z.object({ title: z.string(), unitPrice: moneySchema, part: orderPartSchema })),
   total: moneySchema,
   payment: z.object({
     method: paymentMethodSchema,

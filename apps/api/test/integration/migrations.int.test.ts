@@ -48,6 +48,7 @@ describe('database migrations and roles (PostgreSQL 17)', () => {
       { migration_name: '0008_commerce', finished: true },
       { migration_name: '0009_tenant_admin_console', finished: true },
       { migration_name: '0010_storage_provenance', finished: true },
+      { migration_name: '0011_deposit_plans', finished: true },
     ]);
   });
 

@@ -23,6 +23,7 @@ const TEMPLATES = [
   'refund-instructor',
   'payout-recorded',
   'ledger-mismatch',
+  'balance-reminder',
   'usage-alert',
   'school-status',
   'support-request',

@@ -25,7 +25,9 @@ import {
 import { AUTO_SUBMIT_JOB, createAutoSubmitHandler } from './modules/assessment';
 import { AuditService } from './modules/audit';
 import {
+  BALANCE_REMINDER_JOB,
   type CommerceDeps,
+  createBalanceReminderHandler,
   createLedgerCheckHandler,
   createLedgerReleaseHandler,
   createOrderExpireHandler,
@@ -75,6 +77,7 @@ async function main(): Promise<void> {
     [ORDER_EXPIRE_JOB]: createOrderExpireHandler(commerce),
     [LEDGER_RELEASE_JOB]: createLedgerReleaseHandler(commerce),
     [LEDGER_CHECK_JOB]: createLedgerCheckHandler(commerce),
+    [BALANCE_REMINDER_JOB]: createBalanceReminderHandler(commerce),
     [EXPORT_JOB]: createExportHandler({
       prisma,
       locations,

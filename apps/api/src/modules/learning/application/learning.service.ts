@@ -16,7 +16,16 @@ import { MediaService } from '../../media';
 import { AppError, isSchoolReadOnly, requireTenantId, TenantDb, type TenantTx } from '../../platform';
 import { readContentSettings } from '../../tenancy';
 import { courseProgress, type LessonProgressStatus, nextLessonState } from '../domain/progress-rules';
-import { activeEnrollment, type CourseForAccess, grantFor, inCatalogue, refusal } from './access';
+import {
+  activeEnrollment,
+  balanceRequired,
+  type CourseForAccess,
+  type EnrollmentRow,
+  grantFor,
+  inCatalogue,
+  lockedLessons,
+  refusal,
+} from './access';
 
 const COURSE_FOR_ACCESS = {
   id: true,
@@ -25,7 +34,19 @@ const COURSE_FOR_ACCESS = {
   status: true,
   ownerMembershipId: true,
   firstPublishedAt: true,
+  currency: true,
 } as const;
+
+/** A deposit enrolment's unpaid balance for the player (null with full access). */
+function balanceView(enrollment: EnrollmentRow, currency: string, now = new Date()) {
+  if (enrollment.accessLimitPct === null || enrollment.balanceDueAt === null) return null;
+  return {
+    amount: { amountMinor: Number(enrollment.balanceMinor ?? 0n), currency },
+    dueAt: enrollment.balanceDueAt.toISOString(),
+    overdue: enrollment.balanceDueAt <= now,
+    lessonPct: enrollment.accessLimitPct,
+  };
+}
 
 const UNIQUE_VIOLATION = 'P2002';
 
@@ -156,6 +177,7 @@ export class LearningService {
       const grant = await grantFor(tx, member, course, expired);
       if (grant === null) throw await refusal(tx, member, course);
       const { sections, lessons } = await orderedLessons(tx, courseId);
+      const locked = await lockedLessons(tx, grant, courseId);
       const progress =
         grant.enrollment === null
           ? []
@@ -180,12 +202,14 @@ export class LearningService {
                 progressPercent: summary.percent,
                 completedAt: grant.enrollment.completedAt?.toISOString() ?? null,
                 expiresAt: grant.enrollment.expiresAt?.toISOString() ?? null,
+                balance: balanceView(grant.enrollment, course.currency),
               },
         sections: sections.map((section) => ({
           id: section.id,
           title: section.title,
           lessons: section.lessons.map((lesson) => ({
             ...lesson,
+            locked: locked.has(lesson.id),
             status: (byLesson.get(lesson.id)?.status ?? 'NOT_STARTED') as LessonProgressStatus,
             positionSeconds: byLesson.get(lesson.id)?.positionSeconds ?? 0,
           })),
@@ -526,7 +550,13 @@ export class LearningService {
     if (lesson === null) throw new AppError('NOT_FOUND');
     const course: CourseForAccess & { slug: string; title: string } = lesson.course;
     const grant = await grantFor(tx, actor, course, expired);
-    if (grant !== null) return { lesson, course, access: grant.access, enrollment: grant.enrollment };
+    if (grant !== null) {
+      // Beyond what a deposit opened: locked until the balance is paid (no content, video or files).
+      if (grant.enrollment !== null && (await lockedLessons(tx, grant, course.id)).has(lesson.id)) {
+        throw balanceRequired(grant.enrollment);
+      }
+      return { lesson, course, access: grant.access, enrollment: grant.enrollment };
+    }
     if (lesson.isPreview && (await inCatalogue(tx, actor, course))) {
       return { lesson, course, access: 'PREVIEW' as const, enrollment: null };
     }

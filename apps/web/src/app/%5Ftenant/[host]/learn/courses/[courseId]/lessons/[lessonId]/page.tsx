@@ -9,7 +9,8 @@ import { cache } from 'react';
 import { LessonPlayer } from '../../../../../../../../components/lesson-player';
 import { PlayerFrame } from '../../../../../../../../components/player-frame';
 import { RichText } from '../../../../../../../../components/rich-text';
-import { fetchLearning, UUID } from '../../../../../../../../lib/learn-api';
+import { formatPrice } from '../../../../../../../../components/course-card';
+import { fetchLearning, fetchLesson, UUID } from '../../../../../../../../lib/learn-api';
 import { learnTexts } from '../../../../../../../../lib/learn-texts';
 import { currentTenant, getTerms } from '../../../../../../../../lib/tenant';
 
@@ -19,17 +20,25 @@ const load = cache(async (courseId: string, lessonId: string) => {
   if (!UUID.test(courseId) || !UUID.test(lessonId)) notFound();
   const [course, lesson] = await Promise.all([
     fetchLearning(`/api/v1/learn/courses/${courseId}`, playerCourseSchema),
-    fetchLearning(`/api/v1/learn/lessons/${lessonId}`, playerLessonSchema),
+    fetchLesson(`/api/v1/learn/lessons/${lessonId}`, playerLessonSchema),
   ]);
   if (course === null || lesson === null) notFound();
-  if (course !== 'locked' && lesson !== 'locked' && lesson.courseId !== course.course.id) notFound();
+  if (course !== 'locked' && typeof lesson !== 'string' && lesson.courseId !== course.course.id) notFound();
+  // A lesson beyond the deposit must belong to this course's outline to show the balance panel.
+  if (
+    course !== 'locked' &&
+    lesson === 'balance' &&
+    !course.sections.some((section) => section.lessons.some((l) => l.id === lessonId))
+  ) {
+    notFound();
+  }
   return { course, lesson };
 });
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { courseId, lessonId } = await params;
   const { course, lesson } = await load(courseId, lessonId);
-  if (course === 'locked' || lesson === 'locked') return { robots: { index: false } };
+  if (course === 'locked' || typeof lesson === 'string') return { robots: { index: false } };
   return { title: `${lesson.title} · ${course.course.title}`, robots: { index: false } };
 }
 
@@ -57,6 +66,34 @@ export default async function LessonPage({ params }: { params: Params }) {
           }
         />
       </main>
+    );
+  }
+
+  if (lesson === 'balance') {
+    // Deposit plans: a lesson beyond what the deposit opened. The outline stays, the content doesn't.
+    const balance = course.enrollment?.balance ?? null;
+    return (
+      <PlayerFrame course={course} currentLessonId={lessonId} terms={terms}>
+        <StatePanel
+          kind="permission"
+          headingLevel={1}
+          title={t('learn.player.lockedTitle')}
+          message={
+            balance === null
+              ? undefined
+              : t('learn.player.lockedHint', {
+                  ...terms,
+                  percent: balance.lessonPct,
+                  balance: await formatPrice(balance.amount.amountMinor, balance.amount.currency),
+                })
+          }
+          actions={
+            <NextLink href={`/c/${course.course.slug}`} className={buttonClasses('primary')}>
+              {t('learn.player.payBalance')}
+            </NextLink>
+          }
+        />
+      </PlayerFrame>
     );
   }
 

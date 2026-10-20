@@ -47,6 +47,15 @@ export const playerCourseSchema = z.object({
       progressPercent: z.number(),
       completedAt: z.iso.datetime().nullable(),
       expiresAt: z.iso.datetime().nullable(),
+      /** A deposit enrolment with its balance unpaid: only `lessonPct` % of the lessons are open. */
+      balance: z
+        .object({
+          amount: z.object({ amountMinor: z.number().int(), currency: z.string().length(3) }),
+          dueAt: z.iso.datetime(),
+          overdue: z.boolean(),
+          lessonPct: z.number().int(),
+        })
+        .nullable(),
     })
     .nullable(),
   sections: z.array(
@@ -61,6 +70,8 @@ export const playerCourseSchema = z.object({
           durationSeconds: z.number().nullable(),
           isPreview: z.boolean(),
           isRequired: z.boolean(),
+          /** Beyond what the deposit opened: the balance must be paid first. */
+          locked: z.boolean(),
           ...lessonStateFields,
         }),
       ),

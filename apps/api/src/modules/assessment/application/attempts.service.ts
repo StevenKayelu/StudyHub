@@ -9,7 +9,7 @@ import type {
 
 import { Prisma } from '../../../generated/prisma/client';
 import type { TenantActor } from '../../identity';
-import { grantFor } from '../../learning';
+import { grantFor, requireQuizOpen } from '../../learning';
 import {
   addToOutbox,
   AppError,
@@ -578,6 +578,7 @@ export class AttemptsService {
     if (grant === null)
       throw new AppError(quiz.course.status === 'PUBLISHED' ? 'ENROLMENT_INACTIVE' : 'NOT_FOUND');
     if (quiz.status !== 'READY' && grant.access === 'ENROLLED') throw new AppError('NOT_FOUND');
+    await requireQuizOpen(tx, grant, quiz.course.id, quiz.id);
     return { quiz, grant };
   }
 

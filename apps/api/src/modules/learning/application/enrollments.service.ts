@@ -25,17 +25,25 @@ export class EnrollmentsService {
   /** What the landing page offers this visitor: Enrol, Continue, or open as owner/administrator. */
   async viewer(
     actor: TenantActor | null,
-    course: { id: string; ownerMembershipId: string; priceMinor: number },
+    course: { id: string; ownerMembershipId: string; priceMinor: number; currency: string },
   ): Promise<CourseViewer> {
     const isOwner = actor !== null && actor.membershipId === course.ownerMembershipId;
     const base = {
       signedIn: actor !== null,
       isOwner,
       canOpenWithoutEnrolment: isOwner || can(actor, 'admin.access'),
+      // Decided by the catalogue with `purchasable` (school rules and the course's plan).
+      depositAvailable: false,
     };
     // `purchasable` is decided by the catalogue, which knows whether the school can take payments (M8).
     if (actor === null) {
-      return { ...base, enrollment: null, canEnrolFree: course.priceMinor === 0, purchasable: false };
+      return {
+        ...base,
+        enrollment: null,
+        canEnrolFree: course.priceMinor === 0,
+        purchasable: false,
+        balance: null,
+      };
     }
     return this.db.run(async (tx) => {
       const enrollment = await activeEnrollment(tx, actor.membershipId, course.id);
@@ -45,6 +53,7 @@ export class EnrollmentsService {
           enrollment: null,
           canEnrolFree: course.priceMinor === 0 && !isOwner,
           purchasable: false,
+          balance: null,
         };
       }
       const resume =
@@ -65,6 +74,16 @@ export class EnrollmentsService {
         },
         canEnrolFree: false,
         purchasable: false,
+        // A deposit enrolment: the balance opens the rest (payable after the deadline too).
+        balance:
+          enrollment.accessLimitPct === null || enrollment.balanceDueAt === null
+            ? null
+            : {
+                amount: { amountMinor: Number(enrollment.balanceMinor ?? 0n), currency: course.currency },
+                dueAt: enrollment.balanceDueAt.toISOString(),
+                overdue: enrollment.balanceDueAt <= new Date(),
+                lessonPct: enrollment.accessLimitPct,
+              },
       };
     });
   }

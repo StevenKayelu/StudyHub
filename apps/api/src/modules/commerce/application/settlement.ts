@@ -6,6 +6,7 @@ import { activeEnrollment } from '../../learning';
 import {
   addToOutbox,
   AppError,
+  type JobEnvelope,
   queueEmail,
   requireTenantId,
   runInTenantTx,
@@ -23,6 +24,7 @@ import {
   successProblem,
   type PaymentState,
 } from '../domain/money-rules';
+import { balanceDueAt, balanceReminderTimes } from '../domain/deposit-rules';
 import type { PaymentGateway } from '../infra/payment-gateway';
 import type { ProviderStatus } from '../infra/payment-provider';
 
@@ -32,6 +34,7 @@ export const PAYMENT_CHECK_JOB = 'commerce.payment-check';
 export const ORDER_EXPIRE_JOB = 'commerce.order-expire';
 export const LEDGER_RELEASE_JOB = 'commerce.ledger-release';
 export const LEDGER_CHECK_JOB = 'commerce.ledger-check';
+export const BALANCE_REMINDER_JOB = 'commerce.balance-reminder';
 
 /** What the money workflows need, in the API and in the worker alike. */
 export interface CommerceDeps {
@@ -145,14 +148,16 @@ export async function applyProviderStatus(
   const order = payment.order;
   const item = order.items[0];
   if (item === undefined) throw new Error(`order ${order.id} has no item`);
-  const enrolled = (await activeEnrollment(tx, order.membershipId, item.courseId)) !== null;
+  const enrollment = await activeEnrollment(tx, order.membershipId, item.courseId);
   const problem = successProblem({
     orderStatus: order.status,
     orderAmountMinor: Number(order.totalMinor),
     orderCurrency: order.currency,
     paidAmountMinor: status.amountMinor,
     paidCurrency: status.currency,
-    alreadyEnrolled: enrolled,
+    alreadyEnrolled: enrollment !== null,
+    part: item.part,
+    owesBalance: enrollment !== null && enrollment.accessLimitPct !== null,
   });
   if (problem !== null) {
     await tx.payment.update({
@@ -210,9 +215,33 @@ export async function grantPurchase(
   });
 
   let enrollmentId: string | null = null;
-  if ((await activeEnrollment(tx, order.membershipId, item.courseId)) === null) {
+  let dueAt: Date | null = null;
+  const existing = await activeEnrollment(tx, order.membershipId, item.courseId);
+  if (item.part === 'BALANCE') {
+    // The balance opens the rest of the course; start date and expiry stay as the deposit set them.
+    if (existing === null || existing.accessLimitPct === null) {
+      throw new AppError('INVALID_STATE', { detail: 'Nothing is owed on this course any more.' });
+    }
+    await tx.enrollment.update({
+      where: { id: existing.id },
+      data: { accessLimitPct: null, balanceOrderItemId: item.id, updatedAt: now },
+    });
+    enrollmentId = existing.id;
+  } else if (existing === null) {
     const content = await readContentSettings(tx);
     const days = item.accessDays ?? content.defaultAccessDays;
+    const deposit =
+      item.part === 'DEPOSIT' &&
+      item.planLessonPct !== null &&
+      item.planBalanceMinor !== null &&
+      item.planBalanceDueDays !== null
+        ? {
+            accessLimitPct: item.planLessonPct,
+            planLessonPct: item.planLessonPct,
+            balanceMinor: item.planBalanceMinor,
+            balanceDueAt: balanceDueAt(now, item.planBalanceDueDays),
+          }
+        : null;
     const enrollment = await tx.enrollment.create({
       data: {
         tenantId,
@@ -222,11 +251,19 @@ export async function grantPurchase(
         orderItemId: item.id,
         startedAt: now,
         expiresAt: days === null ? null : new Date(now.getTime() + days * 86_400_000),
+        ...deposit,
       },
       select: { id: true },
     });
     enrollmentId = enrollment.id;
     await tx.course.update({ where: { id: item.courseId }, data: { enrollmentCount: { increment: 1 } } });
+    if (deposit !== null) {
+      dueAt = deposit.balanceDueAt;
+      for (const at of balanceReminderTimes(dueAt, now)) {
+        const outboxId = await addToOutbox(tx, BALANCE_REMINDER_JOB, { enrollmentId: enrollment.id });
+        await tx.outbox.update({ where: { id: outboxId }, data: { availableAt: at } });
+      }
+    }
   }
 
   // W2: the instructor's earnings, only where the school shares revenue (03 §9.2 F29).
@@ -272,6 +309,8 @@ export async function grantPurchase(
         amount: formatAmount(Number(order.totalMinor), order.currency),
         number,
         link: await schoolLink(tx, deps.schoolUrlTemplate, `/account/purchases/${order.id}`),
+        ...(item.part !== 'FULL' && { part: item.part }),
+        ...(dueAt !== null && { dueDate: schoolDate(dueAt) }),
       },
     });
   }
@@ -288,6 +327,63 @@ export async function grantPurchase(
     },
   });
   return { receiptNumber: number };
+}
+
+/** A date as emails show it, in the school's time zone ("31 October 2026"). */
+export function schoolDate(at: Date): string {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: SCHOOL_TIME_ZONE, dateStyle: 'long' }).format(at);
+}
+
+/**
+ * `commerce.balance-reminder`: reminds a learner of an unpaid balance (PROPOSED 3). Nothing is sent once
+ * the balance is paid or the enrolment has ended.
+ */
+export function createBalanceReminderHandler(
+  deps: Pick<CommerceDeps, 'prisma' | 'box' | 'schoolUrlTemplate'>,
+) {
+  return async (envelope: JobEnvelope): Promise<{ sent: boolean }> => {
+    const enrollmentId = envelope.payload.enrollmentId;
+    if (typeof enrollmentId !== 'string') return { sent: false };
+    return runInTenantTx(deps.prisma, async (tx) => {
+      const enrollment = await tx.enrollment.findUnique({
+        where: { id: enrollmentId },
+        select: {
+          status: true,
+          membershipId: true,
+          accessLimitPct: true,
+          balanceMinor: true,
+          balanceDueAt: true,
+          expiresAt: true,
+          course: { select: { slug: true, title: true, currency: true } },
+        },
+      });
+      if (
+        enrollment === null ||
+        enrollment.status !== 'ACTIVE' ||
+        enrollment.accessLimitPct === null ||
+        enrollment.balanceMinor === null ||
+        enrollment.balanceDueAt === null ||
+        (enrollment.expiresAt !== null && enrollment.expiresAt <= new Date())
+      ) {
+        return { sent: false };
+      }
+      const buyer = await buyerOf(tx, enrollment.membershipId);
+      if (buyer === null) return { sent: false };
+      await queueEmail(tx, deps.box, {
+        template: 'balance-reminder',
+        to: buyer.email,
+        vars: {
+          schoolName: await schoolName(tx),
+          displayName: buyer.name,
+          courseTitle: enrollment.course.title,
+          amount: formatAmount(Number(enrollment.balanceMinor), enrollment.course.currency),
+          dueDate: schoolDate(enrollment.balanceDueAt),
+          link: await schoolLink(tx, deps.schoolUrlTemplate, `/courses/${enrollment.course.slug}`),
+        },
+      });
+      return { sent: true };
+    });
+  };
 }
 
 /** BR-33 / BR-55: the next number of the school's year, taken inside this transaction (gap-free). */

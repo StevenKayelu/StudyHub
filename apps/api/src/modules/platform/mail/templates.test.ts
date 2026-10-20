@@ -13,6 +13,7 @@ const TEMPLATES: EmailTemplate[] = [
   'refund-instructor',
   'payout-recorded',
   'ledger-mismatch',
+  'balance-reminder',
   'usage-alert',
   'school-status',
   'support-request',

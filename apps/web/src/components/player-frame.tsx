@@ -2,12 +2,13 @@ import 'server-only';
 
 import type { PlayerCourse } from '@studyhub/contracts';
 import { Banner, ProgressLine, SkipLink } from '@studyhub/ui';
-import { ArrowLeft, Circle, CircleCheck, CircleDot, ListChecks } from 'lucide-react';
+import { ArrowLeft, Circle, CircleCheck, CircleDot, ListChecks, Lock } from 'lucide-react';
 import NextLink from 'next/link';
-import { getTranslations } from 'next-intl/server';
+import { getFormatter, getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 
 import { currentTenant, type Terms } from '../lib/tenant';
+import { formatPrice } from './course-card';
 
 /**
  * The course player's frame (S-L02, 06 §1 "content first, chrome last"): a slim top bar with the way
@@ -35,8 +36,25 @@ export async function PlayerFrame({
   if (course.access === 'ADMIN') notices.push(p('adminPreview'));
   if (course.access === 'ENROLLED' && course.course.status !== 'PUBLISHED') notices.push(p('unpublished'));
   const back = course.course.status === 'PUBLISHED' ? `/c/${course.course.slug}` : '/learn';
-  // F22: practice for enrolled learners, while the school has the practice feature (F40).
-  const practice = course.access === 'ENROLLED' && (await currentTenant())?.features.practiceMode === true;
+  // Deposit plans: what is owed and by when; the course page has the "Pay the balance" button.
+  const balance = course.enrollment?.balance ?? null;
+  let balanceNotice: { text: string; overdue: boolean } | null = null;
+  if (balance !== null) {
+    balanceNotice = {
+      overdue: balance.overdue,
+      text: p(balance.overdue ? 'balanceOverdue' : 'balanceDue', {
+        percent: balance.lessonPct,
+        balance: await formatPrice(balance.amount.amountMinor, balance.amount.currency),
+        date: (await getFormatter()).dateTime(new Date(balance.dueAt), { dateStyle: 'long' }),
+      }),
+    };
+  }
+  // F22: practice for enrolled learners, while the school has the practice feature (F40). Practice draws
+  // on the whole question bank, so it opens with the balance (PROPOSED 2, payment plans).
+  const practice =
+    course.access === 'ENROLLED' &&
+    balance === null &&
+    (await currentTenant())?.features.practiceMode === true;
 
   const outline = (
     <nav aria-label={p('outline')} className="flex flex-col gap-4">
@@ -46,15 +64,17 @@ export async function PlayerFrame({
           <ol className="flex flex-col border-s-[3px] border-line">
             {section.lessons.map((lesson) => {
               const current = lesson.id === currentLessonId;
-              const state = current ? 'CURRENT' : lesson.status;
+              const state = current ? 'CURRENT' : lesson.locked ? 'LOCKED' : lesson.status;
               const Icon =
                 lesson.status === 'COMPLETED'
                   ? CircleCheck
                   : current
                     ? CircleDot
-                    : lesson.type === 'QUIZ'
-                      ? ListChecks
-                      : Circle;
+                    : lesson.locked
+                      ? Lock
+                      : lesson.type === 'QUIZ'
+                        ? ListChecks
+                        : Circle;
               return (
                 <li key={lesson.id} className="-ms-[3px]">
                   <NextLink
@@ -76,7 +96,7 @@ export async function PlayerFrame({
                             : 'text-muted'
                       }`}
                     />
-                    <span className="flex-1">{lesson.title}</span>
+                    <span className={`flex-1 ${lesson.locked ? 'text-muted' : ''}`}>{lesson.title}</span>
                     <span className="sr-only">{p(`states.${state}`)}</span>
                   </NextLink>
                 </li>
@@ -124,6 +144,11 @@ export async function PlayerFrame({
           {notice}
         </Banner>
       ))}
+      {balanceNotice !== null ? (
+        <Banner tone={balanceNotice.overdue ? 'warning' : 'info'}>
+          {balanceNotice.text} <NextLink href={`/c/${course.course.slug}`}>{p('payBalance')}</NextLink>
+        </Banner>
+      ) : null}
       <div className="mx-auto grid w-full max-w-app flex-1 gap-6 px-4 py-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="hidden lg:block">{outline}</aside>
         <main id="content" className="flex min-w-0 flex-col gap-4">

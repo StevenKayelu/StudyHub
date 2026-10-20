@@ -10,7 +10,7 @@ import type { z } from 'zod';
 
 import { Prisma } from '../../../generated/prisma/client';
 import type { TenantActor } from '../../identity';
-import { grantFor } from '../../learning';
+import { grantFor, requireFullAccess } from '../../learning';
 import { AppError, requireTenantId, TenantDb, type TenantTx } from '../../platform';
 import { readContentSettings, requireFeature } from '../../tenancy';
 import { shuffled } from '../domain/quiz-rules';
@@ -251,6 +251,7 @@ export class PracticeService {
         course.status === 'PUBLISHED' || grant !== null ? 'ENROLMENT_INACTIVE' : 'NOT_FOUND',
       );
     }
+    requireFullAccess(grant);
     return course;
   }
 

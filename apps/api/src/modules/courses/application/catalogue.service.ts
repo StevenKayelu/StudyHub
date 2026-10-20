@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { CatalogueResponse, CourseCard, CourseLanding, InstructorPage } from '@studyhub/contracts';
 
-import { paymentsProblem } from '../../commerce';
+import { paymentsProblem, planOffered } from '../../commerce';
 import type { TenantActor } from '../../identity';
 import { EnrollmentsService } from '../../learning';
 import { AppError, TenantDb, type TenantTx } from '../../platform';
-import { readContentSettings, readFeatures } from '../../tenancy';
+import { readCommerceSettings, readContentSettings, readFeatures } from '../../tenancy';
 import { StudioService } from './studio.service';
 
 const DEFAULT_LIMIT = 12;
@@ -124,15 +124,28 @@ export class CatalogueService {
         where: { membershipId: course.ownerMembershipId },
       });
       if (profile?.status === 'SUSPENDED') throw new AppError('NOT_FOUND');
-      return { course, profile };
+      const { depositPlans } = await readCommerceSettings(tx);
+      return { course, profile, depositPlans };
     });
-    const { course, profile } = data;
+    const { course, profile, depositPlans } = data;
+    const price = Number(course.priceMinor);
+    const plan =
+      course.depositMinor === null || course.depositLessonPct === null || course.balanceDueDays === null
+        ? null
+        : {
+            depositMinor: Number(course.depositMinor),
+            lessonPct: course.depositLessonPct,
+            balanceDueDays: course.balanceDueDays,
+          };
+    // Offered only while the school allows deposit plans and the plan still fits the price and rules.
+    const offeredPlan = planOffered(price, plan, depositPlans) ? plan : null;
     const lessons = course.sections.flatMap((s) => s.lessons);
     const covers = await this.studio.coverUrls([course.coverAssetId]);
     const viewer = await this.enrollments.viewer(actor, {
       id: course.id,
       ownerMembershipId: course.ownerMembershipId,
       priceMinor: Number(course.priceMinor),
+      currency: course.currency,
     });
     // M8: "Buy" only where the school can sell this course now (BR-54, BR-04).
     if (
@@ -143,6 +156,7 @@ export class CatalogueService {
     ) {
       viewer.purchasable =
         (await this.db.run((tx) => paymentsProblem(tx, course.ownerMembershipId))) === null;
+      viewer.depositAvailable = viewer.purchasable && offeredPlan !== null;
     }
     return {
       id: course.id,
@@ -153,6 +167,8 @@ export class CatalogueService {
       level: course.level,
       priceMinor: Number(course.priceMinor),
       currency: course.currency,
+      depositPlan:
+        offeredPlan === null ? null : { ...offeredPlan, balanceMinor: price - offeredPlan.depositMinor },
       lessonCount: lessons.length,
       durationSeconds: lessons.reduce((total, l) => total + (l.durationSeconds ?? 0), 0),
       instructor: { name: profile?.displayName ?? '', slug: profile?.slug ?? null },

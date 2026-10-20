@@ -45,7 +45,13 @@ export const QUEUE_DEFINITIONS: ReadonlyArray<Omit<Queue, 'name'> & { name: stri
     retryBackoff: true,
     retentionSeconds: 14 * 24 * 3600,
   })),
-  ...['commerce.order-expire', 'commerce.ledger-release', 'commerce.ledger-check'].map((name) => ({
+  // Deposit plans: balance reminders before and on the deadline (docs/design/payment-plans.md).
+  ...[
+    'commerce.order-expire',
+    'commerce.ledger-release',
+    'commerce.ledger-check',
+    'commerce.balance-reminder',
+  ].map((name) => ({
     name,
     retryLimit: 5,
     retryDelay: 30,

@@ -129,11 +129,17 @@
         "COMPLETED": "Completed",
         "IN_PROGRESS": "In progress",
         "NOT_STARTED": "Not started",
-        "CURRENT": "Current lesson"
+        "CURRENT": "Current lesson",
+        "LOCKED": "Locked until the balance is paid"
       },
       "keyboardHint": "Tip: use the ← and → keys for the previous and next lesson.",
       "downloadName": "Download {name}",
-      "takeQuiz": "Open the quiz"
+      "takeQuiz": "Open the quiz",
+      "balanceDue": "Your deposit opened {percent}% of this {courseLower}. Pay the balance of {balance} by {date} to open the rest.",
+      "balanceOverdue": "The balance of {balance} was due on {date}. You keep the lessons your deposit opened; pay the balance to open the rest.",
+      "lockedTitle": "This lesson opens when you pay the balance",
+      "lockedHint": "Your deposit opened the first {percent}% of the lessons. Pay the balance of {balance} to open this one and the rest of the {courseLower}.",
+      "payBalance": "Pay the balance"
     },
     "video": {
       "simulated": "Practice video",
@@ -356,7 +362,19 @@
       "accessDays": "Days",
       "paidNote": "Learners can buy paid {coursesLower} once the school accepts payments. The publish checklist shows anything still missing.",
       "preview": "Learner pays {price} · Commission {commission} · You earn ≈ {net}",
-      "previewFee": "The payment provider’s fee comes out of your share and varies by method."
+      "previewFee": "The payment provider’s fee comes out of your share and varies by method.",
+      "paymentOptions": "Payment options",
+      "fullOnly": "Full price only",
+      "withDeposit": "Full price, or a deposit now and the balance later",
+      "deposit": "Deposit (K)",
+      "depositHint": "At least {percent}% of the price ({amount}).",
+      "lessonPct": "Lessons the deposit opens (%)",
+      "lessonPctHint": "Counted from the start of the {courseLower}, in order. Free previews are always open.",
+      "balanceDays": "Days to pay the balance",
+      "balanceDaysHint": "Your school allows up to {days} days.",
+      "depositPreview": "Learners can pay {deposit} now and {balance} within {days} days. The deposit opens {percent}% of the lessons; the balance opens the rest.",
+      "depositOff": "Your school has switched deposit plans off, so your saved plan isn’t offered to learners.",
+      "depositInvalid": "Enter a deposit, a share of lessons from 1 to 99 % and a number of days."
     },
     "publish": {
       "title": "Publish",
@@ -928,7 +946,12 @@
       "notForSaleHint": "The school isn’t taking payments at the moment. Ask the school if you need access sooner.",
       "starting": "Opening checkout…",
       "verifyFirst": "Confirm your email address before buying. We sent you a link when you signed up.",
-      "pendingOrder": "Continue checkout"
+      "pendingOrder": "Continue checkout",
+      "payDeposit": "Pay a deposit of {deposit}",
+      "depositHint": "The deposit opens {percent}% of the lessons now. Pay the remaining {balance} within {days} days to open the rest.",
+      "balanceDue": "Your deposit opened {percent}% of this {courseLower}. Pay the balance of {balance} by {date} to open the rest.",
+      "balanceOverdue": "The balance of {balance} was due on {date}. You keep the lessons your deposit opened; pay the balance to open the rest.",
+      "payBalance": "Pay the balance ({balance})"
     },
     "previewTitle": "Preview: {title}",
     "previewLink": "Preview {title}",
@@ -1004,6 +1027,11 @@
     "false": "False"
   },
   "commerce": {
+    "parts": {
+      "FULL": "{title}",
+      "DEPOSIT": "{title} (deposit)",
+      "BALANCE": "{title} (balance)"
+    },
     "orderStatuses": {
       "PENDING": "Waiting for payment",
       "PAID": "Paid",
@@ -1231,6 +1259,11 @@
         "orderExpiry": "Unpaid orders expire after (minutes)",
         "refundWindow": "Refund window (days)",
         "refundWindowHint": "Guidance for refunds, and how long instructor earnings stay pending.",
+        "depositPlans": "Deposit plans",
+        "depositPlansEnabled": "Let instructors offer a deposit now and the balance later",
+        "depositPlansHint": "The deposit opens part of the lessons; the balance, paid later, opens the rest. Learners keep the deposit’s lessons if they pay late.",
+        "minDepositPct": "Smallest deposit (% of the price)",
+        "maxBalanceDays": "Longest time to pay the balance (days)",
         "refundMode": "Refunds",
         "refundModes": {
           "PROVIDER_API": "Through the payment provider",

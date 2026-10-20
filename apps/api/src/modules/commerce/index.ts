@@ -11,7 +11,9 @@ export {
   type LedgerCheckResult,
 } from './application/jobs';
 export {
+  BALANCE_REMINDER_JOB,
   type CommerceDeps,
+  createBalanceReminderHandler,
   LEDGER_CHECK_JOB,
   LEDGER_RELEASE_JOB,
   ORDER_EXPIRE_JOB,
@@ -27,3 +29,4 @@ export {
 export { createPaymentGateway, PAYMENT_GATEWAY, PaymentGateway } from './infra/payment-gateway';
 export { PaymentVault } from './infra/payment-vault';
 export { CommerceModule } from './commerce.module';
+export { type DepositPlanInput, depositPlanProblems, planOffered } from './domain/deposit-rules';

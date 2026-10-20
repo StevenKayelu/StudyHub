@@ -77,6 +77,18 @@ export function contentSettingsFrom(rows: { key: string; value: unknown }[]): Co
   return contentSettingsSchema.parse(values);
 }
 
+export const depositPlanRulesSchema = z.object({
+  enabled: z.boolean(),
+  minDepositPct: z.number().int().min(1).max(99),
+  maxBalanceDays: z.number().int().min(1).max(365),
+});
+export type DepositPlanRules = z.infer<typeof depositPlanRulesSchema>;
+export const DEPOSIT_PLAN_RULE_DEFAULTS: DepositPlanRules = {
+  enabled: false,
+  minDepositPct: 20,
+  maxBalanceDays: 90,
+};
+
 /**
  * Commerce settings (M8; 05 §8.2 "Commerce", BR-62, Q-BIZ-2 defaults). `minPaidPriceMinor` stays in the
  * content settings above (the publish checklist reads it) and is editable with this group.
@@ -101,7 +113,11 @@ export const commerceSettingsSchema = z.object({
       address: z.string().trim().max(400).nullable().default(null),
       taxId: z.string().trim().max(40).nullable().default(null),
     })
-    .default({ legalName: null, address: null, taxId: null }),
+    .default({ legalName: null, address: null, taxId: null }) /**
+   * Deposit plans (docs/design/payment-plans.md): whether tutors may offer "pay part now, the balance
+   * later", the smallest deposit as a share of the price and the longest time allowed to pay the balance.
+   */,
+  depositPlans: depositPlanRulesSchema.default(DEPOSIT_PLAN_RULE_DEFAULTS),
 });
 export type CommerceSettings = z.infer<typeof commerceSettingsSchema>;
 
@@ -160,6 +176,7 @@ export const settingsPatchSchema = z
       })
       .optional(),
     minPaidPriceMinor: z.number().int().min(100).max(100_000_000).optional(),
+    depositPlans: depositPlanRulesSchema.optional(),
     reason: z.string().trim().min(3).max(300),
   })
   .strict();

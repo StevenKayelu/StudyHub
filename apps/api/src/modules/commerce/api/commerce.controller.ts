@@ -44,8 +44,8 @@ export class CheckoutController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     const actor = requireActor();
-    const { courseId } = parseOrThrow(createOrderSchema, body);
-    const outcome = await this.checkout.createOrder(actor, courseId, key);
+    const input = parseOrThrow(createOrderSchema, body);
+    const outcome = await this.checkout.createOrder(actor, input, key);
     reply.status(outcome.status);
     return outcome.body;
   }

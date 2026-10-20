@@ -15,6 +15,8 @@ export type EmailTemplate =
   | 'refund-instructor'
   | 'payout-recorded'
   | 'ledger-mismatch'
+  // Deposit plans (docs/design/payment-plans.md)
+  | 'balance-reminder'
   // Tenant administration and console (M9)
   | 'usage-alert'
   | 'school-status'
@@ -34,6 +36,9 @@ export interface EmailVariables {
   amount?: string;
   number?: string;
   reference?: string;
+  /** Deposit plans: which part was paid ('DEPOSIT', 'BALANCE') and the balance deadline (formatted). */
+  part?: string;
+  dueDate?: string;
   /** M9: limit alerts, lifecycle and support emails (plain words, already formatted). */
   meter?: string;
   level?: string;
@@ -126,15 +131,31 @@ export function renderEmail(template: EmailTemplate, vars: EmailVariables): Rend
         `Your receipt ${vars.number ?? ''} from ${school}`.replace('  ', ' '),
         [
           hello,
-          `Thank you. Your payment of ${vars.amount ?? ''} for "${vars.courseTitle ?? 'your course'}" is confirmed and the course is now in My learning.`,
+          vars.part === 'DEPOSIT'
+            ? `Thank you. Your deposit of ${vars.amount ?? ''} for "${vars.courseTitle ?? 'your course'}" is confirmed. The first part of the course is now in My learning; pay the balance by ${vars.dueDate ?? 'the date shown on the course'} to open the rest.`
+            : vars.part === 'BALANCE'
+              ? `Thank you. Your balance of ${vars.amount ?? ''} for "${vars.courseTitle ?? 'your course'}" is confirmed, and the whole course is now open.`
+              : `Thank you. Your payment of ${vars.amount ?? ''} for "${vars.courseTitle ?? 'your course'}" is confirmed and the course is now in My learning.`,
           `Receipt number: ${vars.number ?? ''}. ${school} is the seller.`,
         ],
         { label: 'View your receipt', href: link },
       );
+    case 'balance-reminder':
+      return render(
+        `${school}: your balance for "${vars.courseTitle ?? 'your course'}" is due ${vars.dueDate ?? 'soon'}`,
+        [
+          hello,
+          `Your deposit opened the first part of "${vars.courseTitle ?? 'your course'}". Pay the balance of ${vars.amount ?? ''} by ${vars.dueDate ?? 'the due date'} to open the rest of the course.`,
+          'You keep the lessons your deposit opened either way.',
+        ],
+        { label: 'Pay the balance', href: link },
+      );
     case 'refund-learner':
       return render(`Your refund from ${school}`, [
         hello,
-        `${school} has refunded ${vars.amount ?? 'your payment'} for "${vars.courseTitle ?? 'your course'}". Your access to the course has ended.`,
+        vars.part === 'BALANCE'
+          ? `${school} has refunded your balance of ${vars.amount ?? ''} for "${vars.courseTitle ?? 'your course'}". The lessons your deposit opened stay open; pay the balance again to open the rest.`
+          : `${school} has refunded ${vars.amount ?? 'your payment'} for "${vars.courseTitle ?? 'your course'}". Your access to the course has ended.`,
         ...(vars.reference ? [`Refund reference: ${vars.reference}.`] : []),
         'Mobile money and card refunds can take a few days to reach you.',
       ]);

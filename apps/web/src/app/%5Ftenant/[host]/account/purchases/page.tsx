@@ -52,7 +52,7 @@ export default async function PurchasesPage() {
                     <td className="p-3">
                       {format.dateTime(new Date(order.createdAt), { dateStyle: 'medium' })}
                     </td>
-                    <td className="p-3">{order.courseTitle}</td>
+                    <td className="p-3">{t(`commerce.parts.${order.part}`, { title: order.courseTitle })}</td>
                     <td className="tabular p-3 text-right">
                       {formatMoney(order.total.amountMinor, order.total.currency, locale)}
                     </td>

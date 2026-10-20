@@ -696,6 +696,10 @@ model Course {
   priceMinor        BigInt                   @default(0) @map("price_minor")
   currency          String                   @default("ZMW") @db.Char(3)
   accessDays        Int?                     @map("access_days")
+  /// Deposit plan (docs/design/payment-plans.md): all three set, or none.
+  depositMinor      BigInt?                  @map("deposit_minor")
+  depositLessonPct  Int?                     @map("deposit_lesson_pct") @db.SmallInt
+  balanceDueDays    Int?                     @map("balance_due_days")
   status            CourseStatus             @default(DRAFT)
   firstPublishedAt  DateTime?                @map("first_published_at") @db.Timestamptz(3)
   publishedAt       DateTime?                @map("published_at") @db.Timestamptz(3)
@@ -820,25 +824,32 @@ enum LessonProgressStatus {
 }
 
 model Enrollment {
-  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId        String           @map("tenant_id") @db.Uuid
-  membershipId    String           @map("membership_id") @db.Uuid
-  courseId        String           @map("course_id") @db.Uuid
-  source          EnrollmentSource
-  orderItemId     String?          @map("order_item_id") @db.Uuid
-  status          EnrollmentStatus @default(ACTIVE)
-  startedAt       DateTime         @default(now()) @map("started_at") @db.Timestamptz(3)
-  expiresAt       DateTime?        @map("expires_at") @db.Timestamptz(3)
-  revokedAt       DateTime?        @map("revoked_at") @db.Timestamptz(3)
-  revokeReason    String?          @map("revoke_reason")
-  grantedBy       String?          @map("granted_by") @db.Uuid
-  grantReason     String?          @map("grant_reason")
-  progressPercent Int              @default(0) @map("progress_percent") @db.SmallInt
-  completedAt     DateTime?        @map("completed_at") @db.Timestamptz(3)
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String           @map("tenant_id") @db.Uuid
+  membershipId       String           @map("membership_id") @db.Uuid
+  courseId           String           @map("course_id") @db.Uuid
+  source             EnrollmentSource
+  orderItemId        String?          @map("order_item_id") @db.Uuid
+  status             EnrollmentStatus @default(ACTIVE)
+  startedAt          DateTime         @default(now()) @map("started_at") @db.Timestamptz(3)
+  expiresAt          DateTime?        @map("expires_at") @db.Timestamptz(3)
+  revokedAt          DateTime?        @map("revoked_at") @db.Timestamptz(3)
+  revokeReason       String?          @map("revoke_reason")
+  grantedBy          String?          @map("granted_by") @db.Uuid
+  grantReason        String?          @map("grant_reason")
+  progressPercent    Int              @default(0) @map("progress_percent") @db.SmallInt
+  completedAt        DateTime?        @map("completed_at") @db.Timestamptz(3)
   // FK with ON DELETE SET NULL (last_lesson_id) in SQL; no Prisma relation (composite key).
-  lastLessonId    String?          @map("last_lesson_id") @db.Uuid
-  lastAccessedAt  DateTime?        @map("last_accessed_at") @db.Timestamptz(3)
-  updatedAt       DateTime         @default(now()) @map("updated_at") @db.Timestamptz(3)
+  lastLessonId       String?          @map("last_lesson_id") @db.Uuid
+  lastAccessedAt     DateTime?        @map("last_accessed_at") @db.Timestamptz(3)
+  updatedAt          DateTime         @default(now()) @map("updated_at") @db.Timestamptz(3)
+  /// Deposit plan: the share of lessons open now (null = all) and what was agreed at deposit time.
+  accessLimitPct     Int?             @map("access_limit_pct") @db.SmallInt
+  planLessonPct      Int?             @map("plan_lesson_pct") @db.SmallInt
+  balanceMinor       BigInt?          @map("balance_minor")
+  balanceDueAt       DateTime?        @map("balance_due_at") @db.Timestamptz(3)
+  // FK to order_item (composite key) in SQL; no Prisma relation.
+  balanceOrderItemId String?          @map("balance_order_item_id") @db.Uuid
 
   membership TenantMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Restrict)
   course     Course           @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
@@ -1127,6 +1138,12 @@ enum PaymentAccountStatus {
   FAILED_TEST
 }
 
+enum OrderItemPart {
+  FULL
+  DEPOSIT
+  BALANCE
+}
+
 enum OrderStatus {
   PENDING
   PAID
@@ -1236,17 +1253,22 @@ model Order {
 }
 
 model OrderItem {
-  id                     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId               String @map("tenant_id") @db.Uuid
-  orderId                String @map("order_id") @db.Uuid
-  courseId               String @map("course_id") @db.Uuid
-  instructorMembershipId String @map("instructor_membership_id") @db.Uuid
-  titleSnapshot          String @map("title_snapshot")
-  instructorNameSnapshot String @map("instructor_name_snapshot")
-  unitPriceMinor         BigInt @map("unit_price_minor")
-  currency               String @db.Char(3)
-  accessDays             Int?   @map("access_days")
-  commissionBps          Int?   @map("commission_bps")
+  id                     String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String        @map("tenant_id") @db.Uuid
+  orderId                String        @map("order_id") @db.Uuid
+  courseId               String        @map("course_id") @db.Uuid
+  instructorMembershipId String        @map("instructor_membership_id") @db.Uuid
+  titleSnapshot          String        @map("title_snapshot")
+  instructorNameSnapshot String        @map("instructor_name_snapshot")
+  unitPriceMinor         BigInt        @map("unit_price_minor")
+  currency               String        @db.Char(3)
+  accessDays             Int?          @map("access_days")
+  commissionBps          Int?          @map("commission_bps")
+  part                   OrderItemPart @default(FULL)
+  /// Deposit items only: the plan shown at checkout (share of lessons, balance and days to pay).
+  planLessonPct          Int?          @map("plan_lesson_pct") @db.SmallInt
+  planBalanceMinor       BigInt?       @map("plan_balance_minor")
+  planBalanceDueDays     Int?          @map("plan_balance_due_days")
 
   order  Order         @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
   course Course        @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)

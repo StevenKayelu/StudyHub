@@ -11,7 +11,7 @@ import {
 
 import { Prisma } from '../../../generated/prisma/client';
 import { AuditService } from '../../audit';
-import { paymentsProblem } from '../../commerce';
+import { type DepositPlanInput, depositPlanProblems, paymentsProblem } from '../../commerce';
 import type { TenantActor } from '../../identity';
 import {
   AppError,
@@ -21,7 +21,7 @@ import {
   TenantDb,
   type TenantTx,
 } from '../../platform';
-import { readContentSettings } from '../../tenancy';
+import { readCommerceSettings, readContentSettings } from '../../tenancy';
 import {
   type CourseAction,
   type CourseStatus,
@@ -124,7 +124,8 @@ export class StudioService {
         orderBy: { decidedAt: 'desc' },
         select: { notes: true },
       });
-      return { ...found, reviewNote: note?.notes ?? null };
+      const { depositPlans } = await readCommerceSettings(tx);
+      return { ...found, reviewNote: note?.notes ?? null, depositRules: depositPlans };
     });
     const covers = await this.coverUrls([course.coverAssetId]);
     return {
@@ -144,6 +145,8 @@ export class StudioService {
       priceMinor: Number(course.priceMinor),
       currency: course.currency,
       accessDays: course.accessDays,
+      depositPlan: storedDepositPlan(course),
+      depositRules: course.depositRules,
       status: course.status,
       version: course.version,
       publishedAt: course.publishedAt?.toISOString() ?? null,
@@ -169,6 +172,7 @@ export class StudioService {
       coverAssetId?: string | null | undefined;
       priceMinor?: number | undefined;
       accessDays?: number | null | undefined;
+      depositPlan?: DepositPlanInput | null | undefined;
     },
   ): Promise<StudioCourse> {
     await this.db.run(async (tx) => {
@@ -182,6 +186,7 @@ export class StudioService {
       if (input.description !== undefined && input.description !== null) {
         await this.requireAssets(tx, richTextAssetIds(input.description), { kind: 'IMAGE', readyOnly: true });
       }
+      await this.checkDepositPlan(tx, course, input);
       const neverPublished = course.firstPublishedAt === null;
       await tx.course.update({
         where: { id: courseId },
@@ -209,12 +214,55 @@ export class StudioService {
           // A price change applies to new orders only (F12): orders snapshot the price (BR-08).
           ...(input.priceMinor !== undefined && { priceMinor: BigInt(input.priceMinor) }),
           ...(input.accessDays !== undefined && { accessDays: input.accessDays }),
+          // A plan change applies to new deposits only: enrolments snapshot what was agreed.
+          ...(input.depositPlan !== undefined && {
+            depositMinor: input.depositPlan === null ? null : BigInt(input.depositPlan.depositMinor),
+            depositLessonPct: input.depositPlan?.lessonPct ?? null,
+            balanceDueDays: input.depositPlan?.balanceDueDays ?? null,
+          }),
           updatedAt: new Date(),
           version: { increment: 1 },
         },
       });
     });
     return this.get(actor, courseId);
+  }
+
+  /**
+   * A new or changed deposit plan must fit the school's rules (docs/design/payment-plans.md). A price
+   * change alone keeps the stored plan if the deposit stays below the price; whether it still fits the
+   * school's rules is checked again whenever it would be offered.
+   */
+  private async checkDepositPlan(
+    tx: TenantTx,
+    course: {
+      priceMinor: bigint;
+      depositMinor: bigint | null;
+      depositLessonPct: number | null;
+      balanceDueDays: number | null;
+    },
+    input: { priceMinor?: number | undefined; depositPlan?: DepositPlanInput | null | undefined },
+  ): Promise<void> {
+    const plan = input.depositPlan !== undefined ? input.depositPlan : storedDepositPlan(course);
+    if (plan === null || (input.depositPlan === undefined && input.priceMinor === undefined)) return;
+    const price = input.priceMinor ?? Number(course.priceMinor);
+    const problems =
+      input.depositPlan !== undefined
+        ? depositPlanProblems(price, plan, (await readCommerceSettings(tx)).depositPlans)
+        : plan.depositMinor >= price
+          ? [
+              {
+                field: 'priceMinor',
+                code: 'BELOW_DEPOSIT',
+                message: 'The price must stay above the deposit. Change or remove the deposit plan first.',
+              },
+            ]
+          : [];
+    if (problems.length > 0) {
+      throw new AppError('VALIDATION_FAILED', {
+        errors: problems.map(({ field, code, message }) => ({ field, code, message })),
+      });
+    }
   }
 
   // --- Outline -----------------------------------------------------------------------------------
@@ -833,3 +881,19 @@ export const LESSON_SELECT = {
 } as const;
 
 export type { CourseAction };
+
+/** The course's stored deposit plan, or null (the database keeps all three columns set or none). */
+function storedDepositPlan(course: {
+  depositMinor: bigint | null;
+  depositLessonPct: number | null;
+  balanceDueDays: number | null;
+}): DepositPlanInput | null {
+  if (course.depositMinor === null || course.depositLessonPct === null || course.balanceDueDays === null) {
+    return null;
+  }
+  return {
+    depositMinor: Number(course.depositMinor),
+    lessonPct: course.depositLessonPct,
+    balanceDueDays: course.balanceDueDays,
+  };
+}

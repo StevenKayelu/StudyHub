@@ -24,6 +24,9 @@ export function PaymentSettingsForm({ initial, texts }: { initial: AdminSettings
   const [refundMode, setRefundMode] = useState<string>(c.refundMode);
   const [commission, setCommission] = useState(String(c.instructorCommissionBps / 100));
   const [schedule, setSchedule] = useState<string>(c.payoutSchedule);
+  const [deposits, setDeposits] = useState(c.depositPlans.enabled);
+  const [minDepositPct, setMinDepositPct] = useState(String(c.depositPlans.minDepositPct));
+  const [maxBalanceDays, setMaxBalanceDays] = useState(String(c.depositPlans.maxBalanceDays));
   const [seller, setSeller] = useState({
     legalName: c.receiptSeller.legalName ?? '',
     address: c.receiptSeller.address ?? '',
@@ -51,6 +54,11 @@ export function PaymentSettingsForm({ initial, texts }: { initial: AdminSettings
         instructorCommissionBps: Math.round(Number(commission) * 100),
         payoutSchedule: schedule,
       }),
+      depositPlans: {
+        enabled: deposits,
+        minDepositPct: Number(minDepositPct),
+        maxBalanceDays: Number(maxBalanceDays),
+      },
       receiptSeller: {
         legalName: orNull(seller.legalName),
         address: orNull(seller.address),
@@ -161,6 +169,33 @@ export function PaymentSettingsForm({ initial, texts }: { initial: AdminSettings
             />
           </>
         ) : null}
+        <fieldset className="flex flex-col gap-3" data-testid="deposit-rules">
+          <legend className="mb-1 text-label">{t.depositPlans}</legend>
+          <Checkbox
+            label={t.depositPlansEnabled}
+            hint={t.depositPlansHint}
+            checked={deposits}
+            onCheckedChange={(checked) => setDeposits(checked === true)}
+          />
+          {deposits ? (
+            <>
+              <TextField
+                label={t.minDepositPct}
+                inputMode="numeric"
+                value={minDepositPct}
+                onChange={(e) => setMinDepositPct(e.target.value)}
+                error={fields['depositPlans.minDepositPct'] ?? fields.depositPlans}
+              />
+              <TextField
+                label={t.maxBalanceDays}
+                inputMode="numeric"
+                value={maxBalanceDays}
+                onChange={(e) => setMaxBalanceDays(e.target.value)}
+                error={fields['depositPlans.maxBalanceDays']}
+              />
+            </>
+          ) : null}
+        </fieldset>
         <fieldset className="flex flex-col gap-3">
           <legend className="mb-1 text-label">{t.seller}</legend>
           <TextField

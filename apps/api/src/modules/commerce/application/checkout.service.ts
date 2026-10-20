@@ -4,6 +4,7 @@ import {
   maskMsisdn,
   type MobileNetwork,
   normalizeMsisdn,
+  type OrderPart,
   type OrderView,
   type PaymentCapabilities,
   type PaymentFailureCode,
@@ -27,6 +28,7 @@ import {
 } from '../../platform';
 import { readCommerceSettings, requireFeature } from '../../tenancy';
 import { offeredMethods } from '../domain/capability-rules';
+import { planOffered } from '../domain/deposit-rules';
 import { isOrderPayable } from '../domain/money-rules';
 import { PAYMENT_GATEWAY, type PaymentGateway } from '../infra/payment-gateway';
 import { idempotent, type Outcome } from './idempotency';
@@ -57,11 +59,19 @@ export class CheckoutService {
     };
   }
 
-  /** POST /orders: create, or reuse the learner's pending order for the course (BR-35). */
-  createOrder(actor: TenantActor, courseId: string, key: string | undefined): Promise<Outcome<OrderView>> {
-    return idempotent(this.db, actor, key, 'POST /orders', { courseId }, () =>
+  /**
+   * POST /orders: create, or reuse the learner's pending order for the course and part (BR-35). `part`
+   * is FULL (the price), DEPOSIT (the course's deposit plan) or BALANCE (what a deposit enrolment owes).
+   */
+  createOrder(
+    actor: TenantActor,
+    input: { courseId: string; part: OrderPart },
+    key: string | undefined,
+  ): Promise<Outcome<OrderView>> {
+    const { courseId, part } = input;
+    return idempotent(this.db, actor, key, 'POST /orders', { courseId, part }, () =>
       this.db.run(async (tx) => {
-        const created = await this.orderFor(tx, actor, courseId);
+        const created = await this.orderFor(tx, actor, courseId, part);
         return { status: created.created ? 201 : 200, body: await this.view(tx, created.orderId) };
       }),
     );
@@ -71,6 +81,7 @@ export class CheckoutService {
     tx: TenantTx,
     actor: TenantActor,
     courseId: string,
+    part: OrderPart,
   ): Promise<{ orderId: string; created: boolean }> {
     const account = await tx.userAccount.findUnique({
       where: { id: actor.userId },
@@ -88,16 +99,51 @@ export class CheckoutService {
         currency: true,
         accessDays: true,
         ownerMembershipId: true,
+        depositMinor: true,
+        depositLessonPct: true,
+        balanceDueDays: true,
       },
     });
     if (course === null) throw new AppError('NOT_FOUND');
     const notPurchasable = (detail: string) => new AppError('COURSE_NOT_PURCHASABLE', { detail });
-    if (course.status !== 'PUBLISHED') throw notPurchasable('This course is not on sale.');
-    if (course.priceMinor <= 0n) throw notPurchasable('This course is free: enrol instead.');
     // BR-31: instructors don't buy their own courses.
     if (course.ownerMembershipId === actor.membershipId) throw notPurchasable('You teach this course.');
-    if ((await activeEnrollment(tx, actor.membershipId, courseId)) !== null)
-      throw new AppError('ALREADY_ENROLLED');
+    const enrollment = await activeEnrollment(tx, actor.membershipId, courseId);
+
+    let amountMinor: bigint;
+    let plan: { planLessonPct: number; planBalanceMinor: bigint; planBalanceDueDays: number } | null = null;
+    if (part === 'BALANCE') {
+      // Payable after the deadline too, and even if the course was unpublished since (learners keep it).
+      if (enrollment?.accessLimitPct === null || enrollment === null || enrollment.balanceMinor === null) {
+        throw new AppError('INVALID_STATE', { detail: 'Nothing is owed on this course.' });
+      }
+      amountMinor = enrollment.balanceMinor;
+    } else {
+      if (course.status !== 'PUBLISHED') throw notPurchasable('This course is not on sale.');
+      if (course.priceMinor <= 0n) throw notPurchasable('This course is free: enrol instead.');
+      if (enrollment !== null) throw new AppError('ALREADY_ENROLLED');
+      amountMinor = course.priceMinor;
+      if (part === 'DEPOSIT') {
+        const offered =
+          course.depositMinor === null || course.depositLessonPct === null || course.balanceDueDays === null
+            ? null
+            : {
+                depositMinor: Number(course.depositMinor),
+                lessonPct: course.depositLessonPct,
+                balanceDueDays: course.balanceDueDays,
+              };
+        const { depositPlans } = await readCommerceSettings(tx);
+        if (!planOffered(Number(course.priceMinor), offered, depositPlans)) {
+          throw notPurchasable('This course does not offer a deposit.');
+        }
+        amountMinor = BigInt(offered.depositMinor);
+        plan = {
+          planLessonPct: offered.lessonPct,
+          planBalanceMinor: course.priceMinor - amountMinor,
+          planBalanceDueDays: offered.balanceDueDays,
+        };
+      }
+    }
     if ((await activeAccount(tx)) === null)
       throw notPurchasable('This school is not taking payments right now.');
 
@@ -107,7 +153,7 @@ export class CheckoutService {
         membershipId: actor.membershipId,
         status: 'PENDING',
         expiresAt: { gt: now },
-        items: { some: { courseId } },
+        items: { some: { courseId, part } },
       },
       orderBy: { createdAt: 'desc' },
       select: { id: true },
@@ -125,7 +171,7 @@ export class CheckoutService {
         tenantId: requireTenantId(),
         membershipId: actor.membershipId,
         currency: course.currency,
-        totalMinor: course.priceMinor,
+        totalMinor: amountMinor,
         expiresAt,
         items: {
           // tenant_id comes from the order through the composite key.
@@ -134,9 +180,11 @@ export class CheckoutService {
             instructorMembershipId: course.ownerMembershipId,
             titleSnapshot: course.title,
             instructorNameSnapshot: instructor?.displayName ?? '',
-            unitPriceMinor: course.priceMinor,
+            unitPriceMinor: amountMinor,
             currency: course.currency,
             accessDays: course.accessDays,
+            part,
+            ...plan,
           },
         },
       },
@@ -375,6 +423,7 @@ export class CheckoutService {
           status: order.status,
           courseId: order.items[0]?.courseId ?? '',
           courseTitle: order.items[0]?.titleSnapshot ?? '',
+          part: order.items[0]?.part ?? 'FULL',
           total: { amountMinor: Number(order.totalMinor), currency: order.currency },
           receiptNumber: order.receipt?.number ?? null,
         })),
@@ -420,6 +469,7 @@ export class CheckoutService {
         items: order.items.map((item) => ({
           title: item.titleSnapshot,
           unitPrice: { amountMinor: Number(item.unitPriceMinor), currency: item.currency },
+          part: item.part,
         })),
         total: { amountMinor: Number(order.totalMinor), currency: order.currency },
         payment: {
@@ -476,6 +526,7 @@ export class CheckoutService {
         instructorName: item.instructorNameSnapshot,
         accessDays: item.accessDays,
         unitPrice: { amountMinor: Number(item.unitPriceMinor), currency: item.currency },
+        part: item.part,
       })),
       payment:
         payment === undefined

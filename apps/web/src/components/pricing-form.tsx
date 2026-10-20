@@ -48,6 +48,28 @@ export function PricingForm({
   );
   const previewMinor = toMinor(priceText);
   const kwacha = (minor: number) => `K${(minor / 100).toFixed(2)}`;
+  // Deposit plans (docs/design/payment-plans.md), within the school's rules.
+  const rules = course.depositRules;
+  const [withDeposit, setWithDeposit] = useState(course.depositPlan !== null);
+  const [depositText, setDepositText] = useState(
+    course.depositPlan === null ? '' : (course.depositPlan.depositMinor / 100).toFixed(2),
+  );
+  const [lessonPctText, setLessonPctText] = useState(String(course.depositPlan?.lessonPct ?? 30));
+  const [daysText, setDaysText] = useState(
+    String(course.depositPlan?.balanceDueDays ?? Math.min(30, rules.maxBalanceDays)),
+  );
+  const [depositError, setDepositError] = useState<string | undefined>(undefined);
+  const depositMinor = toMinor(depositText);
+  const lessonPct = Number(lessonPctText);
+  const balanceDays = Number(daysText);
+  const planValid =
+    depositMinor !== null &&
+    depositMinor > 0 &&
+    Number.isInteger(lessonPct) &&
+    lessonPct >= 1 &&
+    lessonPct <= 99 &&
+    Number.isInteger(balanceDays) &&
+    balanceDays >= 1;
 
   return (
     <form
@@ -64,11 +86,25 @@ export function PricingForm({
           return;
         }
         const days = Number(text(data, 'accessDays'));
+        const offerDeposit = paid && rules.enabled && withDeposit;
+        if (offerDeposit && !planValid) {
+          event.preventDefault();
+          setDepositError(p.depositInvalid);
+          return;
+        }
+        setDepositError(undefined);
+        // Free courses can't keep a plan; with plans switched off a saved plan is kept, not offered.
+        const depositPlan = offerDeposit
+          ? { depositMinor: depositMinor!, lessonPct, balanceDueDays: balanceDays }
+          : (!paid || rules.enabled) && course.depositPlan !== null
+            ? null
+            : undefined;
         const result = await form.submit(event, () =>
           callApi<StudioCourse>('PATCH', `/api/v1/studio/courses/${course.id}`, {
             version: course.version,
             priceMinor,
             accessDays: limited && Number.isInteger(days) && days > 0 ? days : null,
+            ...(depositPlan !== undefined && { depositPlan }),
           }),
         );
         if (result !== null) {
@@ -112,6 +148,78 @@ export function PricingForm({
               </p>
             ) : null}
             <Alert tone="info" title={p.paidNote} />
+            {!rules.enabled && course.depositPlan !== null ? (
+              <Alert tone="warning" title={p.depositOff} />
+            ) : null}
+            {rules.enabled ? (
+              <>
+                <RadioGroup
+                  legend={p.paymentOptions}
+                  name="paymentOptions"
+                  value={withDeposit ? 'deposit' : 'full'}
+                  onValueChange={(value) => setWithDeposit(value === 'deposit')}
+                  options={[
+                    { value: 'full', label: p.fullOnly },
+                    { value: 'deposit', label: p.withDeposit },
+                  ]}
+                />
+                {withDeposit ? (
+                  <div className="flex flex-col gap-4" data-testid="deposit-plan">
+                    <TextField
+                      id="depositPlan.depositMinor"
+                      name="deposit"
+                      label={p.deposit}
+                      inputMode="decimal"
+                      value={depositText}
+                      onChange={(event) => setDepositText(event.target.value)}
+                      hint={
+                        previewMinor !== null && previewMinor > 0
+                          ? fill(p.depositHint, {
+                              percent: rules.minDepositPct,
+                              amount: kwacha(Math.ceil((previewMinor * rules.minDepositPct) / 100)),
+                            })
+                          : undefined
+                      }
+                      error={
+                        depositError ??
+                        form.fieldError('depositPlan.depositMinor') ??
+                        form.fieldError('depositPlan')
+                      }
+                    />
+                    <TextField
+                      id="depositPlan.lessonPct"
+                      name="lessonPct"
+                      label={p.lessonPct}
+                      inputMode="numeric"
+                      value={lessonPctText}
+                      onChange={(event) => setLessonPctText(event.target.value)}
+                      hint={p.lessonPctHint}
+                      error={form.fieldError('depositPlan.lessonPct')}
+                    />
+                    <TextField
+                      id="depositPlan.balanceDueDays"
+                      name="balanceDays"
+                      label={p.balanceDays}
+                      inputMode="numeric"
+                      value={daysText}
+                      onChange={(event) => setDaysText(event.target.value)}
+                      hint={fill(p.balanceDaysHint, { days: rules.maxBalanceDays })}
+                      error={form.fieldError('depositPlan.balanceDueDays')}
+                    />
+                    {planValid && previewMinor !== null && depositMinor! < previewMinor ? (
+                      <p className="text-body-sm" data-testid="deposit-preview">
+                        {fill(p.depositPreview, {
+                          deposit: kwacha(depositMinor!),
+                          balance: kwacha(previewMinor - depositMinor!),
+                          days: balanceDays,
+                          percent: lessonPct,
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            ) : null}
           </>
         ) : null}
         <RadioGroup

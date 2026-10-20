@@ -52,6 +52,8 @@ export const ERROR_DEFINITIONS = {
   EMAIL_NOT_VERIFIED: { status: 403, title: 'Verify your email address first', active: true },
   COURSE_NOT_PURCHASABLE: { status: 422, title: 'This course cannot be bought', active: true },
   ORDER_NOT_PAYABLE: { status: 409, title: 'This order can no longer be paid', active: true },
+  // Deposit plans (docs/design/payment-plans.md): a lesson beyond what the deposit opened.
+  BALANCE_REQUIRED: { status: 402, title: 'Pay the balance to open this lesson', active: true },
   IDEMPOTENCY_KEY_REUSED: {
     status: 422,
     title: 'This request key was already used for another request',
