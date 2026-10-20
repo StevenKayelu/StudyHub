@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { featureAvailable, featureEnabled, featureMap, planGrants } from './features';
+import { featureAvailable, featureChangeProblems, featureEnabled, featureMap, planGrants } from './features';
 
 describe('features (F40, BR-48)', () => {
   it('on by default; the school can switch it off; the platform can revoke or grant', () => {
@@ -53,5 +53,22 @@ describe('features (F40, BR-48)', () => {
       { featureKey: 'instructorRevenueShare', enabledByTenant: true, platformOverride: 'NONE' },
     ]);
     expect(on.instructorRevenueShare).toBe(true);
+  });
+
+  it('requires paid courses for new revenue-share enables and protects an effective dependent', () => {
+    const current = featureMap([
+      { featureKey: 'paidCourses', enabledByTenant: false, platformOverride: 'NONE' },
+    ]);
+    expect(featureChangeProblems(current, 'instructorRevenueShare', true)).toEqual([
+      { feature: 'paidCourses', code: 'dependency_disabled' },
+    ]);
+    const sharing = featureMap([
+      { featureKey: 'instructorRevenueShare', enabledByTenant: true, platformOverride: 'NONE' },
+    ]);
+    expect(featureChangeProblems(sharing, 'paidCourses', false)).toEqual([
+      { feature: 'instructorRevenueShare', code: 'dependent_enabled' },
+    ]);
+    expect(featureChangeProblems(sharing, 'instructorRevenueShare', false)).toEqual([]);
+    expect(featureChangeProblems(current, 'paidCourses', true)).toEqual([]);
   });
 });

@@ -243,6 +243,36 @@ describe('learning experience (M6)', () => {
       expect(landing.json().viewer.enrollment.id).toBe(first.json().enrollmentId);
     });
 
+    it('turning off publicCatalog blocks anonymous lesson previews while an existing enrolment keeps its access', async () => {
+      expect(
+        (
+          await h.call('PUT', '/api/v1/admin/features/publicCatalog', {
+            host: ACME,
+            cookie: cookies.admin,
+            body: { enabled: false },
+          })
+        ).statusCode,
+      ).toBe(204);
+      try {
+        expect((await get(ACME, `/api/v1/learn/lessons/${free.lessons[0]}`)).statusCode).toBe(401);
+        const lesson = await get(ACME, `/api/v1/learn/lessons/${free.lessons[1]}`, cookies.learner);
+        expect(lesson.statusCode).toBe(200);
+        expect(lesson.json().access).toBe('ENROLLED');
+        expect(JSON.stringify(lesson.json().content)).toContain('Reading content');
+        expect((await get(BETA, '/api/v1/courses')).statusCode).toBe(200);
+      } finally {
+        expect(
+          (
+            await h.call('PUT', '/api/v1/admin/features/publicCatalog', {
+              host: ACME,
+              cookie: cookies.admin,
+              body: { enabled: true },
+            })
+          ).statusCode,
+        ).toBe(204);
+      }
+    });
+
     it('refuses free enrolment in a paid course and in one’s own course', async () => {
       const paidEnrol = await h.call('POST', `/api/v1/courses/${paid.slug}/enrol`, {
         host: ACME,

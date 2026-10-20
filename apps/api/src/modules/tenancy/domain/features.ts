@@ -20,6 +20,26 @@ export const TENANT_SWITCH_DEFAULTS: Readonly<Partial<Record<FeatureKey, boolean
 /** Features specified but not built yet (03 F38 custom domains, certificates): never effective. */
 export const LATER_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>(['customDomain', 'certificates']);
 
+/** Dependencies apply to configuration changes; historic payments and ledger entries keep working. */
+export const FEATURE_DEPENDENCIES: Readonly<Partial<Record<FeatureKey, readonly FeatureKey[]>>> = {
+  instructorRevenueShare: ['paidCourses'],
+};
+
+export function featureChangeProblems(
+  current: FeatureMap,
+  key: FeatureKey,
+  enabled: boolean,
+): { feature: FeatureKey; code: 'dependency_disabled' | 'dependent_enabled' }[] {
+  if (enabled) {
+    return (FEATURE_DEPENDENCIES[key] ?? [])
+      .filter((dependency) => !current[dependency])
+      .map((feature) => ({ feature, code: 'dependency_disabled' }));
+  }
+  return FEATURE_KEYS.filter(
+    (dependent) => current[dependent] && FEATURE_DEPENDENCIES[dependent]?.includes(key),
+  ).map((feature) => ({ feature, code: 'dependent_enabled' }));
+}
+
 /** Whether the plan grants a feature. A school without a plan keeps every feature (M7/M8 behaviour). */
 export function planGrants(plan: PlanGrants, key: FeatureKey): boolean {
   return plan === null ? true : plan[key] === true;

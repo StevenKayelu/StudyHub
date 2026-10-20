@@ -8,7 +8,8 @@
     "build": "next build && node scripts/standalone.mjs prepare",
     "start": "node scripts/standalone.mjs start",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:security": "playwright test --config playwright.security.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

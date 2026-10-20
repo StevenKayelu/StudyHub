@@ -5,7 +5,7 @@ import { paymentsProblem } from '../../commerce';
 import type { TenantActor } from '../../identity';
 import { EnrollmentsService } from '../../learning';
 import { AppError, TenantDb, type TenantTx } from '../../platform';
-import { readContentSettings } from '../../tenancy';
+import { readContentSettings, readFeatures } from '../../tenancy';
 import { StudioService } from './studio.service';
 
 const DEFAULT_LIMIT = 12;
@@ -205,7 +205,9 @@ export class CatalogueService {
   private async requireVisible(tx: TenantTx, actor: TenantActor | null): Promise<void> {
     if (actor !== null) return;
     const settings = await readContentSettings(tx);
-    if (settings.catalogVisibility === 'MEMBERS_ONLY') throw new AppError('UNAUTHENTICATED');
+    if (!(await readFeatures(tx)).publicCatalog || settings.catalogVisibility === 'MEMBERS_ONLY') {
+      throw new AppError('UNAUTHENTICATED');
+    }
   }
 
   private async cards(rows: CardRow[]): Promise<CourseCard[]> {

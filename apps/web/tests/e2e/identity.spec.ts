@@ -1,7 +1,16 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { type Cookie, expect, type Page, test } from '@playwright/test';
 
-import { consoleSignIn, DEMO, DEMO_PASSWORD, linkFromEmail, school, signIn, uniqueEmail } from './helpers';
+import {
+  consoleSignIn,
+  DEMO,
+  DEMO_PASSWORD,
+  linkFromEmail,
+  school,
+  signIn,
+  uniqueEmail,
+  WEB_PORT,
+} from './helpers';
 
 // Requires `pnpm db:seed` (demo schools and accounts) and Mailpit (`pnpm db:up`).
 
@@ -30,7 +39,7 @@ test.describe('school realm (M4)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Check your email');
 
     const link = await linkFromEmail(email);
-    expect(link).toMatch(/^http:\/\/acme\.localhost:3000\/verify-email#token=/);
+    expect(link.startsWith(school('acme.localhost', '/verify-email#token='))).toBe(true);
     await page.goto(link);
     await page.waitForURL(school('acme.localhost', '/learn'));
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('My learning');
@@ -75,8 +84,8 @@ test.describe('school realm (M4)', () => {
     expect(acmeCookie).toBeDefined();
     // The browser never sends it to beta.localhost (host-only). Replay it by hand through the web server.
     const replay = (host: string) =>
-      request.get('http://127.0.0.1:3000/api/v1/me', {
-        headers: { host: `${host}:3000`, cookie: `__Host-sh_session=${acmeCookie!.value}` },
+      request.get(school('127.0.0.1', '/api/v1/me'), {
+        headers: { host: `${host}:${WEB_PORT}`, cookie: `__Host-sh_session=${acmeCookie!.value}` },
       });
     expect((await replay('acme.localhost')).status()).toBe(200);
     expect((await replay('beta.localhost')).status()).toBe(401);

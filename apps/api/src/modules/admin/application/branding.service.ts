@@ -12,9 +12,9 @@ import { AuditService } from '../../audit';
 import type { TenantActor } from '../../identity';
 import {
   AppError,
-  OBJECT_STORAGE,
-  type ObjectStorage,
   requireTenantId,
+  STORAGE_LOCATIONS,
+  type StorageLocations,
   TenantDb,
   type TenantTx,
 } from '../../platform';
@@ -75,7 +75,7 @@ export class BrandingService {
   constructor(
     private readonly db: TenantDb,
     private readonly audit: AuditService,
-    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
+    @Inject(STORAGE_LOCATIONS) private readonly locations: StorageLocations,
   ) {}
 
   async editor(actor: TenantActor): Promise<BrandingEditor> {
@@ -97,7 +97,7 @@ export class BrandingService {
       const ids = ASSET_FIELDS.map((field) => draft[field]).filter((id): id is string => id !== null);
       const assets = await tx.asset.findMany({
         where: { id: { in: ids }, purpose: 'BRANDING', status: 'READY' },
-        select: { id: true, storageKey: true, derivativeKey: true },
+        select: { id: true, storageKey: true, derivativeKey: true, storageLocationId: true },
       });
       return {
         keys: assets,
@@ -118,8 +118,10 @@ export class BrandingService {
     });
     for (const asset of keys) {
       const key = asset.derivativeKey ?? asset.storageKey;
-      if (key !== null)
-        editor.assetUrls[asset.id] = await this.storage.presignGet(key, { expiresSeconds: 600 });
+      if (key !== null) {
+        const storage = await this.locations.at(asset.storageLocationId, requireTenantId());
+        editor.assetUrls[asset.id] = await storage.presignGet(key, { expiresSeconds: 600 });
+      }
     }
     return editor;
   }

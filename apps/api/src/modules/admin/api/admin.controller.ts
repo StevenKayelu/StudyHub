@@ -35,7 +35,14 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
-import { AppError, OBJECT_STORAGE, type ObjectStorage, parseOrThrow, TenantDb } from '../../platform';
+import {
+  AppError,
+  parseOrThrow,
+  requireTenantId,
+  STORAGE_LOCATIONS,
+  type StorageLocations,
+  TenantDb,
+} from '../../platform';
 import { AuditLogService } from '../application/audit-log.service';
 import { BrandingService, colourReport } from '../application/branding.service';
 import { ExportsService } from '../application/exports.service';
@@ -349,7 +356,7 @@ export class SchoolPublicController {
     private readonly notifications: NotificationsService,
     private readonly school: SchoolService,
     private readonly db: TenantDb,
-    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
+    @Inject(STORAGE_LOCATIONS) private readonly locations: StorageLocations,
   ) {}
 
   @Get('me/notifications')
@@ -394,7 +401,7 @@ export class SchoolPublicController {
    */
   @Get('tenant/brand/:assetId')
   async brandAsset(@Param('assetId', uuid()) assetId: string, @Res() reply: FastifyReply): Promise<void> {
-    const key = await this.db.run(async (tx) => {
+    const location = await this.db.run(async (tx) => {
       const branding = await tx.tenantBranding.findFirst({
         select: { logoAssetId: true, logoDarkAssetId: true, faviconAssetId: true, appIconAssetId: true },
       });
@@ -402,12 +409,14 @@ export class SchoolPublicController {
       if (!used) return null;
       const asset = await tx.asset.findFirst({
         where: { id: assetId, purpose: 'BRANDING', status: 'READY' },
-        select: { storageKey: true, derivativeKey: true },
+        select: { storageKey: true, derivativeKey: true, storageLocationId: true },
       });
-      return asset?.derivativeKey ?? asset?.storageKey ?? null;
+      const key = asset?.derivativeKey ?? asset?.storageKey ?? null;
+      return asset === null || key === null ? null : { key, locationId: asset.storageLocationId };
     });
-    if (key === null) throw new AppError('NOT_FOUND');
-    const url = await this.storage.presignGet(key, { expiresSeconds: 3600 });
+    if (location === null) throw new AppError('NOT_FOUND');
+    const storage = await this.locations.at(location.locationId, requireTenantId());
+    const url = await storage.presignGet(location.key, { expiresSeconds: 3600 });
     void reply.header('Cache-Control', 'public, max-age=300').redirect(url, 302);
   }
 }

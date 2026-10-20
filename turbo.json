@@ -11,7 +11,15 @@
     "build": {
       "dependsOn": ["^build", "db:generate"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
-      "env": ["API_INTERNAL_URL", "PLATFORM_HOSTS", "CONSOLE_HOSTS"]
+      "env": [
+        "API_INTERNAL_URL",
+        "PLATFORM_HOSTS",
+        "CONSOLE_HOSTS",
+        "WEB_CSP_CONNECT_ORIGINS",
+        "WEB_CSP_IMAGE_ORIGINS",
+        "WEB_CSP_MEDIA_ORIGINS",
+        "WEB_CSP_FRAME_ORIGINS"
+      ]
     },
     "typecheck": {
       "dependsOn": ["^build", "db:generate"]
@@ -28,6 +36,13 @@
     },
     "dev": {
       "dependsOn": ["^build", "db:generate"],
+      "env": [
+        "WEB_CSP_CONNECT_ORIGINS",
+        "WEB_CSP_IMAGE_ORIGINS",
+        "WEB_CSP_MEDIA_ORIGINS",
+        "WEB_CSP_FRAME_ORIGINS",
+        "MAINTENANCE_MODE"
+      ],
       "cache": false,
       "persistent": true
     }

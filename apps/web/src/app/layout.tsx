@@ -7,6 +7,9 @@ import type { ReactNode } from 'react';
 import { AppProviders } from '../components/app-providers';
 import { fontVariables } from '../fonts';
 
+// CSP nonces are generated per request; HTML must never be statically generated or use ISR.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'StudyHub',
   description: 'StudyHub learning platform',

@@ -16,6 +16,6 @@ export default defineConfig({
   test: {
     name: 'api-unit',
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'test/setup/**/*.test.ts'],
   },
 });

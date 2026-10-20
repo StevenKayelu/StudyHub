@@ -17,6 +17,11 @@ import {
   ProblemFilter,
   registerRequestContextHook,
   registerRequestIdHook,
+  registerClientRateLimitHook,
+  registerTenantRateLimitHook,
+  registerSecurityHeadersHook,
+  STORAGE_LOCATIONS,
+  type StorageLocations,
 } from './modules/platform';
 import { ConsoleAuthService, registerConsoleHook } from './modules/console';
 import {
@@ -63,10 +68,13 @@ export async function createApp(options: CreateAppOptions): Promise<NestFastifyA
     payload.resume();
   });
   registerRequestIdHook(fastify);
+  registerSecurityHeadersHook(fastify, options.env.NODE_ENV === 'production');
   registerRequestContextHook(fastify);
+  registerClientRateLimitHook(fastify, options.env);
   // Order matters: CSRF origin check, then the school (from the host), then who is signed in.
   registerOriginCheckHook(fastify);
   registerTenantContextHook(fastify, app.get(TenantResolver));
+  registerTenantRateLimitHook(fastify, options.env);
   registerSessionHook(fastify, app.get(SessionService), app.get(SupportSessionService));
   registerConsoleHook(fastify, app.get(ConsoleAuthService), options.env.CONSOLE_HOSTS);
   app.useGlobalFilters(new ProblemFilter(logger));
@@ -77,8 +85,25 @@ export async function createApp(options: CreateAppOptions): Promise<NestFastifyA
 
 async function bootstrap(): Promise<void> {
   const env = loadApiEnv();
-  const app = await createApp({ env });
+  const logger = createLogger({ level: env.LOG_LEVEL });
+  const app = await createApp({ env, logger });
   await app.listen({ port: env.API_PORT, host: env.API_HOST });
+  await warnIfStorageNotCaptured(app.get<StorageLocations>(STORAGE_LOCATIONS), logger);
+}
+
+/**
+ * Storage fails closed until the deployment's origin is captured, so say so loudly at startup rather
+ * than through the first upload's 503. Capture stays an explicit operator step (storage:bootstrap).
+ */
+async function warnIfStorageNotCaptured(locations: StorageLocations, logger: Logger): Promise<void> {
+  try {
+    if (await locations.activeCaptured()) return;
+    logger.error(
+      'Object storage has not been captured: uploads, exports and downloads return 503. Run `pnpm storage:bootstrap` (see docs/runbooks/staging-readiness.md).',
+    );
+  } catch {
+    // Database unavailable at startup: /readyz reports it.
+  }
 }
 
 // Guarded so tests can import createApp() without starting a server.

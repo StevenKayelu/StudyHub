@@ -48,6 +48,9 @@ export const apiEnvSchema = z
     API_HOST: z.string().min(1).default('127.0.0.1'),
     API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
     READINESS_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(2000),
+    API_RATE_IP_PER_MINUTE: z.coerce.number().int().min(1).max(1_000_000).default(600),
+    API_RATE_TENANT_PER_MINUTE: z.coerce.number().int().min(1).max(1_000_000).default(6000),
+    API_RATE_ACCOUNT_PER_MINUTE: z.coerce.number().int().min(1).max(1_000_000).default(300),
     /**
      * Addresses allowed to set X-Forwarded-Host / X-Forwarded-For (the reverse proxy and the web
      * server). Requests from anywhere else are resolved from their own Host header (threat T3).

@@ -3,6 +3,8 @@ import path from 'node:path';
 
 import { chromium, expect, test } from '@playwright/test';
 
+import { DEMO, school, signIn } from './helpers';
+
 /**
  * M3 AC 5: Lighthouse budget on the public shell (06 §9, UX-10). Mobile emulation with simulated
  * Slow 4G (Lighthouse defaults). Runs against the production build started by the e2e web servers.
@@ -28,7 +30,14 @@ interface NetworkItem {
 /** The framework chunks every page loads, from the production build. */
 function frameworkChunks(): Set<string> {
   const manifest = JSON.parse(
-    readFileSync(path.join(process.cwd(), '.next', 'build-manifest.json'), 'utf8'),
+    readFileSync(
+      path.join(
+        process.cwd(),
+        process.env.STUDYHUB_E2E_ISOLATED === '1' ? '.next-e2e' : '.next',
+        'build-manifest.json',
+      ),
+      'utf8',
+    ),
   ) as {
     rootMainFiles: string[];
     polyfillFiles: string[];
@@ -46,7 +55,7 @@ test('public shell meets the 06 §9 performance budget', async () => {
   });
   try {
     const { default: lighthouse } = await import('lighthouse');
-    const result = await lighthouse('http://acme.localhost:3000/', {
+    const result = await lighthouse(school('acme.localhost'), {
       port: DEBUG_PORT,
       output: 'json',
       logLevel: 'error',
@@ -87,5 +96,41 @@ test('public shell meets the 06 §9 performance budget', async () => {
     expect(report.accessibility ?? 0, 'accessibility score').toBeGreaterThanOrEqual(0.95);
   } finally {
     await browser.close();
+  }
+});
+
+test('learner course initial JavaScript meets NFR-PERF-2 (170 KB compressed)', async ({
+  page,
+  browser,
+}, testInfo) => {
+  await signIn(page, 'acme.localhost', DEMO.learner);
+  const context = await browser.newContext({ storageState: await page.context().storageState() });
+  try {
+    const fresh = await context.newPage();
+    const session = await context.newCDPSession(fresh);
+    await session.send('Network.enable');
+    await session.send('Network.setCacheDisabled', { cacheDisabled: true });
+    await fresh.goto(school('acme.localhost', '/learn/courses/0d6c2b1e-0000-4000-8000-0000000cc001'));
+    await expect(fresh.getByRole('heading', { level: 1 })).toHaveText('What is a cell?');
+    await fresh.waitForLoadState('networkidle');
+    const scripts = await fresh.evaluate(() =>
+      performance
+        .getEntriesByType('resource')
+        .filter((entry) => (entry as PerformanceResourceTiming).initiatorType === 'script')
+        .map((entry) => ({ url: entry.name, bytes: (entry as PerformanceResourceTiming).encodedBodySize })),
+    );
+    expect(scripts.length).toBeGreaterThan(0);
+    expect(scripts.every((script) => script.bytes > 0)).toBe(true);
+    const totalBytes = scripts.reduce((sum, script) => sum + script.bytes, 0);
+    await testInfo.attach('learner-js-budget', {
+      body: JSON.stringify({ totalBytes, budgetBytes: 170 * KB, scripts }, null, 2),
+      contentType: 'application/json',
+    });
+    process.stdout.write(
+      `LEARNER_JS ${JSON.stringify({ totalBytes, kb: totalBytes / KB, budgetKb: 170 })}\n`,
+    );
+    expect(totalBytes, 'cold learner course JavaScript, encoded bytes').toBeLessThanOrEqual(170 * KB);
+  } finally {
+    await context.close();
   }
 });

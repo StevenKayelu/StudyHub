@@ -306,7 +306,7 @@ export class LearningService {
       if (attached === null) throw new AppError('NOT_FOUND');
       const found = await tx.asset.findUnique({
         where: { id: assetId },
-        select: { status: true, storageKey: true, originalName: true },
+        select: { status: true, storageKey: true, storageLocationId: true, originalName: true },
       });
       if (found === null) throw new AppError('NOT_FOUND');
       return found;

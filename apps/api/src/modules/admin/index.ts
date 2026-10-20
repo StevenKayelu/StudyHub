@@ -1,5 +1,15 @@
 // Public surface of the admin module (enforced by dependency-cruiser).
 export { AdminModule } from './admin.module';
+export {
+  planDocumentObjectRecovery,
+  applyDocumentObjectRecovery,
+  type DocumentRecoveryPlan,
+} from './application/object-recovery';
+export {
+  planSchoolContentRecovery,
+  applySchoolContentRecovery,
+  type SchoolRecoveryPlan,
+} from './application/school-recovery';
 export { colourReport } from './application/branding.service';
 export {
   createExportHandler,

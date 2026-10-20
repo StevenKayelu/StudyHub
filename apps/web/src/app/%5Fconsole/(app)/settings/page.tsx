@@ -1,9 +1,15 @@
-import { consoleSettingsSchema, paymentProviderListSchema, providerHealthSchema } from '@studyhub/contracts';
+import {
+  configurationViewSchema,
+  consoleSettingsSchema,
+  paymentProviderListSchema,
+  providerHealthSchema,
+} from '@studyhub/contracts';
 import { Card, StatePanel, StatusBadge } from '@studyhub/ui';
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 
 import { ApiForm } from '../../../../components/api-form';
+import { ConfigurationEditor } from '../../../../components/configuration-editor';
 import { ConsoleFrame } from '../../../../components/workspace-frames';
 import { fetchConsole, formTexts, reauthTexts } from '../../../../lib/admin-api';
 
@@ -18,10 +24,11 @@ const HEALTH_BADGES = { OK: 'published', DEGRADED: 'attention', DOWN: 'failed', 
 export default async function ConsoleSettingsPage() {
   const t = await getTranslations();
   const s = (key: string) => t(`platformConsole.settings.${key}`);
-  const [settings, health, providers] = await Promise.all([
+  const [settings, health, providers, configuration] = await Promise.all([
     fetchConsole('/settings', consoleSettingsSchema),
     fetchConsole('/providers/health', providerHealthSchema),
     fetchConsole('/payment-providers', paymentProviderListSchema),
+    fetchConsole('/configuration', configurationViewSchema),
   ]);
 
   return (
@@ -30,6 +37,9 @@ export default async function ConsoleSettingsPage() {
         <StatePanel kind="permission" title={t('system.permission.title')} />
       ) : (
         <>
+          {configuration !== null && configuration !== 'denied' ? (
+            <ConfigurationEditor initial={configuration} />
+          ) : null}
           <Card>
             <ApiForm
               method="PUT"

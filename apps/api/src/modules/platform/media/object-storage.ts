@@ -165,9 +165,11 @@ export class S3ObjectStorage implements ObjectStorage {
         object.Key === undefined ? [] : [{ Key: object.Key }],
       );
       if (keys.length > 0) {
-        await this.client.send(
+        const result = await this.client.send(
           new DeleteObjectsCommand({ Bucket: this.options.bucket, Delete: { Objects: keys } }),
         );
+        if ((result.Errors?.length ?? 0) > 0)
+          throw new Error('Storage cleanup was incomplete. Retry before purging school records.');
         deleted += keys.length;
       }
       token = page.IsTruncated === true ? page.NextContinuationToken : undefined;

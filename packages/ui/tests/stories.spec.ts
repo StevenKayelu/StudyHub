@@ -31,12 +31,25 @@ const WIDTHS = [320, 375, 768, 1024, 1440] as const;
 async function openStory(page: Page, id: string, theme: string, scheme: string): Promise<void> {
   await page.goto(`/iframe.html?id=${id}&viewMode=story&globals=theme:${theme};scheme:${scheme}`);
   await page.locator('#storybook-root').waitFor({ state: 'attached' });
-  await expect(page.locator('html')).toHaveAttribute('data-applied-theme', /.+/);
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-applied-theme',
+    new RegExp(`^(?:${theme}|console):${scheme}$`),
+  );
   // The stylesheet must be applied too (a capture before it loads shows unstyled controls).
   await page.waitForFunction(
     () => getComputedStyle(document.documentElement).getPropertyValue('--sh-color-bg-canvas').trim() !== '',
   );
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  // Theme changes animate control colours. Audit the settled theme, not an intermediate contrast
+  // ratio; leave infinite loading spinners running and keep all axe rules enabled.
+  await page.evaluate(async () => {
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
 }
 
 test.describe('axe: 0 serious or critical violations (UX-06)', () => {

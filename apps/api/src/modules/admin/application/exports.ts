@@ -6,7 +6,8 @@ import { Prisma, type PrismaClient } from '../../../generated/prisma/client';
 import {
   addToOutbox,
   type JobEnvelope,
-  type ObjectStorage,
+  lockTenantLifecycle,
+  type StorageLocations,
   queueEmail,
   requireTenantId,
   runInTenantTx,
@@ -14,6 +15,7 @@ import {
   type TenantTx,
 } from '../../platform';
 import { toCsv } from '../../platform';
+import { readFeatures } from '../../tenancy';
 import { buildZip, type ZipEntry } from '../domain/zip';
 import { dayRange } from './report-queries';
 
@@ -259,7 +261,7 @@ function jsonValue(_key: string, value: unknown): unknown {
  */
 export async function fullExport(
   tx: TenantTx,
-  storage: ObjectStorage,
+  locations: StorageLocations,
 ): Promise<{ entries: ZipEntry[]; rows: number }> {
   const tenantId = requireTenantId();
   // Each table with the columns that are never exported: binary (hashes, ciphertext) and search vectors.
@@ -344,7 +346,14 @@ export async function fullExport(
 
   const assets = await tx.asset.findMany({
     where: { status: 'READY', kind: { in: ['IMAGE', 'DOCUMENT'] }, storageKey: { not: null } },
-    select: { id: true, originalName: true, sizeBytes: true, storageKey: true, mime: true },
+    select: {
+      id: true,
+      originalName: true,
+      sizeBytes: true,
+      storageKey: true,
+      storageLocationId: true,
+      mime: true,
+    },
   });
   let mediaBytes = 0;
   const listing: unknown[][] = [];
@@ -352,6 +361,9 @@ export async function fullExport(
     const size = Number(asset.sizeBytes);
     const include = size <= MAX_FILE_BYTES && mediaBytes + size <= MAX_MEDIA_BYTES;
     if (include) {
+      // Resolve provenance outside the missing-object catch: an unbound or retired location must
+      // fail the export rather than silently falling back to whichever destination is active now.
+      const storage = await locations.at(asset.storageLocationId, tenantId);
       try {
         const data = await streamToBuffer(await storage.stream(asset.storageKey!));
         entries.push({ name: `files/${asset.id}-${asset.originalName.replace(/[^\w.-]+/g, '_')}`, data });
@@ -385,7 +397,7 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
 
 export interface ExportDeps {
   prisma: PrismaClient;
-  storage: ObjectStorage;
+  locations: StorageLocations;
   box: SecretBox;
   /** e.g. "http://{host}" — links in the "export ready" email. */
   schoolUrlTemplate: string;
@@ -395,35 +407,62 @@ export interface ExportDeps {
 export function createExportHandler(deps: ExportDeps) {
   return async (envelope: JobEnvelope, logger: Logger): Promise<{ status: string }> => {
     const exportId = String((envelope.payload as { exportId?: unknown }).exportId ?? '');
-    const job = await runInTenantTx(deps.prisma, (tx) =>
-      tx.dataExport.findFirst({
-        where: { id: exportId },
-        select: { id: true, type: true, status: true, params: true },
-      }),
-    );
-    if (job === null || job.status === 'READY' || job.status === 'EXPIRED') return { status: 'skipped' };
-    await runInTenantTx(deps.prisma, (tx) =>
-      tx.dataExport.update({ where: { id: exportId }, data: { status: 'RUNNING' } }),
-    );
     const tenantId = requireTenantId();
+    const claim = await runInTenantTx(deps.prisma, async (tx) => {
+      // Serialize claims with purge eligibility. Purge waits for RUNNING exports; queued/failed
+      // exports cannot become writers after the deadline. An existing RUNNING job may finish/retry.
+      const tenant = await lockTenantLifecycle(tx, tenantId);
+      const current = await tx.dataExport.findFirst({
+        where: { id: exportId },
+        select: { id: true, type: true, status: true, params: true, storageLocationId: true },
+      });
+      if (
+        tenant === undefined ||
+        current === null ||
+        current.status === 'READY' ||
+        current.status === 'EXPIRED'
+      ) {
+        return { status: 'skipped', job: null };
+      }
+      if (tenant.blocked && current.status !== 'RUNNING') {
+        await tx.dataExport.update({
+          where: { id: exportId },
+          data: { status: 'FAILED', error: 'SCHOOL_READ_ONLY' },
+        });
+        return { status: 'SCHOOL_READ_ONLY', job: null };
+      }
+      if (current.type === 'TENANT_FULL' && !(await readFeatures(tx)).dataExport) {
+        await tx.dataExport.update({
+          where: { id: exportId },
+          data: { status: 'FAILED', error: 'FEATURE_NOT_ENABLED' },
+        });
+        return { status: 'FEATURE_NOT_ENABLED', job: null };
+      }
+      await tx.dataExport.update({ where: { id: exportId }, data: { status: 'RUNNING' } });
+      return { status: 'RUNNING', job: current };
+    });
+    const job = claim.job;
+    if (job === null) return { status: claim.status };
     try {
+      const storage = await deps.locations.at(job.storageLocationId, tenantId);
       const params = job.params as { from?: string; to?: string };
       const built = await runInTenantTx(deps.prisma, async (tx) => {
         if (job.type === 'TENANT_FULL') {
-          const full = await fullExport(tx, deps.storage);
+          const full = await fullExport(tx, deps.locations);
           return { body: buildZip(full.entries), rows: full.rows, ext: 'zip', type: 'application/zip' };
         }
         const report = await reportCsv(tx, job.type, params.from ?? '2000-01-01', params.to ?? '2100-01-01');
         return { body: Buffer.from(report.csv), rows: report.rows, ext: 'csv', type: 'text/csv' };
       });
       const key = `t/${tenantId}/exports/${exportId}.${built.ext}`;
-      await deps.storage.put(key, built.body, built.type);
+      await storage.put(key, built.body, built.type);
       await runInTenantTx(deps.prisma, async (tx) => {
         const row = await tx.dataExport.update({
           where: { id: exportId },
           data: {
             status: 'READY',
             storageKey: key,
+            storageLocationId: job.storageLocationId,
             rowCount: built.rows,
             sizeBytes: BigInt(built.body.length),
             completedAt: new Date(),

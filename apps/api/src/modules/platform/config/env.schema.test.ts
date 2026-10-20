@@ -23,8 +23,20 @@ describe('loadApiEnv', () => {
       API_HOST: '127.0.0.1',
       API_PORT: 4000,
       READINESS_TIMEOUT_MS: 2000,
+      API_RATE_IP_PER_MINUTE: 600,
+      API_RATE_TENANT_PER_MINUTE: 6000,
+      API_RATE_ACCOUNT_PER_MINUTE: 300,
     });
   });
+
+  it.each(['API_RATE_IP_PER_MINUTE', 'API_RATE_TENANT_PER_MINUTE', 'API_RATE_ACCOUNT_PER_MINUTE'])(
+    'refuses invalid or disabled API budget %s',
+    (key) => {
+      for (const value of ['0', '-1', '1.5', 'NaN', '1000001']) {
+        expect(() => loadApiEnv({ DATABASE_URL_APP: validDatabaseUrl, [key]: value })).toThrow(ConfigError);
+      }
+    },
+  );
 
   it('names a missing required variable', () => {
     const error = captureConfigError(() => loadApiEnv({}));

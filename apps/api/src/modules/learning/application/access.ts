@@ -2,7 +2,7 @@ import type { LearnAccess } from '@studyhub/contracts';
 
 import { can, type TenantActor } from '../../identity';
 import { AppError, isSchoolReadOnly, type TenantTx } from '../../platform';
-import { readContentSettings } from '../../tenancy';
+import { readContentSettings, readFeatures } from '../../tenancy';
 
 /** The course fields every access decision needs. */
 export interface CourseForAccess {
@@ -86,7 +86,9 @@ export async function inCatalogue(
   if (course.status !== 'PUBLISHED') return false;
   if (actor === null) {
     const settings = await readContentSettings(tx);
-    if (settings.catalogVisibility === 'MEMBERS_ONLY') throw new AppError('UNAUTHENTICATED');
+    if (!(await readFeatures(tx)).publicCatalog || settings.catalogVisibility === 'MEMBERS_ONLY') {
+      throw new AppError('UNAUTHENTICATED');
+    }
   }
   const profile = await tx.instructorProfile.findUnique({
     where: { membershipId: course.ownerMembershipId },

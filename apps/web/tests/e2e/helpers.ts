@@ -16,7 +16,8 @@ export const DEMO = {
   staff: 'staff@studyhub.test',
 } as const;
 
-export const school = (host: string, path = '/') => `http://${host}:3000${path}`;
+export const WEB_PORT = process.env.STUDYHUB_E2E_ISOLATED === '1' ? 3400 : 3000;
+export const school = (host: string, path = '/') => `http://${host}:${WEB_PORT}${path}`;
 
 const MAILPIT = process.env.MAILPIT_URL ?? 'http://127.0.0.1:8025';
 
@@ -70,7 +71,7 @@ export function totp(secretBase32: string, offsetSteps = 0): string {
  * resets enrolment): whoever enrols writes it here. The API refuses a code whose step was already used,
  * so every code comes from a step later than the last one handed out.
  */
-const STAFF_TOTP_FILE = join(tmpdir(), 'studyhub-e2e-staff-totp.json');
+const STAFF_TOTP_FILE = process.env.STUDYHUB_E2E_TOTP_FILE ?? join(tmpdir(), 'studyhub-e2e-staff-totp.json');
 const currentStep = () => Math.floor(Date.now() / 30_000);
 
 function readStaffTotp(): { secret: string; lastStep: number } | null {

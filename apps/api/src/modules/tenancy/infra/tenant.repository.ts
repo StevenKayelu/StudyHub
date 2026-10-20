@@ -96,13 +96,14 @@ export class TenantRepository implements TenantLookup {
     // platform_setting is a global table without school data.
     const banner = await tx.platformSetting.findUnique({ where: { key: MAINTENANCE_BANNER_KEY } });
     const legal = generalSettingsFrom(tenant.settings).legalPages;
+    const branding = toBranding(tenant.name, tenant.branding);
 
     return {
       id: tenant.id,
       slug: tenant.slug,
       name: tenant.name,
       status: tenant.status,
-      branding: toBranding(tenant.name, tenant.branding),
+      branding: { ...branding, showPoweredBy: branding.showPoweredBy || !features.whiteLabel },
       locales: toLocaleSettings(tenant.settings),
       features,
       notice: typeof banner?.value === 'string' && banner.value.trim() !== '' ? banner.value : null,

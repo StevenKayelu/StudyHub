@@ -18,6 +18,7 @@ interface Bucket {
 
 export class RateLimiter {
   private readonly buckets = new Map<string, Bucket>();
+  private lastSweep = Number.NEGATIVE_INFINITY;
 
   constructor(
     private readonly now: () => number = Date.now,
@@ -29,7 +30,7 @@ export class RateLimiter {
     const now = this.now();
     let bucket = this.buckets.get(key);
     if (bucket === undefined || bucket.resetAt <= now) {
-      if (this.buckets.size >= this.maxKeys) this.sweep(now);
+      if (bucket === undefined && this.buckets.size >= this.maxKeys) this.makeRoom(now);
       bucket = { count: 0, resetAt: now + rule.windowMs };
       this.buckets.set(key, bucket);
     }
@@ -57,9 +58,20 @@ export class RateLimiter {
     this.buckets.delete(key);
   }
 
-  private sweep(now: number): void {
-    for (const [key, bucket] of this.buckets) if (bucket.resetAt <= now) this.buckets.delete(key);
-    if (this.buckets.size >= this.maxKeys) this.buckets.clear();
+  /**
+   * Under key churn: drop expired buckets (an O(n) sweep, at most once a second), else the oldest
+   * inserted key. Never clears everything (that would reset every live limit at once) and never refuses
+   * new keys (that would let one client's churn lock out every other client).
+   */
+  private makeRoom(now: number): void {
+    if (now - this.lastSweep >= 1000) {
+      this.lastSweep = now;
+      for (const [key, bucket] of this.buckets) if (bucket.resetAt <= now) this.buckets.delete(key);
+    }
+    if (this.buckets.size >= this.maxKeys) {
+      const oldest = this.buckets.keys().next();
+      if (oldest.done !== true) this.buckets.delete(oldest.value);
+    }
   }
 }
 

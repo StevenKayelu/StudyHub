@@ -9,6 +9,8 @@ import type { Client } from 'pg';
 export const GLOBAL_TABLES: Readonly<Record<string, string>> = {
   _prisma_migrations: 'migration bookkeeping (migrator only)',
   platform_setting: 'global platform settings, no tenant data',
+  platform_storage_location:
+    'immutable deployment storage descriptors and encrypted credentials; platform realm only',
   tenant: 'school identity; RLS policy tenant_self limits it to its own context',
   user_account: 'global account (D3); RLS account_self_or_member',
   credential: 'global credential; RLS credential_self',
@@ -34,6 +36,7 @@ export const GLOBAL_RLS_TABLES: Readonly<Record<string, string>> = {
   platform_credential: 'platform_realm',
   platform_session: 'platform_realm',
   platform_audit_log: 'platform_realm',
+  platform_storage_location: 'platform_realm',
   plan: 'platform_realm',
 };
 

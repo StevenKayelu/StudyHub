@@ -24,32 +24,58 @@ export class ClamdScanner implements MalwareScanner {
     return new Promise((resolve, reject) => {
       const socket = new Socket();
       let reply = '';
-      const fail = (error: Error) => {
+      let settled = false;
+      const cleanup = () => {
+        settled = true;
+        content.removeListener('error', fail);
+        content.destroy();
         socket.destroy();
+      };
+      const fail = (error: Error) => {
+        if (settled) return;
+        cleanup();
         reject(error);
       };
+      content.on('error', fail);
       socket.setTimeout(this.timeoutMs, () => fail(new Error('clamd timed out')));
       socket.on('error', fail);
       socket.on('data', (data) => {
         reply += data.toString('utf8');
+        if (reply.length > 4096) fail(new Error('clamd reply exceeds protocol limit'));
+      });
+      socket.on('close', () => {
+        if (!settled) fail(new Error('clamd connection closed before scan result'));
       });
       socket.on('end', () => {
+        if (settled) return;
         const text = reply.replace(/\0/g, '').trim();
-        if (/: OK$/.test(text)) resolve({ clean: true });
-        else if (/ FOUND$/.test(text))
+        if (text === 'stream: OK') {
+          cleanup();
+          resolve({ clean: true });
+        } else if (/^stream: .+ FOUND$/.test(text)) {
+          cleanup();
           resolve({ clean: false, signature: text.replace(/^stream: /, '').replace(/ FOUND$/, '') });
-        else reject(new Error(`Unexpected clamd reply: ${text.slice(0, 200)}`));
+        } else fail(new Error(`Unexpected clamd reply: ${text.slice(0, 200)}`));
       });
       socket.connect(this.port, this.host, () => {
-        socket.write('zINSTREAM\0');
-        content.on('data', (chunk: Buffer) => {
-          const size = Buffer.alloc(4);
-          size.writeUInt32BE(chunk.length);
-          socket.write(size);
-          socket.write(chunk);
-        });
-        content.on('end', () => socket.write(Buffer.alloc(4)));
-        content.on('error', fail);
+        // Await writes so large uploads cannot accumulate unbounded socket buffers when clamd
+        // reads slowly. Stop consuming storage content after rejection, disconnect or timeout.
+        const write = (chunk: Buffer | string) =>
+          new Promise<void>((done, rejectWrite) => {
+            socket.write(chunk, (error) => (error ? rejectWrite(error) : done()));
+          });
+        void (async () => {
+          await write('zINSTREAM\0');
+          for await (const chunk of content) {
+            if (settled) return;
+            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
+            const size = Buffer.alloc(4);
+            size.writeUInt32BE(bytes.length);
+            await write(size);
+            await write(bytes);
+          }
+          if (!settled) await write(Buffer.alloc(4));
+        })().catch(fail);
       });
     });
   }

@@ -75,6 +75,31 @@ export async function runInPlatformTenantTx<T>(
   );
 }
 
+export interface TenantLifecycle {
+  /** DELETED, or OFFBOARDING past (or without) its deadline: no new object writers may start. */
+  blocked: boolean;
+  /** OFFBOARDING and past its deadline: the purge may run once in-flight writers have finished. */
+  purgeDue: boolean;
+}
+
+/**
+ * Locks the school's tenant row (FOR UPDATE) and reads its lifecycle. The purge and every writer of
+ * school objects (export requests and claims, media processing) take this one lock, so no new object
+ * can appear once the purge has checked for in-flight writers. Returns undefined for an unknown school.
+ */
+export async function lockTenantLifecycle(
+  tx: TenantTx,
+  tenantId: string,
+): Promise<TenantLifecycle | undefined> {
+  const [row] = await tx.$queryRaw<TenantLifecycle[]>`
+    SELECT (status = 'DELETED' OR (status = 'OFFBOARDING' AND
+            (delete_after IS NULL OR delete_after <= clock_timestamp()))) AS blocked,
+           (status = 'OFFBOARDING' AND delete_after IS NOT NULL
+            AND delete_after <= clock_timestamp()) AS "purgeDue"
+      FROM tenant WHERE id = ${tenantId}::uuid FOR UPDATE`;
+  return row;
+}
+
 /** Nest-injectable access to tenant-scoped transactions. */
 @Injectable()
 export class TenantDb {

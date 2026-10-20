@@ -3,7 +3,14 @@ import type { Client } from 'pg';
 import { GenericContainer, type StartedTestContainer, Wait } from 'testcontainers';
 
 import { createApp } from '../../src/main';
-import { createLogger, DEV_IDENTITY_ENCRYPTION_KEY, loadApiEnv, SecretBox } from '../../src/modules/platform';
+import {
+  bootstrapStorageLocations,
+  createLogger,
+  DEV_IDENTITY_ENCRYPTION_KEY,
+  loadApiEnv,
+  PrismaService,
+  SecretBox,
+} from '../../src/modules/platform';
 import { provisionTenant } from '../../src/modules/tenancy';
 import { startTestDatabase, type TestDatabase } from './postgres-container';
 
@@ -87,7 +94,7 @@ export async function startHarness(
         '-ip=127.0.0.1',
         '-ip.bind=0.0.0.0',
         '-master.volumeSizeLimitMB=64',
-        '-volume.max=5',
+        '-volume.max=20',
         '-s3',
         '-s3.port=8333',
         '-s3.config=/etc/seaweedfs/s3.json',
@@ -104,6 +111,11 @@ export async function startHarness(
   const env = loadApiEnv({
     DATABASE_URL_APP: database.appUrl,
     LOG_LEVEL: level,
+    // Functional/isolation matrices must reach handlers instead of passing on a generic 429.
+    // Dedicated rate-limit hook tests exercise production defaults and deliberately small budgets.
+    API_RATE_IP_PER_MINUTE: '100000',
+    API_RATE_TENANT_PER_MINUTE: '100000',
+    API_RATE_ACCOUNT_PER_MINUTE: '100000',
     ...(s3Endpoint !== null && {
       S3_ENDPOINT: s3Endpoint,
       S3_ACCESS_KEY_ID: 'test-access',
@@ -112,6 +124,12 @@ export async function startHarness(
     }),
     ...options.env,
   });
+  const bootstrapPrisma = new PrismaService(env, createLogger({ level }));
+  try {
+    await bootstrapStorageLocations({ prisma: bootstrapPrisma, env });
+  } finally {
+    await bootstrapPrisma.onModuleDestroy();
+  }
   const app = await createApp({ env, logger: createLogger({ level }) });
   const box = new SecretBox(DEV_IDENTITY_ENCRYPTION_KEY);
   let ip = 1;

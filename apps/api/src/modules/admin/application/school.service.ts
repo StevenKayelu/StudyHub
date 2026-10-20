@@ -256,11 +256,15 @@ export class SchoolService {
   async cancelOffboarding(actor: TenantActor): Promise<OffboardingView> {
     requireOwner(actor);
     await this.db.run(async (tx) => {
-      const tenant = await tx.tenant.findFirst({ select: { id: true, status: true, deleteAfter: true } });
+      const [tenant] = await tx.$queryRaw<
+        { id: string; status: string; deleteAfter: Date | null; checkedAt: Date }[]
+      >`
+        SELECT id, status, delete_after AS "deleteAfter", clock_timestamp() AS "checkedAt"
+        FROM tenant WHERE id = ${requireTenantId()}::uuid FOR UPDATE`;
       if (
         tenant?.status !== 'OFFBOARDING' ||
         tenant.deleteAfter === null ||
-        tenant.deleteAfter < new Date()
+        tenant.deleteAfter <= tenant.checkedAt
       ) {
         throw new AppError('INVALID_STATE', { detail: 'There is no offboarding to cancel.' });
       }

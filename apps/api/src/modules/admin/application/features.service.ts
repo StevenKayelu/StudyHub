@@ -14,6 +14,7 @@ import type { TenantActor } from '../../identity';
 import { AppError, requireTenantId, TenantDb, type TenantTx } from '../../platform';
 import {
   featureAvailable,
+  featureChangeProblems,
   featureMap,
   LATER_FEATURES,
   planGrants,
@@ -39,6 +40,8 @@ export class FeaturesService {
   async set(actor: TenantActor, key: FeatureKey, enabled: boolean): Promise<void> {
     requireAdmin(actor);
     await this.db.run(async (tx) => {
+      const tenantId = requireTenantId();
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`features:${tenantId}`}))`;
       const features = await this.read(tx);
       const feature = features.features.find((f) => f.key === key);
       if (feature === undefined) throw new AppError('NOT_FOUND');
@@ -48,8 +51,21 @@ export class FeaturesService {
           extensions: { feature: key },
         });
       }
+      const current = Object.fromEntries(features.features.map((f) => [f.key, f.effective]));
+      const problems = featureChangeProblems(current as Record<FeatureKey, boolean>, key, enabled);
+      if (problems.length > 0) {
+        throw new AppError('VALIDATION_FAILED', {
+          errors: problems.map((problem) => ({
+            field: 'enabled',
+            code: problem.code,
+            message:
+              problem.code === 'dependency_disabled'
+                ? `Enable ${problem.feature} before enabling ${key}.`
+                : `Disable ${problem.feature} before disabling ${key}.`,
+          })),
+        });
+      }
       if (feature.enabledByTenant === enabled) return;
-      const tenantId = requireTenantId();
       await tx.tenantFeature.upsert({
         where: { tenantId_featureKey: { tenantId, featureKey: key } },
         create: { tenantId, featureKey: key, enabledByTenant: enabled, updatedBy: actor.membershipId },

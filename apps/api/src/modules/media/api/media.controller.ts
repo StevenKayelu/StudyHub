@@ -102,7 +102,7 @@ export class MediaController {
     if (this.config.get('NODE_ENV') === 'production' || !(this.video instanceof FakeVideoProvider)) {
       throw new AppError('NOT_FOUND');
     }
-    requireActor();
+    await this.media.authorizeVideoUpload(requireActor(), providerVideoId);
     const body = Buffer.from(JSON.stringify({ providerVideoId, status: 'READY', durationSeconds: 60 }));
     const signature = this.video.sign(body);
     // The provider's callback carries no school context of its own.

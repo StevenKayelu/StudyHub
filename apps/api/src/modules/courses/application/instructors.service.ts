@@ -4,7 +4,7 @@ import type { InstructorProfileView } from '@studyhub/contracts';
 import { AuditService } from '../../audit';
 import { can, type TenantActor } from '../../identity';
 import { AppError, requireTenantId, TenantDb, type TenantTx } from '../../platform';
-import { enforceLimit, readContentSettings } from '../../tenancy';
+import { enforceLimit, readContentSettings, readFeatures, requireFeature } from '../../tenancy';
 import { nextFreeSlug, slugify } from '../domain/course-rules';
 
 const REAPPLY_AFTER_MS = 30 * 24 * 3600_000;
@@ -30,10 +30,13 @@ export class InstructorsService {
   ): Promise<{ profile: InstructorProfileView | null; onboardingMode: 'INVITE_ONLY' | 'APPLICATION' }> {
     return this.db.run(async (tx) => {
       const settings = await readContentSettings(tx);
+      const onboardingMode = (await readFeatures(tx)).instructorApplications
+        ? settings.instructorOnboardingMode
+        : 'INVITE_ONLY';
       const profile = await tx.instructorProfile.findUnique({ where: { membershipId: actor.membershipId } });
       return {
-        profile: profile === null ? null : this.view(profile, settings.instructorOnboardingMode),
-        onboardingMode: settings.instructorOnboardingMode,
+        profile: profile === null ? null : this.view(profile, onboardingMode),
+        onboardingMode,
       };
     });
   }
@@ -52,6 +55,7 @@ export class InstructorsService {
     return this.db.run(async (tx) => {
       const settings = await readContentSettings(tx);
       const isInstructor = can(actor, 'studio.access');
+      if (!isInstructor) await requireFeature(tx, 'instructorApplications');
       if (!isInstructor && settings.instructorOnboardingMode !== 'APPLICATION') {
         throw new AppError('FORBIDDEN', { detail: 'This school adds instructors by invitation.' });
       }
@@ -94,6 +98,7 @@ export class InstructorsService {
   /** DRAFT / CHANGES_REQUESTED / REJECTED (after the waiting period) → SUBMITTED. */
   async submit(actor: TenantActor): Promise<InstructorProfileView> {
     return this.db.run(async (tx) => {
+      await requireFeature(tx, 'instructorApplications');
       const settings = await readContentSettings(tx);
       if (settings.instructorOnboardingMode !== 'APPLICATION') throw new AppError('FORBIDDEN');
       await this.requireVerifiedEmail(tx, actor);

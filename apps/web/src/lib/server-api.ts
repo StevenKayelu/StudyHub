@@ -20,6 +20,18 @@ function apiBaseUrl(): string {
   return process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:4000';
 }
 
+const FORWARDED_FOR = /^[0-9a-fA-F.:, ]{1,512}$/;
+
+/**
+ * The visitor's X-Forwarded-For chain (Next.js appends the socket address when absent), so server-side
+ * API calls draw from the visitor's per-IP budget rather than the web server's single address. The API
+ * honours it only from TRUSTED_PROXIES, exactly as for the /api rewrite.
+ */
+export function forwardedFor(incoming: Headers): Record<string, string> {
+  const value = incoming.get('x-forwarded-for')?.trim();
+  return value !== undefined && FORWARDED_FOR.test(value) ? { 'x-forwarded-for': value } : {};
+}
+
 /**
  * Server-side only: asks the API whether it is ready. Every response is validated against the shared
  * contracts; anything unexpected is reported as "unknown" rather than trusted.
@@ -60,11 +72,12 @@ const SCHOOL_HOST = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,
  */
 export async function getTenantBootstrap(host: string): Promise<TenantBootstrap | null> {
   if (!SCHOOL_HOST.test(host)) return null;
+  const incoming = await headers();
   let response: Response;
   try {
     response = await fetch(`${apiBaseUrl()}/api/v1/tenant`, {
       cache: 'no-store',
-      headers: { accept: 'application/json', 'x-forwarded-host': host },
+      headers: { accept: 'application/json', 'x-forwarded-host': host, ...forwardedFor(incoming) },
       signal: AbortSignal.timeout(READINESS_FETCH_TIMEOUT_MS),
     });
   } catch {
@@ -76,7 +89,6 @@ export async function getTenantBootstrap(host: string): Promise<TenantBootstrap 
     const moved = problemSchema.safeParse(await response.json().catch(() => null));
     const primary = moved.success ? (moved.data as { primaryHost?: unknown }).primaryHost : undefined;
     if (typeof primary === 'string' && SCHOOL_HOST.test(primary)) {
-      const incoming = await headers();
       const path = incoming.get('x-studyhub-path') ?? '/';
       const port = /:(\d{1,5})$/.exec(incoming.get('host') ?? '')?.[1];
       const scheme = process.env.NODE_ENV === 'production' ? 'https' : 'http';

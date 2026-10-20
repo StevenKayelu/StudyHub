@@ -1,5 +1,7 @@
 # Runbook: local development
 
+For managed platform defaults and school overrides, see [dashboard configuration](dashboard-configuration.md). This first phase needs no new database migration or environment key. Rebuild/restart the updated application once; subsequent managed-setting activations are read on the next relevant API/worker operation. Infrastructure credentials remain deployment settings.
+
 ## Start and stop
 
 ```powershell
@@ -71,24 +73,36 @@ docker compose --env-file .env -f infra/compose/docker-compose.dev.yml exec post
 
 ## Troubleshooting
 
-| Symptom                                                               | Cause                                           | Fix                                                                                      |
-| --------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `corepack enable` fails with `EPERM … C:\Program Files\nodejs`        | Corepack needs admin rights to write there      | `corepack enable pnpm --install-directory "$env:APPDATA\npm"`                            |
-| `pnpm db:up` fails: `Set POSTGRES_SUPERUSER_PASSWORD in .env`         | No `.env` file                                  | `Copy-Item .env.example .env`                                                            |
-| `pnpm db:up` fails: port 5432 already allocated                       | Another PostgreSQL is running                   | Stop it, or set `POSTGRES_PORT` in `.env` and update both `DATABASE_URL_*` values        |
-| `/readyz` returns 503                                                 | Database down or not migrated                   | `pnpm db:up`, then `pnpm db:migrate`                                                     |
-| API exits with `Invalid configuration`                                | A variable in `.env` is missing or malformed    | The message names each variable; compare with `.env.example`                             |
-| `pnpm test:int` fails to start containers                             | Docker Desktop not running                      | Start Docker Desktop; the first run downloads `postgres:17`                              |
-| `pnpm test:e2e` cannot find a browser                                 | Playwright browser not installed                | `pnpm --filter @studyhub/web exec playwright install --only-shell chromium`              |
-| `pnpm db:migrate` fails: `role "studyhub_rls_definer" does not exist` | The volume predates M2                          | `pnpm db:provision-roles`, then `pnpm db:migrate`                                        |
-| A school host shows "Site not found"                                  | The school isn't seeded or its host is misspelt | `pnpm db:seed`; use `http://acme.localhost:3000`                                         |
-| Playwright browser download times out                                 | Slow or filtered connection to the browser CDN  | `$env:PLAYWRIGHT_CHANNEL = 'msedge'` (uses the installed Edge), then rerun the e2e tests |
-| `pnpm db:migrate` fails: `Cannot find module …dist/cli/migrate.js`    | The API has not been built                      | `pnpm build`, then `pnpm db:migrate`                                                     |
-| `pnpm secrets:scan` cannot start                                      | Docker not running                              | Start Docker Desktop                                                                     |
-| An upload stays at "Checking the file…"                               | The worker isn't running                        | `pnpm dev` (or `pnpm --filter @studyhub/api start:worker`)                               |
-| An upload fails at once in the browser                                | Object store not running                        | `pnpm db:up` (starts SeaweedFS on port 8333)                                             |
+| Symptom                                                                       | Cause                                           | Fix                                                                                      |
+| ----------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `corepack enable` fails with `EPERM … C:\Program Files\nodejs`                | Corepack needs admin rights to write there      | `corepack enable pnpm --install-directory "$env:APPDATA\npm"`                            |
+| `pnpm db:up` fails: `Set POSTGRES_SUPERUSER_PASSWORD in .env`                 | No `.env` file                                  | `Copy-Item .env.example .env`                                                            |
+| `pnpm db:up` fails: port 5432 already allocated                               | Another PostgreSQL is running                   | Stop it, or set `POSTGRES_PORT` in `.env` and update both `DATABASE_URL_*` values        |
+| `/readyz` returns 503                                                         | Database down or not migrated                   | `pnpm db:up`, then `pnpm db:migrate`                                                     |
+| API exits with `Invalid configuration`                                        | A variable in `.env` is missing or malformed    | The message names each variable; compare with `.env.example`                             |
+| `pnpm test:int` fails to start containers                                     | Docker Desktop not running                      | Start Docker Desktop; the first run downloads `postgres:17`                              |
+| `pnpm test:e2e` cannot find a browser                                         | Playwright browser not installed                | `pnpm --filter @studyhub/web exec playwright install --only-shell chromium`              |
+| `pnpm db:migrate` fails: `role "studyhub_rls_definer" does not exist`         | The volume predates M2                          | `pnpm db:provision-roles`, then `pnpm db:migrate`                                        |
+| A school host shows "Site not found"                                          | The school isn't seeded or its host is misspelt | `pnpm db:seed`; use `http://acme.localhost:3000`                                         |
+| Playwright browser download times out                                         | Slow or filtered connection to the browser CDN  | `$env:PLAYWRIGHT_CHANNEL = 'msedge'` (uses the installed Edge), then rerun the e2e tests |
+| `pnpm db:migrate` fails: `Cannot find module …dist/cli/migrate.js`            | The API has not been built                      | `pnpm build`, then `pnpm db:migrate`                                                     |
+| `pnpm secrets:scan` cannot start                                              | Docker not running                              | Start Docker Desktop                                                                     |
+| An upload stays at "Checking the file…"                                       | The worker isn't running                        | `pnpm dev` (or `pnpm --filter @studyhub/api start:worker`)                               |
+| An upload fails at once in the browser                                        | Object store not running                        | `pnpm db:up` (starts SeaweedFS on port 8333)                                             |
+| Uploads/downloads return 503; API logs "Object storage has not been captured" | Storage origin not captured                     | `pnpm db:seed` (captures it), or `pnpm storage:bootstrap` on a database you don't seed   |
 
 ## Security notes
+
+- Use `pnpm.cmd test:e2e:isolated` after building the API/shared packages for browser checks that preserve demo data. It allocates disposable PostgreSQL/Mailpit/SeaweedFS, migrates/seeds only that fresh database, builds `.next-e2e`, and uses web 3400/API 4500. Occupied ports fail rather than reusing a server. All school URLs and email links follow the isolated port, and platform TOTP state is unique to the run. Existing `.env`, `.next`, accounts and volumes are not used for test data. `pnpm verify` and CI now use this runner. The older `test:e2e` intentionally retains its demo-stack behavior.
+- `pnpm.cmd test:load:smoke` runs a small real-HTTP two-school budget/latency test on a disposable database and writes `apps/api/test-results/load/latest.json`. Run alone for meaningful timings. It does not cover authenticated writes, export/worker fairness or launch capacity.
+- `pnpm.cmd test:recovery` restores a synthetic full logical backup into a newly created database and verifies table hashes/RLS; see [recovery verification](recovery-verification.md). No existing target is accepted. Reports are in `apps/api/test-results/recovery/latest.json`.
+- On Windows, a running standalone server can lock `.next/standalone/apps/web`; stop that local web process before rebuilding `.next`, then restart it. Isolated `.next-e2e` builds avoid this lock and do not replace the demo build.
+
+- On Windows where execution policy blocks `pnpm.ps1`, use `pnpm.cmd` for the same commands.
+- After `pnpm build`, run `pnpm.cmd test:security` for database-free production CSP/header browser checks. It uses ports 3300, 3301, 4400 and 4401, with fixture API/upload servers; it refuses to reuse existing servers and never submits to the normal development API. Chromium must be installed. This supplements the real database-backed E2E suite.
+- Configure browser upload/CDN/embed origins with `WEB_CSP_CONNECT_ORIGINS`, `WEB_CSP_IMAGE_ORIGINS`, `WEB_CSP_MEDIA_ORIGINS` and `WEB_CSP_FRAME_ORIGINS` (comma-separated exact HTTPS origins; HTTP only for loopback). Export these into the web process environment; restart after changes and rebuild if changing build-time configuration. Never add wildcard hosts or CSP directives. Local hosts permit SeaweedFS at `http://127.0.0.1:8333` by default. Inline scripts require per-request nonces; inline styles remain permitted for the existing design system and editor.
+- Nonce-based HTML is dynamic and private/no-store; do not enable shared HTML/ISR caching without redesigning the policy. Static assets still use their normal cache rules. Production HSTS/upgrade policy supplements the HTTPS redirect and TLS configuration required at the edge; no edge setup is supplied by this local change.
+- API-wide request budgets are `API_RATE_IP_PER_MINUTE=600`, `API_RATE_TENANT_PER_MINUTE=6000` and `API_RATE_ACCOUNT_PER_MINUTE=300`. All must be positive integers. Restart the API after changing them. A rejected request returns 429 with `Retry-After`; health/readiness probes remain available. These are process-local budgets: validate them against staging traffic and provide shared enforcement before running multiple API instances. See `docs/design/m10-hardening.md` for limitations and verification.
 
 - `.env` is git-ignored. Never commit real credentials. `pnpm secrets:scan` scans the working tree; CI scans the full git history.
 - Logs redact passwords, tokens, cookies, authorization headers and phone numbers. Don't log request bodies.

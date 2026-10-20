@@ -8,10 +8,10 @@ import {
   createLogger,
   MALWARE_SCANNER,
   type MalwareScanner,
-  OBJECT_STORAGE,
-  type ObjectStorage,
   PrismaService,
   runWithContext,
+  STORAGE_LOCATIONS,
+  type StorageLocations,
 } from '../../src/modules/platform';
 import { type Harness, SCHOOLS, startHarness } from '../setup/school-harness';
 
@@ -39,7 +39,7 @@ describe('catalogue and authoring (M5)', () => {
   async function processAsset(tenantId: string, assetId: string): Promise<void> {
     const handler = createProcessAssetHandler({
       prisma: h.app.get(PrismaService),
-      storage: h.app.get<ObjectStorage>(OBJECT_STORAGE),
+      locations: h.app.get<StorageLocations>(STORAGE_LOCATIONS),
       scanner: h.app.get<MalwareScanner>(MALWARE_SCANNER),
     });
     await runWithContext({ requestId: 'test', tenantId }, () =>
@@ -454,6 +454,40 @@ describe('catalogue and authoring (M5)', () => {
       expect(result.items.map((c: { title: string }) => c.title)).toContain('Biology basics');
     });
 
+    it('disabling publicCatalog protects anonymous catalogue routes for one school and keeps member access', async () => {
+      expect(
+        (
+          await h.call('PUT', '/api/v1/admin/features/publicCatalog', {
+            host: ACME,
+            cookie: adminCookie,
+            body: { enabled: false },
+          })
+        ).statusCode,
+      ).toBe(204);
+      try {
+        expect((await h.call('GET', '/api/v1/courses', { host: ACME })).statusCode).toBe(401);
+        expect((await h.call('GET', '/api/v1/courses/biology-basics', { host: ACME })).statusCode).toBe(401);
+        expect((await h.call('GET', '/api/v1/instructors/tiko-phiri', { host: ACME })).statusCode).toBe(401);
+        expect((await h.call('GET', '/api/v1/courses', { host: ACME, cookie: tutorCookie })).statusCode).toBe(
+          200,
+        );
+        expect((await h.call('GET', '/api/v1/courses', { host: BETA })).statusCode).toBe(200);
+        expect((await h.call('GET', '/api/v1/tenant', { host: BETA })).json().features.publicCatalog).toBe(
+          true,
+        );
+      } finally {
+        expect(
+          (
+            await h.call('PUT', '/api/v1/admin/features/publicCatalog', {
+              host: ACME,
+              cookie: adminCookie,
+              body: { enabled: true },
+            })
+          ).statusCode,
+        ).toBe(204);
+      }
+    });
+
     it('BR-57: a members-only catalogue needs sign-in', async () => {
       await h.setSetting(h.tenants.acme, 'catalogVisibility', 'MEMBERS_ONLY');
       try {
@@ -679,6 +713,83 @@ describe('catalogue and authoring (M5)', () => {
           })
         ).statusCode,
       ).toBe(201);
+    });
+
+    it('application restrictions apply to draft writes and submissions in one school while existing instructors keep their profiles', async () => {
+      await h.setSetting(h.tenants.acme, 'instructorOnboardingMode', 'APPLICATION');
+      await h.setSetting(h.tenants.beta, 'instructorOnboardingMode', 'APPLICATION');
+      const acmeLearner = await h.member(
+        ACME,
+        h.tenants.acme,
+        'pilot-applicant@acme.test',
+        'Pilot Applicant',
+      );
+      const betaLearner = await h.member(BETA, h.tenants.beta, 'pilot-applicant@beta.test', 'Beta Applicant');
+      for (const [host, cookie] of [
+        [ACME, acmeLearner],
+        [BETA, betaLearner],
+      ]) {
+        expect(
+          (
+            await h.call('PUT', '/api/v1/me/instructor', {
+              host: host!,
+              cookie,
+              body: { displayName: 'Pilot Applicant' },
+            })
+          ).statusCode,
+        ).toBe(200);
+      }
+      expect(
+        (
+          await h.call('PUT', '/api/v1/admin/features/instructorApplications', {
+            host: ACME,
+            cookie: adminCookie,
+            body: { enabled: false },
+          })
+        ).statusCode,
+      ).toBe(204);
+      try {
+        for (const response of [
+          await h.call('PUT', '/api/v1/me/instructor', {
+            host: ACME,
+            cookie: acmeLearner,
+            body: { displayName: 'Changed' },
+          }),
+          await h.call('POST', '/api/v1/me/instructor/submit', { host: ACME, cookie: acmeLearner }),
+        ]) {
+          expect(response.statusCode).toBe(403);
+          expect(response.json().code).toBe('FEATURE_NOT_ENABLED');
+        }
+        const existing = (
+          await h.call('GET', '/api/v1/me/instructor', { host: ACME, cookie: acmeLearner })
+        ).json();
+        expect(existing.onboardingMode).toBe('INVITE_ONLY');
+        expect(existing.profile.status).toBe('DRAFT');
+        expect(
+          (
+            await h.call('PUT', '/api/v1/me/instructor', {
+              host: ACME,
+              cookie: tutorCookie,
+              body: { displayName: 'Tiko Phiri' },
+            })
+          ).statusCode,
+        ).toBe(200);
+        expect(
+          (await h.call('POST', '/api/v1/me/instructor/submit', { host: BETA, cookie: betaLearner }))
+            .statusCode,
+        ).toBe(200);
+      } finally {
+        expect(
+          (
+            await h.call('PUT', '/api/v1/admin/features/instructorApplications', {
+              host: ACME,
+              cookie: adminCookie,
+              body: { enabled: true },
+            })
+          ).statusCode,
+        ).toBe(204);
+        await h.setSetting(h.tenants.beta, 'instructorOnboardingMode', 'INVITE_ONLY');
+      }
     });
 
     it('BR-28: a suspended instructor loses Studio and their courses leave the catalogue', async () => {

@@ -4,6 +4,16 @@ import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
 import { consoleHosts, platformHosts } from './src/lib/hosts';
+import { cspOrigins, webSecurityHeaders } from './src/lib/security-headers';
+
+for (const key of [
+  'WEB_CSP_CONNECT_ORIGINS',
+  'WEB_CSP_IMAGE_ORIGINS',
+  'WEB_CSP_MEDIA_ORIGINS',
+  'WEB_CSP_FRAME_ORIGINS',
+]) {
+  cspOrigins(process.env[key]);
+}
 
 /** Where the web server reaches the API (server-side and through the /api rewrite). */
 const apiInternalUrl = process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:4000';
@@ -29,13 +39,27 @@ const consoleHost = {
 const ROUTED_PATH = '/:path((?!api(?:/|$)|_next/|_tenant(?:/|$)|_console(?:/|$)|_system(?:/|$)).+)';
 
 const nextConfig: NextConfig = {
+  distDir: process.env.STUDYHUB_E2E_ISOLATED === '1' ? '.next-e2e' : '.next',
   output: 'standalone',
   // The monorepo root, so standalone output traces workspace packages correctly.
   outputFileTracingRoot: path.resolve(process.cwd(), '..', '..'),
   poweredByHeader: false,
+  // Keep standalone loopback rewrites internal: Next's localhost canonicalization otherwise turns
+  // the maintenance rewrite into a second HTTP request rejected by the internal-route guard.
+  skipProxyUrlNormalize: true,
   reactStrictMode: true,
   // Import only the design-system modules a route uses (keeps Radix out of pages that don't need it).
   experimental: { optimizePackageImports: ['@studyhub/ui', 'lucide-react'] },
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: Object.entries(webSecurityHeaders(process.env.NODE_ENV === 'production')).map(
+          ([key, value]) => ({ key, value }),
+        ),
+      },
+    ];
+  },
   async rewrites() {
     return {
       // School sites: every non-platform host is served by the internal /_tenant/<host> route, so every

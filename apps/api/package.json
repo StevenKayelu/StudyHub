@@ -14,7 +14,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "node --env-file-if-exists=../../.env dist/cli/migrate.js",
     "db:seed": "node --env-file-if-exists=../../.env dist/cli/seed.js",
-    "tenant:create": "node --env-file-if-exists=../../.env dist/cli/tenant-create.js"
+    "tenant:create": "node --env-file-if-exists=../../.env dist/cli/tenant-create.js",
+    "storage:bootstrap": "node --env-file-if-exists=../../.env dist/cli/storage-bootstrap.js"
   },
   "devDependencies": {
     "@studyhub/config": "workspace:*",
@@ -46,7 +47,7 @@
     "pino": "10.4.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
-    "sharp": "0.34.4",
+    "sharp": "0.35.5",
     "zod": "4.6.5"
   }
 }

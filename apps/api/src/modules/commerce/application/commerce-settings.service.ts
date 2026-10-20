@@ -5,6 +5,7 @@ import {
   CONTENT_SETTING_KEYS,
   GENERAL_SETTING_KEYS,
   generalSettingsFrom,
+  MANAGED_CONTENT_KEYS,
   type SettingsPatch,
   SUPPORTED_LOCALES,
   supportedMethods,
@@ -14,7 +15,14 @@ import { Prisma } from '../../../generated/prisma/client';
 import { AuditService } from '../../audit';
 import { can, type TenantActor } from '../../identity';
 import { AppError, requireTenantId, TenantDb, type TenantTx } from '../../platform';
-import { readCommerceSettings, readContentSettings, readFeatures, readPlan } from '../../tenancy';
+import {
+  lockContentConfiguration,
+  readContentDefaults,
+  readCommerceSettings,
+  readContentSettings,
+  readFeatures,
+  readPlan,
+} from '../../tenancy';
 import { settingsProblems } from '../domain/capability-rules';
 import { activeAccount } from './checkout.service';
 
@@ -39,6 +47,15 @@ export class CommerceSettingsService {
   async patch(actor: TenantActor, input: SettingsPatch): Promise<AdminSettings> {
     requireAdmin(actor);
     return this.db.run(async (tx) => {
+      if (MANAGED_CONTENT_KEYS.some((key) => input[key] !== undefined)) {
+        await lockContentConfiguration(tx, 'SCHOOL');
+        const defaults = await readContentDefaults(tx);
+        if (defaults.lockedKeys.some((key) => input[key] !== undefined)) {
+          throw new AppError('FORBIDDEN', {
+            detail: 'A platform restriction prevents changing this setting.',
+          });
+        }
+      }
       const before = await this.read(tx);
       const { reason, ...changes } = input;
       const merged = {
@@ -102,10 +119,23 @@ export class CommerceSettingsService {
       const tenantId = requireTenantId();
       const now = new Date();
       const changed: Record<string, { from: unknown; to: unknown }> = {};
+      const managedRows = MANAGED_CONTENT_KEYS.some((key) => changes[key] !== undefined)
+        ? await tx.tenantSetting.findMany({
+            where: { key: { in: [...MANAGED_CONTENT_KEYS] } },
+            select: { key: true, value: true },
+          })
+        : [];
       for (const [key, value] of Object.entries(changes)) {
         if (value === undefined) continue;
         const previous = current[key];
-        if (JSON.stringify(previous) === JSON.stringify(value)) continue;
+        const managed = (MANAGED_CONTENT_KEYS as readonly string[]).includes(key);
+        const stored = managedRows.find((row) => row.key === key);
+        if (
+          managed
+            ? stored !== undefined && JSON.stringify(stored.value) === JSON.stringify(value)
+            : JSON.stringify(previous) === JSON.stringify(value)
+        )
+          continue;
         changed[key] = { from: previous, to: value };
         const json = value === null ? Prisma.JsonNull : (value as object);
         await tx.tenantSetting.upsert({

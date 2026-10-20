@@ -12,6 +12,8 @@ import {
   type ObjectStorage,
   PrismaService,
   runWithContext,
+  STORAGE_LOCATIONS,
+  type StorageLocations,
   SecretBox,
   timeStep,
   totpCode,
@@ -638,6 +640,94 @@ describe('tenant administration, white-label and platform console (M9)', () => {
     expect((await ok(await school('GET', '/api/v1/tenant', ACME))).locales.timeZone).toBe('Africa/Harare');
   });
 
+  it('feature dependencies, unbuilt capabilities and school isolation are enforced on direct requests', async () => {
+    const owner = cookies['owner@acme.test']!;
+    const switchFeature = (key: string, enabled: boolean) =>
+      school('PUT', `/api/v1/admin/features/${key}`, ACME, owner, { enabled });
+    expect(
+      code(
+        await school('PUT', '/api/v1/admin/features/publicCatalog', ACME, cookies['l1@example.com'], {
+          enabled: false,
+        }),
+      ),
+    ).toBe('FORBIDDEN');
+    await freshReauth();
+    for (const key of ['customDomain', 'certificates']) {
+      expect(code(await switchFeature(key, true))).toBe('FEATURE_NOT_ENABLED');
+      expect(
+        code(
+          await consoleCall('PUT', `/console/tenants/${tenants.acme}/features/${key}`, 'PLATFORM_OWNER', {
+            override: 'GRANT',
+            reason: 'Unbuilt capability test',
+          }),
+        ),
+      ).toBe('FEATURE_NOT_ENABLED');
+    }
+    await ok(await switchFeature('instructorRevenueShare', true), 204);
+    try {
+      expect(code(await switchFeature('paidCourses', false))).toBe('VALIDATION_FAILED');
+      expect(
+        code(
+          await consoleCall(
+            'PUT',
+            `/console/tenants/${tenants.acme}/features/paidCourses`,
+            'PLATFORM_OPERATOR',
+            {
+              override: 'REVOKE',
+              reason: 'Dependency test',
+            },
+          ),
+        ),
+      ).toBe('VALIDATION_FAILED');
+      await ok(await switchFeature('instructorRevenueShare', false), 204);
+      await ok(await switchFeature('paidCourses', false), 204);
+      expect(code(await switchFeature('instructorRevenueShare', true))).toBe('VALIDATION_FAILED');
+      expect(
+        code(
+          await consoleCall(
+            'PUT',
+            `/console/tenants/${tenants.acme}/features/instructorRevenueShare`,
+            'PLATFORM_OPERATOR',
+            {
+              override: 'GRANT',
+              reason: 'Dependency test',
+            },
+          ),
+        ),
+      ).toBe('VALIDATION_FAILED');
+      expect((await ok(await school('GET', '/api/v1/tenant', ACME))).features.paidCourses).toBe(false);
+      expect((await ok(await school('GET', '/api/v1/tenant', BETA))).features.paidCourses).toBe(true);
+    } finally {
+      await ok(await switchFeature('instructorRevenueShare', false), 204);
+      await ok(await switchFeature('paidCourses', true), 204);
+    }
+  });
+
+  it('revoking whiteLabel restores the badge without discarding published branding', async () => {
+    const owner = cookies['owner@acme.test']!;
+    const editor = await ok(await school('GET', '/api/v1/admin/branding', ACME, owner));
+    await ok(
+      await school('PUT', '/api/v1/admin/branding/draft', ACME, owner, {
+        ...editor.draft,
+        showPoweredBy: false,
+      }),
+      204,
+    );
+    await ok(await school('POST', '/api/v1/admin/branding/publish', ACME, owner));
+    expect((await ok(await school('GET', '/api/v1/tenant', ACME))).branding.showPoweredBy).toBe(false);
+    await ok(await school('PUT', '/api/v1/admin/features/whiteLabel', ACME, owner, { enabled: false }), 204);
+    try {
+      expect((await ok(await school('GET', '/api/v1/tenant', ACME))).branding.showPoweredBy).toBe(true);
+      expect((await ok(await school('GET', '/api/v1/admin/branding', ACME, owner))).draft.showPoweredBy).toBe(
+        false,
+      );
+    } finally {
+      await ok(await school('PUT', '/api/v1/admin/features/whiteLabel', ACME, owner, { enabled: true }), 204);
+      await ok(await school('PUT', '/api/v1/admin/branding/draft', ACME, owner, editor.draft), 204);
+      await ok(await school('POST', '/api/v1/admin/branding/publish', ACME, owner));
+    }
+  });
+
   it('F37: suspension makes the school read-only and tells its owners; lifecycle needs re-authentication', async () => {
     const GAMMA = 'gamma.localhost';
     await freshReauth();
@@ -1094,7 +1184,12 @@ describe('tenant administration, white-label and platform console (M9)', () => {
     );
     expect(code(await school('POST', '/api/v1/admin/exports/tenant', ACME, admin))).toBe('FORBIDDEN');
     const full = await ok(await school('POST', '/api/v1/admin/exports/tenant', ACME, owner), 201);
-    const handler = createExportHandler({ prisma, storage, box, schoolUrlTemplate: 'http://{host}:3000' });
+    const handler = createExportHandler({
+      prisma,
+      locations: h.app.get<StorageLocations>(STORAGE_LOCATIONS),
+      box,
+      schoolUrlTemplate: 'http://{host}:3000',
+    });
     expect(await runJobs(tenants.acme!, EXPORT_JOB, handler as never)).toBe(3);
 
     const paymentsView = await ok(await school('GET', `/api/v1/admin/exports/${payments.id}`, ACME, admin));
@@ -1149,6 +1244,35 @@ describe('tenant administration, white-label and platform console (M9)', () => {
   // -------------------------------------------------------------------------------------------------
   // AC 6: statement arithmetic matches recorded sales minus refunds (W8)
   // -------------------------------------------------------------------------------------------------
+
+  it('the export worker refuses a full export queued before its school lost dataExport', async () => {
+    const owner = cookies['owner@acme.test']!;
+    const full = await ok(await school('POST', '/api/v1/admin/exports/tenant', ACME, owner), 201);
+    await ok(await school('PUT', '/api/v1/admin/features/dataExport', ACME, owner, { enabled: false }), 204);
+    try {
+      const handler = createExportHandler({
+        prisma,
+        locations: h.app.get<StorageLocations>(STORAGE_LOCATIONS),
+        box,
+        schoolUrlTemplate: 'http://{host}:3000',
+      });
+      expect(await runJobs(tenants.acme!, EXPORT_JOB, handler as never)).toBe(1);
+      const result = await sql(
+        tenants.acme!,
+        'SELECT status, error, storage_key FROM data_export WHERE id = $1',
+        [full.id],
+      );
+      expect(result.rows[0]).toMatchObject({
+        status: 'FAILED',
+        error: 'FEATURE_NOT_ENABLED',
+        storage_key: null,
+      });
+      expect(await storage.head(`t/${tenants.acme}/exports/${full.id}.zip`)).toBeNull();
+      expect((await ok(await school('GET', '/api/v1/tenant', BETA))).features.dataExport).toBe(true);
+    } finally {
+      await ok(await school('PUT', '/api/v1/admin/features/dataExport', ACME, owner, { enabled: true }), 204);
+    }
+  });
 
   it('AC 6 (W8, BR-63): monthly statements from recorded sales; drafts hidden; issued amounts frozen', async () => {
     const generated = await ok(
@@ -1434,7 +1558,7 @@ describe('tenant administration, white-label and platform console (M9)', () => {
       await school('POST', '/api/v1/admin/offboarding', DELTA, owner, { confirmName: 'Delta School' }),
     );
 
-    const purge = createPurgeHandler({ prisma, storage });
+    const purge = createPurgeHandler({ prisma, locations: h.app.get<StorageLocations>(STORAGE_LOCATIONS) });
     const run = () =>
       runWithContext({ requestId: 'purge', tenantId: delta }, () =>
         purge({ type: 'admin.tenant-purge', tenantId: delta, payload: {}, requestId: 'purge' }, silent),

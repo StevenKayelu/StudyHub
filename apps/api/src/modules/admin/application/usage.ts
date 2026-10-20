@@ -6,9 +6,11 @@ import type { Logger } from 'pino';
 import type { PrismaClient } from '../../../generated/prisma/client';
 import type { TenantActor } from '../../identity';
 import {
+  AppError,
   enqueue,
   type JobEnvelope,
-  type ObjectStorage,
+  lockTenantLifecycle,
+  type StorageLocations,
   requireTenantId,
   runInPlatformTx,
   runInTenantTx,
@@ -151,18 +153,78 @@ export function createUsageMeterHandler(deps: { prisma: PrismaClient; box: Secre
 
 /**
  * `tenants.purge` (F46 AC 2, BR-53): purge_tenant() archives financial records and the audit trail,
- * deletes every other school row and marks the school DELETED; then the school's objects are removed.
+ * deletes every other school row and marks the school DELETED after all retained object locations
+ * have been cleaned. A failed cleanup leaves lifecycle metadata intact so the job can retry.
  */
-export function createPurgeHandler(deps: { prisma: PrismaClient; storage: ObjectStorage }) {
+export function createPurgeHandler(deps: { prisma: PrismaClient; locations: StorageLocations }) {
   return async (_envelope: JobEnvelope, logger: Logger): Promise<{ deleted: number }> => {
     const tenantId = requireTenantId();
+    const eligible = async () => {
+      const busy = await runInTenantTx(deps.prisma, async (tx) => {
+        if ((await lockTenantLifecycle(tx, tenantId))?.purgeDue !== true) return null;
+        // Export/media workers claim these states under this same tenant lock. Existing writers
+        // finish first; new claims are refused once offboarding is due, so no object can appear
+        // after its retained location has been cleaned.
+        return {
+          exports: await tx.dataExport.count({ where: { status: 'RUNNING' } }),
+          assets: await tx.asset.count({ where: { status: 'SCANNING' } }),
+        };
+      });
+      if (busy === null) return false;
+      if (busy.exports > 0 || busy.assets > 0) {
+        // A writer that never finishes would block the purge on every daily retry: make that visible.
+        logger.warn(
+          { runningExports: busy.exports, scanningAssets: busy.assets },
+          'School purge is due but waits for in-flight object writers',
+        );
+        return false;
+      }
+      return true;
+    };
+    if (!(await eligible())) return { deleted: 0 };
+    const locations = [...new Set(await deps.locations.retained())];
+    if (locations.length === 0) {
+      throw new AppError('SERVICE_UNAVAILABLE', {
+        detail: 'No retained storage locations are available for safe cleanup.',
+      });
+    }
+    const references = await runInTenantTx(
+      deps.prisma,
+      (tx) =>
+        tx.$queryRaw<{ locationId: string | null }[]>`
+        SELECT DISTINCT storage_location_id AS "locationId" FROM asset
+         WHERE storage_key IS NOT NULL OR derivative_key IS NOT NULL
+        UNION
+        SELECT DISTINCT storage_location_id AS "locationId" FROM data_export
+         WHERE storage_key IS NOT NULL`,
+    );
+    const retained = new Set(locations);
+    if (
+      references.some((reference) => reference.locationId === null || !retained.has(reference.locationId))
+    ) {
+      throw new AppError('SERVICE_UNAVAILABLE', {
+        detail:
+          'Recorded objects have unresolved storage locations. Capture their original storage before retrying cleanup.',
+      });
+    }
+    // Resolve every retained adapter before starting destructive work. Missing credentials or an
+    // invalid registry snapshot must leave all objects and database metadata available for repair.
+    const adapters = [];
+    for (const locationId of locations) adapters.push(await deps.locations.at(locationId, tenantId));
+    let objects = 0;
+    for (const storage of adapters) {
+      // Recheck after adapter resolution and immediately before destructive I/O. Cancellation is
+      // forbidden once deleteAfter has passed; cancellation writers must enforce that atomically.
+      if (!(await eligible())) return { deleted: 0 };
+      objects += await storage.deletePrefix(`t/${tenantId}/`);
+    }
+    if (!(await eligible())) return { deleted: 0 };
     const [row] = await runInTenantTx(
       deps.prisma,
       (tx) => tx.$queryRaw<{ deleted: bigint }[]>`SELECT purge_tenant(${tenantId}::uuid) AS deleted`,
     );
     const deleted = Number(row?.deleted ?? -1n);
     if (deleted < 0) return { deleted: 0 };
-    const objects = await deps.storage.deletePrefix(`t/${tenantId}/`);
     logger.warn({ deleted, objects }, 'School purged after offboarding');
     return { deleted };
   };

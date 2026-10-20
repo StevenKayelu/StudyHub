@@ -5,9 +5,9 @@ import {
   addToOutbox,
   AppError,
   ConfigService,
-  OBJECT_STORAGE,
-  type ObjectStorage,
   requireTenantId,
+  STORAGE_LOCATIONS,
+  type StorageLocations,
   TenantDb,
   type TenantTx,
   VIDEO_PROVIDER,
@@ -65,7 +65,7 @@ export class MediaService {
   constructor(
     private readonly db: TenantDb,
     private readonly config: ConfigService,
-    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
+    @Inject(STORAGE_LOCATIONS) private readonly locations: StorageLocations,
     @Inject(VIDEO_PROVIDER) private readonly video: VideoProvider,
   ) {}
 
@@ -80,12 +80,13 @@ export class MediaService {
     }
     if (!mayUpload(actor, input.purpose)) throw new AppError('FORBIDDEN');
     const tenantId = requireTenantId();
-    const { assetId, key } = await this.db.run(async (tx) => {
+    const { assetId, key, storage } = await this.db.run(async (tx) => {
       const rule = uploadRule(
         input.purpose,
         capUploadSettings(await readContentSettings(tx), (await readPlan(tx)).limits),
       );
       this.assertAllowed(rule, input.mime, input.sizeBytes);
+      const location = await this.locations.active(tx, tenantId);
       await this.reserve(tx, input.sizeBytes);
       const asset = await tx.asset.create({
         data: {
@@ -93,6 +94,7 @@ export class MediaService {
           ownerMembershipId: actor.membershipId,
           kind: rule.kind,
           purpose: input.purpose,
+          storageLocationId: location.locationId,
           originalName: cleanFileName(input.fileName),
           mime: input.mime,
           sizeBytes: BigInt(input.sizeBytes),
@@ -102,9 +104,9 @@ export class MediaService {
       });
       const key = `t/${tenantId}/${input.purpose.toLowerCase()}/${asset.id}`;
       await tx.asset.update({ where: { id: asset.id }, data: { storageKey: key } });
-      return { assetId: asset.id, key };
+      return { assetId: asset.id, key, storage: location.storage };
     });
-    const uploadUrl = await this.storage.presignPut(key, {
+    const uploadUrl = await storage.presignPut(key, {
       contentType: input.mime,
       contentLength: input.sizeBytes,
       expiresSeconds: PRESIGN_SECONDS,
@@ -175,6 +177,26 @@ export class MediaService {
     });
   }
 
+  /** Before a development upload can simulate a provider callback, bind it to its issuing member
+   * and school. A provider id is a lookup key, not an authorization credential. */
+  async authorizeVideoUpload(actor: TenantActor, providerVideoId: string): Promise<void> {
+    const tenantId = requireTenantId();
+    await this.db.run(async (tx) => {
+      const asset = await tx.asset.findFirst({
+        where: {
+          tenantId,
+          ownerMembershipId: actor.membershipId,
+          provider: this.video.name,
+          providerVideoId,
+          kind: 'VIDEO',
+          purpose: 'LESSON_VIDEO',
+        },
+        select: { id: true },
+      });
+      if (asset === null) throw new AppError('NOT_FOUND');
+    });
+  }
+
   async status(actor: TenantActor, assetId: string): Promise<AssetStatusView> {
     return this.db.run(async (tx) => this.view(await this.visibleAsset(tx, actor, assetId)));
   }
@@ -183,7 +205,8 @@ export class MediaService {
   async downloadUrl(actor: TenantActor, assetId: string): Promise<{ url: string; expiresAt: string }> {
     const asset = await this.db.run((tx) => this.visibleAsset(tx, actor, assetId));
     if (asset.status !== 'READY' || asset.storageKey === null) throw new AppError('INVALID_STATE');
-    const url = await this.storage.presignGet(asset.storageKey, {
+    const storage = await this.locations.at(asset.storageLocationId, requireTenantId());
+    const url = await storage.presignGet(asset.storageKey, {
       expiresSeconds: DOWNLOAD_SECONDS,
       downloadName: asset.originalName,
     });
@@ -200,21 +223,21 @@ export class MediaService {
     const assets = await this.db.run((tx) =>
       tx.asset.findMany({
         where: { id: { in: [...assetIds] }, status: 'READY' },
-        select: { id: true, storageKey: true, derivativeKey: true },
+        select: { id: true, storageKey: true, derivativeKey: true, storageLocationId: true },
       }),
     );
     const entries = await Promise.all(
       assets
         .filter((a) => (a.derivativeKey ?? a.storageKey) !== null)
-        .map(
-          async (a) =>
-            [
-              a.id,
-              await this.storage.presignGet(a.derivativeKey ?? a.storageKey!, {
-                expiresSeconds: DOWNLOAD_SECONDS,
-              }),
-            ] as const,
-        ),
+        .map(async (a) => {
+          const storage = await this.locations.at(a.storageLocationId, requireTenantId());
+          return [
+            a.id,
+            await storage.presignGet(a.derivativeKey ?? a.storageKey!, {
+              expiresSeconds: DOWNLOAD_SECONDS,
+            }),
+          ] as const;
+        }),
     );
     return new Map(entries);
   }
@@ -223,10 +246,12 @@ export class MediaService {
   async fileUrl(asset: {
     status: string;
     storageKey: string | null;
+    storageLocationId: string | null;
     originalName: string;
   }): Promise<{ url: string; expiresAt: string }> {
     if (asset.status !== 'READY' || asset.storageKey === null) throw new AppError('NOT_FOUND');
-    const url = await this.storage.presignGet(asset.storageKey, {
+    const storage = await this.locations.at(asset.storageLocationId, requireTenantId());
+    const url = await storage.presignGet(asset.storageKey, {
       expiresSeconds: DOWNLOAD_SECONDS,
       downloadName: asset.originalName,
     });

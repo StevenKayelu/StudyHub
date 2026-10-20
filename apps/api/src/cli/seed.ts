@@ -3,7 +3,16 @@
 import { Client } from 'pg';
 
 import { FAKE_PROFILE_CAPABILITIES, PaymentVault } from '../modules/commerce';
-import { ConfigError, DEV_PAYMENT_ENCRYPTION_KEY, hashPassword, loadMigratorEnv } from '../modules/platform';
+import {
+  bootstrapStorageLocations,
+  ConfigError,
+  createLogger,
+  DEV_PAYMENT_ENCRYPTION_KEY,
+  hashPassword,
+  loadApiEnv,
+  loadMigratorEnv,
+  PrismaService,
+} from '../modules/platform';
 import { provisionTenant, type ProvisionTenantInput, writeTenantProfile } from '../modules/tenancy';
 
 /**
@@ -758,6 +767,13 @@ async function seedPlans(client: Client, tenantIds: Partial<Record<string, strin
 async function main(): Promise<void> {
   const env = loadMigratorEnv();
   if (env.NODE_ENV === 'production') throw new Error('Refusing to seed demo schools in production.');
+  const apiEnv = loadApiEnv();
+  const storagePrisma = new PrismaService(apiEnv, createLogger({ level: 'silent' }));
+  try {
+    await bootstrapStorageLocations({ prisma: storagePrisma, env: apiEnv });
+  } finally {
+    await storagePrisma.onModuleDestroy();
+  }
 
   const client = new Client({
     connectionString: env.DATABASE_URL_MIGRATOR,

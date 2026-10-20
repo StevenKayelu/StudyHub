@@ -2,7 +2,17 @@
 
 `pnpm audit --audit-level high` runs in CI and must pass. Every override or exception is recorded here with its package, advisory, impact on StudyHub, rationale and review trigger.
 
-Last reviewed: 2026-10-11 (Milestone 1).
+Last reviewed: 2026-10-18 (Milestone 10).
+
+## Direct dependency patches (M10)
+
+### `sharp` 0.34.4 → 0.35.5
+
+- **Advisories:** [GHSA-f88m-g3jw-g9cj](https://github.com/advisories/GHSA-f88m-g3jw-g9cj) (libvips, patched in 0.35.0), [GHSA-rgj7-g3m4-5g8c](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c) (libheif, patched in 0.35.4), [GHSA-wq5f-xc86-pv6w](https://github.com/advisories/GHSA-wq5f-xc86-pv6w) (librsvg, patched in 0.35.5). All reported high by `pnpm audit`.
+- **Path/impact:** runtime dependency `apps/api > sharp`, used to decode and re-encode uploaded images. Existing file-type restrictions narrow exposure but are not a substitute for native dependency patches.
+- **Resolution:** pin the direct dependency to 0.35.5; use the existing patched lockfile resolution and remove obsolete 0.34.4 native packages. No new override or audit exception was introduced. Node 24 satisfies the patched package's Node >=20.9 requirement.
+- **Verified:** `pnpm audit --audit-level high` passes with only the unchanged documented `braces` development exception. All 317 unit and 880 integration tests pass, including real image upload/worker processing; API compilation passes. A native PNG → 32×24 WebP smoke test reports sharp 0.35.5/libvips 8.18.7. Results are recorded in `docs/design/m10-hardening.md`.
+- **Maintainer release:** [sharp 0.35.5](https://sharp.pixelplumbing.com/changelog/v0.35.5/).
 
 ## Overrides (patched versions forced)
 

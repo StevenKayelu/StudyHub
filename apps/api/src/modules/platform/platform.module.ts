@@ -8,6 +8,7 @@ import { TenantDb } from './db/tenant-db';
 import { HealthController } from './health/health.controller';
 import { APP_LOGGER } from './logging/logger';
 import { createMediaPorts, MALWARE_SCANNER, OBJECT_STORAGE, VIDEO_PROVIDER } from './media/media-ports';
+import { STORAGE_LOCATIONS, StorageLocations } from './media/storage-locations';
 import { RateLimiter } from './security/rate-limiter';
 import { SecretBox } from './security/secret-box';
 
@@ -38,6 +39,11 @@ export class PlatformModule {
         ConfigService,
         PrismaService,
         TenantDb,
+        {
+          provide: STORAGE_LOCATIONS,
+          inject: [PrismaService],
+          useFactory: (prisma: PrismaService) => new StorageLocations(prisma, options.env),
+        },
         { provide: SecretBox, useValue: new SecretBox(options.env.IDENTITY_ENCRYPTION_KEY) },
         { provide: RateLimiter, useValue: new RateLimiter() },
       ],
@@ -49,6 +55,7 @@ export class PlatformModule {
         SecretBox,
         RateLimiter,
         OBJECT_STORAGE,
+        STORAGE_LOCATIONS,
         MALWARE_SCANNER,
         VIDEO_PROVIDER,
       ],

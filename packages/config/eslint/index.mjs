@@ -9,6 +9,7 @@ export const ignores = [
   '**/node_modules/**',
   '**/dist/**',
   '**/.next/**',
+  '**/.next-e2e/**',
   '**/.turbo/**',
   '**/coverage/**',
   '**/playwright-report/**',

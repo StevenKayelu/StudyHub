@@ -21,6 +21,23 @@ model PlatformSetting {
   @@map("platform_setting")
 }
 
+/// Immutable deployment storage descriptor and encrypted credentials. Platform realm only.
+/// Existing object rows retain this origin when the deployment's active storage changes.
+model PlatformStorageLocation {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider       String
+  config         Json
+  credentialsEnc Bytes    @map("credentials_enc")
+  fingerprint    String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  assets      Asset[]
+  dataExports DataExport[]
+
+  @@index([fingerprint], map: "platform_storage_location_fingerprint_idx")
+  @@map("platform_storage_location")
+}
+
 enum TenantKind {
   SCHOOL
   COLLEGE
@@ -600,6 +617,7 @@ model Asset {
   kind              AssetKind
   purpose           AssetPurpose
   storageKey        String?      @map("storage_key")
+  storageLocationId String?      @map("storage_location_id") @db.Uuid
   derivativeKey     String?      @map("derivative_key")
   provider          String?
   providerVideoId   String?      @map("provider_video_id")
@@ -615,6 +633,8 @@ model Asset {
   expiresAt         DateTime?    @map("expires_at") @db.Timestamptz(3)
   createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime     @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  storageLocation PlatformStorageLocation? @relation(fields: [storageLocationId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, id], map: "asset_tenant_id_id_key")
   @@index([tenantId, ownerMembershipId, status], map: "asset_tenant_owner_status_idx")
@@ -1599,19 +1619,22 @@ model TenantUsageDaily {
 
 /// Report CSVs (F32) and the full school export (F46), produced by the worker. RLS: tenant_isolation.
 model DataExport {
-  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String       @map("tenant_id") @db.Uuid
-  type        ExportType
-  params      Json         @default("{}")
-  status      ExportStatus @default(QUEUED)
-  requestedBy String       @map("requested_by") @db.Uuid
-  rowCount    Int?         @map("row_count")
-  storageKey  String?      @map("storage_key")
-  sizeBytes   BigInt?      @map("size_bytes")
-  error       String?
-  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  completedAt DateTime?    @map("completed_at") @db.Timestamptz(3)
-  expiresAt   DateTime?    @map("expires_at") @db.Timestamptz(3)
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String       @map("tenant_id") @db.Uuid
+  type              ExportType
+  params            Json         @default("{}")
+  status            ExportStatus @default(QUEUED)
+  requestedBy       String       @map("requested_by") @db.Uuid
+  rowCount          Int?         @map("row_count")
+  storageKey        String?      @map("storage_key")
+  storageLocationId String?      @map("storage_location_id") @db.Uuid
+  sizeBytes         BigInt?      @map("size_bytes")
+  error             String?
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt       DateTime?    @map("completed_at") @db.Timestamptz(3)
+  expiresAt         DateTime?    @map("expires_at") @db.Timestamptz(3)
+
+  storageLocation PlatformStorageLocation? @relation(fields: [storageLocationId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, id], map: "data_export_tenant_id_id_key")
   @@index([tenantId, createdAt(sort: Desc)], map: "data_export_tenant_created_idx")

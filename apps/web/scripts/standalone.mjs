@@ -7,13 +7,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // With outputFileTracingRoot at the monorepo root, Next mirrors the workspace layout here.
-const standaloneAppDir = path.join(appDir, '.next', 'standalone', 'apps', 'web');
+const distDir = process.env.STUDYHUB_E2E_ISOLATED === '1' ? '.next-e2e' : '.next';
+const standaloneAppDir = path.join(appDir, distDir, 'standalone', 'apps', 'web');
 const serverPath = path.join(standaloneAppDir, 'server.js');
 
 const command = process.argv[2];
 
 if (command === 'prepare') {
-  cpSync(path.join(appDir, '.next', 'static'), path.join(standaloneAppDir, '.next', 'static'), {
+  cpSync(path.join(appDir, distDir, 'static'), path.join(standaloneAppDir, distDir, 'static'), {
     recursive: true,
   });
   const publicDir = path.join(appDir, 'public');

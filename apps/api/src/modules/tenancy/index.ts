@@ -21,9 +21,21 @@ export {
 export { readCommerceSettings } from './infra/commerce-settings';
 export { readContentSettings } from './infra/content-settings';
 export {
+  CONTENT_DEFAULTS_KEY,
+  CONTENT_DRAFT_KEY,
+  CONTENT_CONFIG_ACTION,
+  CONTENT_CONFIG_ENTITY,
+  effectiveManagedContent,
+  lockContentConfiguration,
+  managedOverridesFrom,
+  readContentDefaults,
+} from './infra/content-configuration';
+export {
   featureAvailable,
+  featureChangeProblems,
   featureEnabled,
   featureMap,
+  FEATURE_DEPENDENCIES,
   LATER_FEATURES,
   type PlanGrants,
   planGrants,

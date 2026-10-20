@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 
+import { ConfigurationModule } from '../configuration';
 import { TenancyModule } from '../tenancy';
+import { ConsoleConfigurationController } from './api/console-configuration.controller';
 import { ConsoleAdminController } from './api/console-admin.controller';
 import { ConsoleController } from './api/console.controller';
 import { ConsoleAuthService } from './application/console-auth.service';
@@ -14,8 +16,8 @@ import { ConsoleTenantsService } from './application/console-tenants.service';
  * plans, staff, global settings, audit, domain approvals, statements and support access (M9, F43).
  */
 @Module({
-  imports: [TenancyModule],
-  controllers: [ConsoleController, ConsoleAdminController],
+  imports: [TenancyModule, ConfigurationModule],
+  controllers: [ConsoleController, ConsoleAdminController, ConsoleConfigurationController],
   providers: [
     ConsoleAuthService,
     ConsoleTenantsService,

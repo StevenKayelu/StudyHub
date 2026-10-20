@@ -1,11 +1,10 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
 
-import { DEMO, signIn } from './helpers';
+import { DEMO, school, signIn } from './helpers';
 
 // Requires `pnpm db:seed`: acme (Copperline default), beta (teal, Humanist, "Lecturer"/"Module"),
 // gamma (provisioning).
-const school = (host: string, path = '/') => `http://${host}:3000${path}`;
 
 const cssVar = (page: Page, name: string) =>
   page.evaluate(

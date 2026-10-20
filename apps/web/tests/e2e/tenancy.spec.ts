@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 
+import { school } from './helpers';
+
 // Requires the demo schools from `pnpm db:seed` (acme.localhost, beta.localhost).
-const school = (host: string, path = '/') => `http://${host}:3000${path}`;
 
 test('T-ISO-19: each school host renders its own school, with no cross-host cache mixing', async ({
   page,

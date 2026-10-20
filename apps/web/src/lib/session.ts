@@ -10,11 +10,14 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { cache } from 'react';
 
+import { forwardedFor } from './server-api';
+
 const apiBaseUrl = () => process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:4000';
 
 /**
  * Server-side call to the API on behalf of the browser: the request's own host (so the API resolves
- * the same school) and its cookies (so the API sees the same session). Never cached.
+ * the same school), its cookies (so the API sees the same session) and its client address (so it
+ * counts against the visitor's rate budget). Never cached.
  */
 export async function apiGet(path: string): Promise<Response> {
   const incoming = await headers();
@@ -23,6 +26,7 @@ export async function apiGet(path: string): Promise<Response> {
     headers: {
       accept: 'application/json',
       'x-forwarded-host': incoming.get('host') ?? '',
+      ...forwardedFor(incoming),
       ...(incoming.get('cookie') !== null && { cookie: incoming.get('cookie')! }),
     },
     signal: AbortSignal.timeout(5000),

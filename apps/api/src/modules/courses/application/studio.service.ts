@@ -15,9 +15,9 @@ import { paymentsProblem } from '../../commerce';
 import type { TenantActor } from '../../identity';
 import {
   AppError,
-  OBJECT_STORAGE,
-  type ObjectStorage,
   requireTenantId,
+  STORAGE_LOCATIONS,
+  type StorageLocations,
   TenantDb,
   type TenantTx,
 } from '../../platform';
@@ -61,7 +61,7 @@ export class StudioService {
     private readonly db: TenantDb,
     private readonly audit: AuditService,
     private readonly instructors: InstructorsService,
-    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
+    @Inject(STORAGE_LOCATIONS) private readonly locations: StorageLocations,
   ) {}
 
   // --- Courses -----------------------------------------------------------------------------------
@@ -800,19 +800,19 @@ export class StudioService {
     const assets = await this.db.run((tx) =>
       tx.asset.findMany({
         where: { id: { in: ids }, status: 'READY' },
-        select: { id: true, storageKey: true, derivativeKey: true },
+        select: { id: true, storageKey: true, derivativeKey: true, storageLocationId: true },
       }),
     );
     const entries = await Promise.all(
-      assets.map(
-        async (a) =>
-          [
-            a.id,
-            await this.storage.presignGet(a.derivativeKey ?? a.storageKey!, {
-              expiresSeconds: COVER_URL_SECONDS,
-            }),
-          ] as const,
-      ),
+      assets.map(async (a) => {
+        const storage = await this.locations.at(a.storageLocationId, requireTenantId());
+        return [
+          a.id,
+          await storage.presignGet(a.derivativeKey ?? a.storageKey!, {
+            expiresSeconds: COVER_URL_SECONDS,
+          }),
+        ] as const;
+      }),
     );
     return new Map(entries);
   }

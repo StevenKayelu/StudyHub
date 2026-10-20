@@ -15,6 +15,7 @@ import {
   tenantBootstrapSchema,
 } from '../dist/index.js';
 import { IDENTITY_SCHEMAS, IDENTITY_TAGS, identityPaths, SECURITY_SCHEMES } from './identity-openapi.mts';
+import { CONFIGURATION_SCHEMAS, configurationPaths } from './configuration-openapi.mts';
 
 type JsonObject = Record<string, unknown>;
 
@@ -39,6 +40,7 @@ const document = {
     { name: 'operations', description: 'Liveness and readiness probes' },
     { name: 'tenancy', description: 'School context resolved from the request host' },
     ...IDENTITY_TAGS,
+    { name: 'configuration', description: 'Reviewed platform defaults and school overrides' },
   ],
   paths: {
     '/healthz': {
@@ -90,12 +92,16 @@ const document = {
       },
     },
     ...identityPaths(ref),
+    ...configurationPaths(ref),
   },
   components: {
     securitySchemes: SECURITY_SCHEMES,
     schemas: {
       ...Object.fromEntries(
-        Object.entries(IDENTITY_SCHEMAS).map(([name, schema]) => [name, toSchema(schema)]),
+        Object.entries({ ...IDENTITY_SCHEMAS, ...CONFIGURATION_SCHEMAS }).map(([name, schema]) => [
+          name,
+          toSchema(schema),
+        ]),
       ),
       Healthz: toSchema(healthzResponseSchema),
       Readyz: toSchema(readyzResponseSchema),

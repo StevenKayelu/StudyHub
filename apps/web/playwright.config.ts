@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const isCI = Boolean(process.env.CI);
+const isolated = process.env.STUDYHUB_E2E_ISOLATED === '1';
+const webPort = isolated ? 3400 : 3000;
+const apiPort = isolated ? 4500 : 4000;
 
 /**
  * Browser: Playwright's bundled Chromium by default (CI). Set PLAYWRIGHT_CHANNEL=msedge (or chrome) to use
@@ -15,11 +18,12 @@ const channel = process.env.PLAYWRIGHT_CHANNEL;
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
+  ...(isolated ? { workers: 1 } : {}),
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
   reporter: isCI ? [['github'], ['html', { open: 'never' }]] : [['list']],
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: `http://127.0.0.1:${webPort}`,
     trace: 'retain-on-failure',
   },
   projects: [
@@ -39,8 +43,8 @@ export default defineConfig({
     {
       command: 'pnpm --filter @studyhub/api start',
       cwd: '../..',
-      url: 'http://127.0.0.1:4000/healthz',
-      reuseExistingServer: !isCI,
+      url: `http://127.0.0.1:${apiPort}/readyz`,
+      reuseExistingServer: isolated ? false : !isCI,
       timeout: 60_000,
     },
     {
@@ -48,14 +52,14 @@ export default defineConfig({
       command: 'pnpm --filter @studyhub/api start:worker',
       cwd: '../..',
       wait: { stdout: /Worker started/ },
-      reuseExistingServer: !isCI,
+      reuseExistingServer: isolated ? false : !isCI,
       timeout: 60_000,
     },
     {
       command: 'pnpm --filter @studyhub/web start',
       cwd: '../..',
-      url: 'http://127.0.0.1:3000',
-      reuseExistingServer: !isCI,
+      url: `http://127.0.0.1:${webPort}`,
+      reuseExistingServer: isolated ? false : !isCI,
       timeout: 120_000,
     },
   ],

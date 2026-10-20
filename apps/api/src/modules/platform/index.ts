@@ -21,10 +21,12 @@ export {
 } from './context/request-context';
 export { PrismaService } from './db/prisma.service';
 export {
+  lockTenantLifecycle,
   runInPlatformTenantTx,
   runInPlatformTx,
   runInTenantTx,
   TenantDb,
+  type TenantLifecycle,
   type TenantTx,
 } from './db/tenant-db';
 export { AppError, parseOrThrow, zodIssuesToFieldErrors } from './errors/app-error';
@@ -58,6 +60,24 @@ export {
   VIDEO_PROVIDER,
 } from './media/media-ports';
 export { type ObjectStorage, S3ObjectStorage } from './media/object-storage';
+export {
+  ACTIVE_STORAGE_LOCATION_KEY,
+  BOOTSTRAP_STORAGE_LOCATION_ID,
+  bootstrapStorageLocations,
+  deploymentStorageDescriptor,
+  schoolStorage,
+  STORAGE_LOCATIONS,
+  StorageLocations,
+  storageLocationConfigSchema,
+  storageLocationFingerprint,
+  type StorageLocationConfig,
+} from './media/storage-locations';
+export { S3DocumentBackupStorage } from './media/object-backup-storage';
+export {
+  S3VersionRecoveryStorage,
+  type VersionRecoveryStorage,
+  type RecoveryObjectVersion,
+} from './media/object-recovery-storage';
 export { ClamdScanner, EicarOnlyScanner, type MalwareScanner } from './media/scanner';
 export { matchesDeclaredType, sniffType } from './media/sniff';
 export {
@@ -88,6 +108,8 @@ export {
   verifyPassword,
 } from './security/passwords';
 export { RATE_RULES, RateLimiter, type RateRule } from './security/rate-limiter';
+export { registerSecurityHeadersHook } from './security/security-headers.hook';
+export { registerClientRateLimitHook, registerTenantRateLimitHook } from './security/api-rate-limit.hook';
 export { SecretBox } from './security/secret-box';
 export {
   hashToken,

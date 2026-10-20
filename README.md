@@ -2,7 +2,13 @@
 
 StudyHub is a multi-tenant, white-label learning platform for schools, colleges, tutors and education businesses. The full product, architecture and design specification is in [`docs/blueprint/`](docs/blueprint/README.md).
 
-**Current state: Milestone 5, instructors, catalogue and authoring** (on top of M1–M4).
+**Current state: M1–M9 implemented locally; M10 hardening in progress.** Production launch is pending; see [`docs/design/m10-hardening.md`](docs/design/m10-hardening.md) for verified checks and outstanding work.
+
+Dashboard configuration phase 1 adds reviewed platform content defaults, enforced restrictions and school overrides, with drafts, activation history, reset and allowlisted settings import. It reuses existing plan/feature controls and strengthens API/job enforcement. See the [architecture and phased gaps](docs/design/dashboard-configuration.md) and [administrator/developer guide](docs/runbooks/dashboard-configuration.md). Dashboard credential entry, provider connection testing and safe storage switching remain later phases; storage still uses deployment configuration.
+
+The [production-readiness checklist](docs/design/production-readiness.md) maps requirements to current evidence and blockers. See the [staging preparation checklist](docs/runbooks/staging-readiness.md) and [recovery rehearsal](docs/runbooks/recovery-verification.md). The latest isolated browser run passed 59 checks; a separate learner JS check passed at 146.9 KB compressed. These local results do not establish production capacity or recovery readiness.
+
+Recovery includes tested bounded school-content and document repair using disposable data. R2 remains the selected storage provider, with application-managed version backups: [design, verified scope and remaining rollout work](docs/design/object-recovery.md). Automatic upload capture and staging verification are still required.
 
 - A TypeScript monorepo with an API, a background worker and a web app; shared contracts; a PostgreSQL migration pipeline; automated quality gates (M1).
 - **Multi-school isolation enforced by the database** (M2): every school-owned table has forced row-level security; the school is resolved only from the request host; background jobs and the outbox run in their school's context; no database login can bypass RLS. Design: [`docs/design/m2-tenancy-kernel.md`](docs/design/m2-tenancy-kernel.md), ADR-0016 to ADR-0018.
@@ -10,7 +16,7 @@ StudyHub is a multi-tenant, white-label learning platform for schools, colleges,
 - **Accounts and access** (M4): one account per person with per-school memberships and roles; sign-in on each school's host, school switching by one-time hand-off, invitations, email verification and password reset; a separate platform console with mandatory two-step verification; a policy layer and an authorization matrix tested in CI. Design: [`docs/design/m4-identity-realms.md`](docs/design/m4-identity-realms.md); ASVS checklist: [`docs/security/asvs-v2-v3.md`](docs/security/asvs-v2-v3.md).
 - **Instructors, catalogue and authoring** (M5): instructor applications or invitations; categories and subjects; Studio for building courses (outline, rich text, video and file lessons, details, pricing, publish checklist) with administrator review; uploads straight from the browser to object storage, verified and scanned by the worker; a searchable per-school catalogue with course and instructor pages. Design: [`docs/design/m5-catalogue-authoring.md`](docs/design/m5-catalogue-authoring.md).
 
-Enrolment and learning, quizzes and payments arrive in later milestones (see `docs/blueprint/07-implementation-roadmap.md`). Video and payment providers are development fakes until the client approves one.
+Enrolment and learning (M6), assessments and practice (M7), commerce and ledger workflows (M8), and school administration/platform console (M9) are implemented; design notes are in `docs/design/`. M10 hardening, recovery/load validation and M11 launch remain unfinished (see `docs/blueprint/07-implementation-roadmap.md`). Lipila is the client-selected payment provider; [sandbox preparation and blockers](docs/design/lipila-evaluation.md) are recorded separately. The runtime still uses the fake payment adapter until sandbox certification and full adapter wiring are complete. Video remains a development fake pending provider selection.
 
 ## Repository layout
 
@@ -96,20 +102,24 @@ pnpm dev
 pnpm verify
 ```
 
-`pnpm verify` runs every gate in order: lint, typecheck, boundaries, unit tests, integration tests (including the tenant-isolation suite), build, migrate, seed, e2e (including the Lighthouse budget), story tests (axe and visual regression), OpenAPI, secret scan. The database must be up (`pnpm db:up`). Individual gates:
+`pnpm verify` runs lint, typecheck, boundaries, unit tests, integration tests (including isolation and disposable recovery), build, security-header/CSP browser checks, isolated e2e (including Lighthouse/learner JS budgets), stories, OpenAPI and secret scan. Docker must be available. It no longer migrates or seeds the existing demo database. The isolated browser runner creates fresh services and a separate web build; it refuses to reuse occupied test ports. Individual gates:
 
-| Command             | What it checks                                                                  |
-| ------------------- | ------------------------------------------------------------------------------- |
-| `pnpm lint`         | ESLint (zero warnings) and Prettier formatting                                  |
-| `pnpm typecheck`    | TypeScript strict mode across all packages                                      |
-| `pnpm boundaries`   | module-boundary rules, and proof that violations are detected                   |
-| `pnpm test`         | unit tests (Vitest)                                                             |
-| `pnpm test:int`     | integration tests against throwaway PostgreSQL 17 containers (Testcontainers)   |
-| `pnpm build`        | production builds of contracts, API and web                                     |
-| `pnpm test:e2e`     | Playwright e2e (starts the built API and web), then the Lighthouse budget       |
-| `pnpm test:stories` | builds Storybook; axe on every story in 3 themes, visual regression at 5 widths |
-| `pnpm openapi`      | regenerates `apps/api/openapi.json` from the contracts                          |
-| `pnpm secrets:scan` | gitleaks secret scan of the working tree (via Docker)                           |
+| Command                  | What it checks                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm lint`              | ESLint (zero warnings) and Prettier formatting                                                                                  |
+| `pnpm typecheck`         | TypeScript strict mode across all packages                                                                                      |
+| `pnpm boundaries`        | module-boundary rules, and proof that violations are detected                                                                   |
+| `pnpm test`              | unit tests (Vitest)                                                                                                             |
+| `pnpm test:int`          | integration tests against throwaway PostgreSQL 17 containers (Testcontainers)                                                   |
+| `pnpm build`             | production builds of contracts, API and web                                                                                     |
+| `pnpm test:e2e`          | Playwright e2e (starts the built API and web), then the Lighthouse budget                                                       |
+| `pnpm test:e2e:isolated` | Real browser journeys with disposable services on dedicated ports; separate web build                                           |
+| `pnpm test:recovery`     | Disposable full-database and reviewed single-school content recovery; checks shared identities and other schools stay unchanged |
+| `pnpm test:load:smoke`   | Opt-in two-school TCP request-budget/latency smoke; not launch-capacity evidence                                                |
+| `pnpm test:security`     | Production CSP/header browser checks with fixture API; no database required                                                     |
+| `pnpm test:stories`      | builds Storybook; axe on every story in 3 themes, visual regression at 5 widths                                                 |
+| `pnpm openapi`           | regenerates `apps/api/openapi.json` from the contracts                                                                          |
+| `pnpm secrets:scan`      | gitleaks secret scan of the working tree (via Docker)                                                                           |
 
 Stop the database with `pnpm db:down`. Data persists in a Docker volume; see the runbook to reset it.
 

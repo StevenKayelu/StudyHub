@@ -47,6 +47,7 @@ describe('database migrations and roles (PostgreSQL 17)', () => {
       { migration_name: '0007_assessment', finished: true },
       { migration_name: '0008_commerce', finished: true },
       { migration_name: '0009_tenant_admin_console', finished: true },
+      { migration_name: '0010_storage_provenance', finished: true },
     ]);
   });
 
@@ -85,6 +86,97 @@ describe('database migrations and roles (PostgreSQL 17)', () => {
       app.query(`INSERT INTO platform_setting (key, value) VALUES ('Bad Key', '1')`),
     );
     expect(state).toBe('23514'); // check_violation
+  });
+
+  it('creates no deployment storage descriptor or credentials during migration', async () => {
+    await migrator.query('BEGIN');
+    try {
+      await migrator.query("SELECT set_config('app.realm', 'platform', true)");
+      const { rows } = await migrator.query('SELECT id FROM platform_storage_location');
+      expect(rows).toEqual([]);
+    } finally {
+      await migrator.query('ROLLBACK');
+    }
+  });
+
+  it('keeps immutable storage origins in the platform realm', async () => {
+    const config = JSON.stringify({
+      version: 1,
+      endpoint: 'https://storage.example.test',
+      region: 'auto',
+      bucket: 'private-files',
+      forcePathStyle: false,
+      createBucket: false,
+    });
+    let locationId: string;
+    await app.query('BEGIN');
+    try {
+      await app.query("SELECT set_config('app.realm', 'platform', true)");
+      const { rows } = await app.query<{ id: string }>(
+        `INSERT INTO platform_storage_location (provider, config, credentials_enc, fingerprint)
+         VALUES ('R2', $1::jsonb, $2, $3) RETURNING id`,
+        [config, Buffer.alloc(29, 1), 'a'.repeat(64)],
+      );
+      locationId = rows[0]!.id;
+      await app.query('COMMIT');
+    } catch (error) {
+      await app.query('ROLLBACK');
+      throw error;
+    }
+    expect((await app.query('SELECT id FROM platform_storage_location')).rows).toEqual([]);
+    expect(
+      await sqlStateOf(
+        app.query("UPDATE platform_storage_location SET provider='S3' WHERE id=$1", [locationId]),
+      ),
+    ).toBe(INSUFFICIENT_PRIVILEGE);
+    expect(
+      await sqlStateOf(app.query('DELETE FROM platform_storage_location WHERE id=$1', [locationId])),
+    ).toBe(INSUFFICIENT_PRIVILEGE);
+    // The table owner cannot quietly repoint an existing descriptor either.
+    await migrator.query('BEGIN');
+    try {
+      await migrator.query("SELECT set_config('app.realm', 'platform', true)");
+      expect(
+        await sqlStateOf(
+          migrator.query('UPDATE platform_storage_location SET config=$2::jsonb WHERE id=$1', [
+            locationId,
+            config,
+          ]),
+        ),
+      ).toBe('23514');
+    } finally {
+      await migrator.query('ROLLBACK');
+    }
+  });
+
+  it('rejects storage descriptors that put secrets into public config', async () => {
+    await app.query('BEGIN');
+    try {
+      await app.query("SELECT set_config('app.realm', 'platform', true)");
+      expect(
+        await sqlStateOf(
+          app.query(
+            `INSERT INTO platform_storage_location (provider, config, credentials_enc, fingerprint)
+             VALUES ('S3', $1::jsonb, $2, $3)`,
+            [
+              JSON.stringify({
+                version: 1,
+                endpoint: null,
+                region: 'us-east-1',
+                bucket: 'private-files',
+                forcePathStyle: false,
+                createBucket: false,
+                secretAccessKey: 'must-be-encrypted',
+              }),
+              Buffer.alloc(29, 1),
+              'b'.repeat(64),
+            ],
+          ),
+        ),
+      ).toBe('23514');
+    } finally {
+      await app.query('ROLLBACK');
+    }
   });
 
   it('denies the app role CREATE TABLE in the public schema', async () => {

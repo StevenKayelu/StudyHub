@@ -1,10 +1,17 @@
-import { adminLocalesSchema, adminSettingsSchema, DOCUMENT_TYPES, LEGAL_PAGES } from '@studyhub/contracts';
+import {
+  adminLocalesSchema,
+  adminSettingsSchema,
+  configurationViewSchema,
+  DOCUMENT_TYPES,
+  LEGAL_PAGES,
+} from '@studyhub/contracts';
 import { Card } from '@studyhub/ui';
 import type { Metadata } from 'next';
 import { getFormatter, getLocale, getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 
 import { type ApiField, ApiForm } from '../../../../../components/api-form';
+import { ConfigurationEditor } from '../../../../../components/configuration-editor';
 import { PaymentSettingsForm } from '../../../../../components/payment-settings-form';
 import { AdminFrame } from '../../../../../components/workspace-frames';
 import { fetchAdmin, formTexts } from '../../../../../lib/admin-api';
@@ -30,9 +37,10 @@ export default async function AdminSettingsPage() {
   const format = await getFormatter();
   const locale = await getLocale();
   const terms = await getTerms(tenant, locale);
-  const [settings, locales] = await Promise.all([
+  const [settings, locales, configuration] = await Promise.all([
     fetchContent('/api/v1/admin/settings', adminSettingsSchema),
     fetchAdmin('/api/v1/admin/locales', adminLocalesSchema),
+    fetchAdmin('/api/v1/admin/configuration', configurationViewSchema),
   ]);
   if (settings === null) return null;
   const texts = await formTexts();
@@ -110,15 +118,9 @@ export default async function AdminSettingsPage() {
           defaultValue: general.unverifiedFreeEnrolment,
         },
       ])}
-      {group('catalogue', [
-        {
-          kind: 'select',
-          name: 'catalogVisibility',
-          label: s('catalogVisibility'),
-          options: options('catalogVisibilities'),
-          defaultValue: content.catalogVisibility,
-        },
-      ])}
+      {configuration !== null && configuration !== 'denied' ? (
+        <ConfigurationEditor initial={configuration} />
+      ) : null}
       {group('instructors', [
         {
           kind: 'select',
@@ -126,12 +128,6 @@ export default async function AdminSettingsPage() {
           label: t('schoolAdmin.settings.onboardingMode', terms),
           options: options('onboardingModes'),
           defaultValue: content.instructorOnboardingMode,
-        },
-        {
-          kind: 'checkbox',
-          name: 'courseReviewRequired',
-          label: t('schoolAdmin.settings.reviewRequired', terms),
-          defaultValue: content.courseReviewRequired,
         },
       ])}
       {group(
@@ -156,12 +152,6 @@ export default async function AdminSettingsPage() {
             name: 'maxVideoGb',
             label: s('maxVideoGb', { max: planCaps.maxVideoGb }),
             defaultValue: content.maxVideoGb,
-          },
-          {
-            kind: 'checkbox',
-            name: 'downloadsAllowedDefault',
-            label: s('downloads'),
-            defaultValue: content.downloadsAllowedDefault,
           },
           {
             kind: 'number',

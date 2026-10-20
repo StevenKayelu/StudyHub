@@ -23,11 +23,16 @@ import {
   type TenantTx,
 } from '../../platform';
 import {
+  featureChangeProblems,
+  featureEnabled,
   featureMap,
+  LATER_FEATURES,
   limitOf,
   ownerContacts,
   planFromRow,
   planGrants,
+  readFeatures,
+  readPlan,
   slugProblem,
   TENANT_SWITCH_DEFAULTS,
   TenantResolver,
@@ -365,6 +370,15 @@ export class ConsoleTenantsService {
     }
     const now = new Date();
     await this.db.runPlatformIn(tenantId, async (tx) => {
+      if (action === 'cancel-offboarding') {
+        const [locked] = await tx.$queryRaw<{ status: string; eligible: boolean }[]>`
+          SELECT status, (delete_after > clock_timestamp()) AS eligible FROM tenant
+          WHERE id = ${tenantId}::uuid FOR UPDATE`;
+        if (locked?.status !== 'OFFBOARDING' || !locked.eligible)
+          throw new AppError('INVALID_STATE', {
+            detail: 'The grace period has ended or offboarding was already changed.',
+          });
+      }
       await tx.tenant.update({
         where: { id: tenantId },
         data: {
@@ -468,9 +482,40 @@ export class ConsoleTenantsService {
   ) {
     await this.metadata(tenantId);
     await this.db.runPlatformIn(tenantId, async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`features:${tenantId}`}))`;
+      if (override === 'GRANT' && LATER_FEATURES.has(key)) {
+        throw new AppError('FEATURE_NOT_ENABLED', {
+          detail: 'This capability has not been implemented and cannot be granted.',
+          extensions: { feature: key },
+        });
+      }
       const before = await tx.tenantFeature.findUnique({
         where: { tenantId_featureKey: { tenantId, featureKey: key } },
       });
+      const current = await readFeatures(tx);
+      const enabled = featureEnabled(
+        {
+          enabledByTenant: before?.enabledByTenant ?? TENANT_SWITCH_DEFAULTS[key] ?? true,
+          platformOverride: override,
+        },
+        planGrants((await readPlan(tx)).features, key),
+      );
+      const problems =
+        override === 'GRANT' || current[key] !== enabled
+          ? featureChangeProblems(current, key, override === 'GRANT' || enabled)
+          : [];
+      if (problems.length > 0) {
+        throw new AppError('VALIDATION_FAILED', {
+          errors: problems.map((problem) => ({
+            field: 'override',
+            code: problem.code,
+            message:
+              problem.code === 'dependency_disabled'
+                ? `Enable ${problem.feature} before granting ${key}.`
+                : `Disable ${problem.feature} before removing ${key}.`,
+          })),
+        });
+      }
       await tx.tenantFeature.upsert({
         where: { tenantId_featureKey: { tenantId, featureKey: key } },
         create: {

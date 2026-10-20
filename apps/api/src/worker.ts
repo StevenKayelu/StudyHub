@@ -10,6 +10,7 @@ import {
   loadApiEnv,
   PrismaService,
   SecretBox,
+  StorageLocations,
   startWorker,
 } from './modules/platform';
 import {
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
   const prisma = new PrismaService(env, logger);
   const media = createMediaPorts(env);
   const box = new SecretBox(env.IDENTITY_ENCRYPTION_KEY);
+  const locations = new StorageLocations(prisma, env);
   const commerce: CommerceDeps = {
     prisma,
     gateway: createPaymentGateway(env, prisma),
@@ -64,7 +66,7 @@ async function main(): Promise<void> {
     [EMAIL_SEND_JOB]: createEmailHandler(box, createMailTransport(env.SMTP_URL), env.MAIL_FROM_ADDRESS),
     [MEDIA_PROCESS_JOB]: createProcessAssetHandler({
       prisma,
-      storage: media.storage,
+      locations,
       scanner: media.scanner,
     }),
     [AUTO_SUBMIT_JOB]: createAutoSubmitHandler({ prisma }),
@@ -75,12 +77,12 @@ async function main(): Promise<void> {
     [LEDGER_CHECK_JOB]: createLedgerCheckHandler(commerce),
     [EXPORT_JOB]: createExportHandler({
       prisma,
-      storage: media.storage,
+      locations,
       box,
       schoolUrlTemplate: env.SCHOOL_URL_TEMPLATE,
     }),
     [USAGE_METER_JOB]: createUsageMeterHandler({ prisma, box }),
-    [PURGE_JOB]: createPurgeHandler({ prisma, storage: media.storage }),
+    [PURGE_JOB]: createPurgeHandler({ prisma, locations }),
   };
   const boss = await startWorker({ connectionString: env.DATABASE_URL_APP, logger, handlers });
 

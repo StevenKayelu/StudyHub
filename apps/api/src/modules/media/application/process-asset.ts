@@ -4,11 +4,14 @@ import { z } from 'zod';
 
 import type { PrismaClient } from '../../../generated/prisma/client';
 import {
+  AppError,
   type JobEnvelope,
+  lockTenantLifecycle,
   type MalwareScanner,
   matchesDeclaredType,
-  type ObjectStorage,
+  requireTenantId,
   runInTenantTx,
+  type StorageLocations,
 } from '../../platform';
 import { adjustUsage } from './usage';
 
@@ -19,7 +22,7 @@ const DERIVATIVE_WIDTH = 1280;
 
 export interface ProcessAssetDeps {
   prisma: PrismaClient;
-  storage: ObjectStorage;
+  locations: StorageLocations;
   scanner: MalwareScanner;
 }
 
@@ -31,19 +34,26 @@ export interface ProcessAssetDeps {
  */
 export function createProcessAssetHandler(deps: ProcessAssetDeps) {
   return async (envelope: JobEnvelope, logger: Logger): Promise<{ status: string }> => {
+    const tenantId = requireTenantId();
+    if (envelope.tenantId !== tenantId) throw new AppError('TENANT_CONTEXT_MISSING');
     const { assetId } = payloadSchema.parse(envelope.payload);
     const asset = await runInTenantTx(deps.prisma, async (tx) => {
+      // Serialize claims with purge eligibility (same lock): once offboarding is due, an UPLOADED asset
+      // never becomes a writer. An asset already SCANNING may finish or retry; the purge waits for it.
+      const tenant = await lockTenantLifecycle(tx, tenantId);
       const found = await tx.asset.findUnique({ where: { id: assetId } });
       if (found === null || (found.status !== 'UPLOADED' && found.status !== 'SCANNING')) return null;
+      if (tenant === undefined || (tenant.blocked && found.status !== 'SCANNING')) return null;
       await tx.asset.update({ where: { id: assetId }, data: { status: 'SCANNING', updatedAt: new Date() } });
       return found;
     });
     if (asset === null || asset.storageKey === null) return { status: 'skipped' };
+    const storage = await deps.locations.at(asset.storageLocationId, tenantId);
     const key = asset.storageKey;
     const size = Number(asset.sizeBytes);
 
     const reject = async (reason: string) => {
-      await deps.storage.delete(key).catch(() => undefined);
+      await storage.delete(key).catch(() => undefined);
       await runInTenantTx(deps.prisma, async (tx) => {
         await tx.asset.update({
           where: { id: assetId },
@@ -55,13 +65,13 @@ export function createProcessAssetHandler(deps: ProcessAssetDeps) {
       return { status: 'REJECTED' };
     };
 
-    const head = await deps.storage.head(key);
+    const head = await storage.head(key);
     if (head === null) return reject('The file never arrived. Upload it again.');
     if (head.size !== size) return reject('The file size does not match what was declared.');
-    if (!matchesDeclaredType(asset.mime, await deps.storage.readStart(key, 64))) {
+    if (!matchesDeclaredType(asset.mime, await storage.readStart(key, 64))) {
       return reject('The file content does not match its type.');
     }
-    const verdict = await deps.scanner.scan(await deps.storage.stream(key));
+    const verdict = await deps.scanner.scan(await storage.stream(key));
     if (!verdict.clean) return reject('The file failed the malware check.');
 
     let width: number | null = null;
@@ -69,7 +79,7 @@ export function createProcessAssetHandler(deps: ProcessAssetDeps) {
     let derivativeKey: string | null = null;
     if (asset.kind === 'IMAGE') {
       const chunks: Buffer[] = [];
-      for await (const chunk of await deps.storage.stream(key)) chunks.push(Buffer.from(chunk as Buffer));
+      for await (const chunk of await storage.stream(key)) chunks.push(Buffer.from(chunk as Buffer));
       const original = Buffer.concat(chunks);
       try {
         const meta = await sharp(original).metadata();
@@ -81,7 +91,7 @@ export function createProcessAssetHandler(deps: ProcessAssetDeps) {
           .webp({ quality: 78 })
           .toBuffer();
         derivativeKey = `${key}.webp`;
-        await deps.storage.put(derivativeKey, derivative, 'image/webp');
+        await storage.put(derivativeKey, derivative, 'image/webp');
       } catch {
         return reject('The image could not be read.');
       }

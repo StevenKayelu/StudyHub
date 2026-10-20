@@ -26,6 +26,10 @@
     {
       "name": "console",
       "description": "Platform console realm (console hosts only)"
+    },
+    {
+      "name": "configuration",
+      "description": "Reviewed platform defaults and school overrides"
     }
   ],
   "paths": {
@@ -1334,6 +1338,682 @@
           }
         }
       }
+    },
+    "/api/v1/admin/configuration": {
+      "get": {
+        "operationId": "schoolConfiguration_get",
+        "tags": [
+          "configuration"
+        ],
+        "summary": "get: managed content configuration",
+        "description": "School owner/administrator; host resolves the school. Draft saving and import preview do not alter active settings. Imports accept only three nonsecret aliases; credentials and deployment keys are rejected.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current configuration or validated preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/configuration/draft": {
+      "put": {
+        "operationId": "schoolConfiguration_saveDraft",
+        "tags": [
+          "configuration"
+        ],
+        "summary": "saveDraft: managed content configuration",
+        "description": "School owner/administrator; host resolves the school. Draft saving and import preview do not alter active settings. Imports accept only three nonsecret aliases; credentials and deployment keys are rejected.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigurationDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current configuration or validated preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/configuration/activate": {
+      "post": {
+        "operationId": "schoolConfiguration_activate",
+        "tags": [
+          "configuration"
+        ],
+        "summary": "activate: managed content configuration",
+        "description": "School owner/administrator; host resolves the school. Draft saving and import preview do not alter active settings. Imports accept only three nonsecret aliases; credentials and deployment keys are rejected.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigurationActivateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current configuration or validated preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/configuration/import-preview": {
+      "post": {
+        "operationId": "schoolConfiguration_previewImport",
+        "tags": [
+          "configuration"
+        ],
+        "summary": "previewImport: managed content configuration",
+        "description": "School owner/administrator; host resolves the school. Draft saving and import preview do not alter active settings. Imports accept only three nonsecret aliases; credentials and deployment keys are rejected.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigurationImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current configuration or validated preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationImportPreview"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/console/configuration": {
+      "get": {
+        "operationId": "platformConfiguration_get",
+        "tags": [
+          "configuration"
+        ],
+        "summary": "get: managed content configuration",
+        "description": "Platform owner with verified MFA; activation also requires recent TOTP reauthentication. Draft saving and import preview do not alter active settings. Imports accept only three nonsecret aliases; credentials and deployment keys are rejected.",
+        "security": [
+          {
+            "consoleCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current configuration or validated preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/console/configuration/draft": {
+      "put": {
+        "operationId": "platformConfiguration_saveDraft",
+        "tags": [
+          "configuration"
+        ],
+        "summary": "saveDraft: managed content configuration",
+        "description": "Platform owner with verified MFA; activation also requires recent TOTP reauthentication. Draft saving and import preview do not alter active settings. Imports accept only three nonsecret aliases; credentials and deployment keys are rejected.",
+        "security": [
+          {
+            "consoleCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigurationDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current configuration or validated preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/console/configuration/activate": {
+      "post": {
+        "operationId": "platformConfiguration_activate",
+        "tags": [
+          "configuration"
+        ],
+        "summary": "activate: managed content configuration",
+        "description": "Platform owner with verified MFA; activation also requires recent TOTP reauthentication. Draft saving and import preview do not alter active settings. Imports accept only three nonsecret aliases; credentials and deployment keys are rejected.",
+        "security": [
+          {
+            "consoleCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigurationActivateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current configuration or validated preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/console/configuration/import-preview": {
+      "post": {
+        "operationId": "platformConfiguration_previewImport",
+        "tags": [
+          "configuration"
+        ],
+        "summary": "previewImport: managed content configuration",
+        "description": "Platform owner with verified MFA; activation also requires recent TOTP reauthentication. Draft saving and import preview do not alter active settings. Imports accept only three nonsecret aliases; credentials and deployment keys are rejected.",
+        "security": [
+          {
+            "consoleCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigurationImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current configuration or validated preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationImportPreview"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication, permission, version conflict, validation or configuration availability error.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2133,6 +2813,422 @@
         "required": [
           "status",
           "signedIn"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigurationView": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "PLATFORM",
+              "SCHOOL"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "values": {
+            "type": "object",
+            "properties": {
+              "catalogVisibility": {
+                "type": "string",
+                "enum": [
+                  "PUBLIC",
+                  "MEMBERS_ONLY"
+                ]
+              },
+              "courseReviewRequired": {
+                "type": "boolean"
+              },
+              "downloadsAllowedDefault": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "lockedKeys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "catalogVisibility",
+                "courseReviewRequired",
+                "downloadsAllowedDefault"
+              ]
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "enum": [
+                    "catalogVisibility",
+                    "courseReviewRequired",
+                    "downloadsAllowedDefault"
+                  ]
+                },
+                "value": {
+                  "type": [
+                    "boolean",
+                    "string"
+                  ]
+                },
+                "inheritedValue": {
+                  "type": [
+                    "boolean",
+                    "string"
+                  ]
+                },
+                "overrideValue": {
+                  "type": [
+                    "boolean",
+                    "string",
+                    "null"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "PLATFORM_DEFAULT",
+                    "SCHOOL_OVERRIDE",
+                    "PLATFORM_ENFORCED"
+                  ]
+                },
+                "locked": {
+                  "type": "boolean"
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "NEXT_REQUEST",
+                    "NEW_CONTENT"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "value",
+                "inheritedValue",
+                "overrideValue",
+                "source",
+                "locked",
+                "effect"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "draft": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "values": {
+                    "type": "object",
+                    "properties": {
+                      "catalogVisibility": {
+                        "type": "string",
+                        "enum": [
+                          "PUBLIC",
+                          "MEMBERS_ONLY"
+                        ]
+                      },
+                      "courseReviewRequired": {
+                        "type": "boolean"
+                      },
+                      "downloadsAllowedDefault": {
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "lockedKeys": {
+                    "default": [],
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "catalogVisibility",
+                        "courseReviewRequired",
+                        "downloadsAllowedDefault"
+                      ]
+                    }
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 300
+                  },
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "baseRevision": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "stale": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "values",
+                  "lockedKeys",
+                  "reason",
+                  "schemaVersion",
+                  "id",
+                  "baseRevision",
+                  "createdAt",
+                  "stale"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "actorId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "values": {
+                  "type": "object",
+                  "properties": {
+                    "catalogVisibility": {
+                      "type": "string",
+                      "enum": [
+                        "PUBLIC",
+                        "MEMBERS_ONLY"
+                      ]
+                    },
+                    "courseReviewRequired": {
+                      "type": "boolean"
+                    },
+                    "downloadsAllowedDefault": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "lockedKeys": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "catalogVisibility",
+                      "courseReviewRequired",
+                      "downloadsAllowedDefault"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "at",
+                "actorId",
+                "reason",
+                "values",
+                "lockedKeys"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "scope",
+          "revision",
+          "values",
+          "lockedKeys",
+          "fields",
+          "draft",
+          "history"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigurationDraftRequest": {
+        "type": "object",
+        "properties": {
+          "expectedRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "values": {
+            "type": "object",
+            "properties": {
+              "catalogVisibility": {
+                "type": "string",
+                "enum": [
+                  "PUBLIC",
+                  "MEMBERS_ONLY"
+                ]
+              },
+              "courseReviewRequired": {
+                "type": "boolean"
+              },
+              "downloadsAllowedDefault": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "lockedKeys": {
+            "default": [],
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "catalogVisibility",
+                "courseReviewRequired",
+                "downloadsAllowedDefault"
+              ]
+            }
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "values",
+          "lockedKeys",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigurationActivateRequest": {
+        "type": "object",
+        "properties": {
+          "draftId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "expectedRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "draftId",
+          "expectedRevision"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigurationImportRequest": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigurationImportPreview": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "values": {
+            "type": "object",
+            "properties": {
+              "catalogVisibility": {
+                "type": "string",
+                "enum": [
+                  "PUBLIC",
+                  "MEMBERS_ONLY"
+                ]
+              },
+              "courseReviewRequired": {
+                "type": "boolean"
+              },
+              "downloadsAllowedDefault": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "setting": {
+                  "type": "string",
+                  "enum": [
+                    "catalogVisibility",
+                    "courseReviewRequired",
+                    "downloadsAllowedDefault"
+                  ]
+                },
+                "displayValue": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "setting",
+                "displayValue"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "values",
+          "entries"
         ],
         "additionalProperties": false
       },

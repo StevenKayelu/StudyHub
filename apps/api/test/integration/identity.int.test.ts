@@ -15,10 +15,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from '../../src/main';
 import {
+  bootstrapStorageLocations,
   createLogger,
   DEV_IDENTITY_ENCRYPTION_KEY,
   hashPassword,
   loadApiEnv,
+  PrismaService,
   SecretBox,
   timeStep,
   totpCode,
@@ -169,6 +171,13 @@ describe('identity realms (M4)', () => {
     // TEST_LOG_LEVEL=error shows server-side failures while debugging this suite.
     const level = (process.env.TEST_LOG_LEVEL ?? 'silent') as 'silent';
     const env = loadApiEnv({ DATABASE_URL_APP: database.appUrl, LOG_LEVEL: level });
+    // Storage fails closed until its origin is captured (as `pnpm storage:bootstrap` does on deploy).
+    const bootstrapPrisma = new PrismaService(env, createLogger({ level }));
+    try {
+      await bootstrapStorageLocations({ prisma: bootstrapPrisma, env });
+    } finally {
+      await bootstrapPrisma.onModuleDestroy();
+    }
     app = await createApp({ env, logger: createLogger({ level }) });
   });
 

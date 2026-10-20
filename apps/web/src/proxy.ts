@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { webContentSecurityPolicy, webSecurityHeaders } from './lib/security-headers';
+
 /**
  * Request guard (blueprint 04 §6, §17.2; design §3.6). Runs once per request, on the ORIGINAL path,
  * before next.config rewrites map hosts to the internal /_tenant/<host> and /_console routes.
@@ -20,31 +22,52 @@ function isInternal(pathname: string): boolean {
 
 export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
-  if (isInternal(pathname)) {
-    return new NextResponse('Not found', { status: 404 });
-  }
-
+  const headers = new Headers(request.headers);
+  // A client must never choose the nonce or the policy consumed by Next's renderer.
+  headers.delete('x-nonce');
+  headers.delete('content-security-policy');
   const rawHost = (request.headers.get('host') ?? '').trim().toLowerCase();
   const hostname = rawHost.replace(/:\d{1,5}$/, '').replace(/\.$/, '');
-  if (!HOST.test(hostname)) {
-    return new NextResponse('Bad request', { status: 400 });
+  const localHost = hostname === 'localhost' || hostname.endsWith('.localhost') || hostname === '127.0.0.1';
+  const responseHeaders = new Headers(webSecurityHeaders(process.env.NODE_ENV === 'production'));
+  // API responses carry the API's own policy (including its development hosted-card HTML).
+  if (!(pathname === '/api' || pathname.startsWith('/api/'))) {
+    const nonce = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64');
+    const csp = webContentSecurityPolicy(nonce, process.env.NODE_ENV === 'development', localHost);
+    headers.set('x-nonce', nonce);
+    headers.set('content-security-policy', csp);
+    responseHeaders.set('content-security-policy', csp);
+    // Never cache HTML with a nonce and replay it under another response's policy.
+    // The versioned theme handler returns CSS, contains no nonce and owns its cache policy.
+    // Keep it behind the same host guard rather than excluding it from the proxy matcher.
+    if (!/^\/theme\/[^/]+\/[^/]+\.css$/.test(pathname)) {
+      responseHeaders.set('cache-control', 'private, no-store');
+    }
+  }
+  if (isInternal(pathname)) {
+    return new NextResponse('Not found', { status: 404, headers: responseHeaders });
   }
 
-  const headers = new Headers(request.headers);
+  if (!HOST.test(hostname)) {
+    return new NextResponse('Bad request', { status: 400, headers: responseHeaders });
+  }
+
   headers.set('x-forwarded-host', rawHost);
   // The original path (before rewrites), for "return to" after sign-in. Client values are overwritten.
   headers.set('x-studyhub-path', `${pathname}${request.nextUrl.search}`.slice(0, 2048));
 
   if (process.env.MAINTENANCE_MODE === 'on' && !pathname.startsWith('/api/')) {
-    const url = request.nextUrl.clone();
+    // Native URL preserves the server origin; next.config disables proxy URL canonicalization.
+    const url = new URL(request.url);
     url.pathname = '/_system/maintenance';
+    responseHeaders.set('retry-after', '600');
     return NextResponse.rewrite(url, {
       status: 503,
       request: { headers },
-      headers: { 'retry-after': '600' },
+      headers: responseHeaders,
     });
   }
-  return NextResponse.next({ request: { headers } });
+  return NextResponse.next({ request: { headers }, headers: responseHeaders });
 }
 
 export const config = {

@@ -199,7 +199,8 @@ const COMMERCE_ROUTES: readonly string[] = [
 /**
  * School administration routes (M9). Covered by admin.int.test.ts (07 M9 AC 1–8: cross-school ids are
  * 404, exports hold only the school's rows, support-session exclusions) and by the M9 rows of the
- * authorization matrix.
+ * authorization matrix. Content configuration (M10) is covered by configuration.int.test.ts (cross-school
+ * cookies are refused and each school's drafts and active values stay separate).
  */
 const ADMIN_ROUTES: readonly string[] = [
   'DELETE /api/v1/admin/offboarding',
@@ -208,6 +209,7 @@ const ADMIN_ROUTES: readonly string[] = [
   'GET /api/v1/admin/billing/statements',
   'GET /api/v1/admin/billing/statements/:id',
   'GET /api/v1/admin/branding',
+  'GET /api/v1/admin/configuration',
   'GET /api/v1/admin/domains',
   'GET /api/v1/admin/domains/availability',
   'GET /api/v1/admin/exports',
@@ -233,6 +235,8 @@ const ADMIN_ROUTES: readonly string[] = [
   'POST /api/v1/admin/branding/publish',
   'POST /api/v1/admin/branding/rollback/:version',
   'POST /api/v1/admin/branding/validate-colour',
+  'POST /api/v1/admin/configuration/activate',
+  'POST /api/v1/admin/configuration/import-preview',
   'POST /api/v1/admin/domains',
   'POST /api/v1/admin/domains/change-requests',
   'POST /api/v1/admin/domains/change-requests/:id/cancel',
@@ -252,6 +256,7 @@ const ADMIN_ROUTES: readonly string[] = [
   'POST /api/v1/support/end',
   'POST /api/v1/support/handoff',
   'PUT /api/v1/admin/branding/draft',
+  'PUT /api/v1/admin/configuration/draft',
   'PUT /api/v1/admin/features/:key',
   'PUT /api/v1/admin/locales',
   'PUT /api/v1/me/notification-preferences',

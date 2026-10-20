@@ -53,7 +53,7 @@ module.exports = {
     doNotFollow: { path: 'node_modules' },
     exclude: {
       path: [
-        '(^|/)(dist|\\.next|\\.turbo|coverage|generated|storybook-static)/',
+        '(^|/)(dist|\\.next|\\.next-e2e|\\.turbo|coverage|generated|storybook-static)/',
         '(^|/)node_modules/',
         '^tools/boundary-fixtures/',
       ],
