@@ -136,10 +136,11 @@ async function readingOrder(tx: TenantTx, courseId: string) {
 }
 
 /** The refusal for content beyond a deposit: what is owed and by when (402, docs/design/payment-plans.md). */
-export function balanceRequired(enrollment: EnrollmentRow): AppError {
+export function balanceRequired(enrollment: EnrollmentRow, courseId: string): AppError {
   return new AppError('BALANCE_REQUIRED', {
     detail: 'Your deposit opens part of this course. Pay the balance to open the rest.',
     extensions: {
+      courseId,
       balanceMinor: Number(enrollment.balanceMinor ?? 0n),
       dueAt: enrollment.balanceDueAt?.toISOString() ?? null,
       lessonPct: enrollment.accessLimitPct,
@@ -169,12 +170,12 @@ export async function requireQuizOpen(
   const lessons = await readingOrder(tx, courseId);
   const locked = lockedLessonIds(lessons, enrollment.accessLimitPct);
   const open = lessons.some((lesson) => lesson.quizId === quizId && !locked.has(lesson.id));
-  if (!open) throw balanceRequired(enrollment);
+  if (!open) throw balanceRequired(enrollment, courseId);
 }
 
-/** Practice draws on the whole question bank, so it needs the full course (PROPOSED 2). */
-export function requireFullAccess(grant: Grant): void {
+/** Practice draws on the whole question bank, so it needs the full course (decision 2). */
+export function requireFullAccess(grant: Grant, courseId: string): void {
   if (grant.access === 'ENROLLED' && grant.enrollment !== null && grant.enrollment.accessLimitPct !== null) {
-    throw balanceRequired(grant.enrollment);
+    throw balanceRequired(grant.enrollment, courseId);
   }
 }

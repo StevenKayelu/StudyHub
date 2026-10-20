@@ -321,6 +321,7 @@ describe('deposit payment plans', () => {
     expect(refused.statusCode).toBe(402);
     expect(refused.json()).toMatchObject({
       code: 'BALANCE_REQUIRED',
+      courseId,
       balanceMinor: BALANCE,
       lessonPct: 30,
     });

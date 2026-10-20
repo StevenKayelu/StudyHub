@@ -70,7 +70,7 @@ export default async function AdminOrderPage({ params }: { params: Params }) {
     <AdminFrame
       tenant={tenant}
       current="/admin/orders"
-      title={`${order.courseTitle} · ${order.buyerName}`}
+      title={`${t(`commerce.parts.${order.part}`, { title: order.courseTitle })} · ${order.buyerName}`}
       breadcrumbs={[
         { href: '/admin/orders', label: t('commerce.admin.orders.title') },
         { href: `/admin/orders/${order.id}`, label: order.receiptNumber ?? order.id.slice(0, 8) },

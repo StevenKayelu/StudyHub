@@ -553,7 +553,7 @@ export class LearningService {
     if (grant !== null) {
       // Beyond what a deposit opened: locked until the balance is paid (no content, video or files).
       if (grant.enrollment !== null && (await lockedLessons(tx, grant, course.id)).has(lesson.id)) {
-        throw balanceRequired(grant.enrollment);
+        throw balanceRequired(grant.enrollment, course.id);
       }
       return { lesson, course, access: grant.access, enrollment: grant.enrollment };
     }

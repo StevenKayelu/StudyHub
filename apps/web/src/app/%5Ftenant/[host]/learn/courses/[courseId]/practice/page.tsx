@@ -1,5 +1,5 @@
 import { practiceSetupSchema } from '@studyhub/contracts';
-import { StatePanel } from '@studyhub/ui';
+import { buttonClasses, StatePanel } from '@studyhub/ui';
 import type { Metadata } from 'next';
 import NextLink from 'next/link';
 import { notFound, redirect } from 'next/navigation';
@@ -29,7 +29,22 @@ export default async function PracticeSetupPage({ params }: { params: Promise<{ 
     redirect(`/sign-in?returnTo=${encodeURIComponent(`/learn/courses/${courseId}/practice`)}`);
   if (response.status === 404) notFound();
   let content: React.ReactNode;
-  if (response.status === 403) {
+  if (response.status === 402) {
+    // Deposit plans: practice draws on the whole question bank, so it opens with the balance.
+    content = (
+      <StatePanel
+        kind="permission"
+        headingLevel={2}
+        title={t('learn.player.practiceLocked')}
+        message={t('learn.player.lockedElsewhereHint', terms)}
+        actions={
+          <NextLink href={`/learn/courses/${courseId}`} className={buttonClasses('primary')}>
+            {t('learn.player.openCourse', terms)}
+          </NextLink>
+        }
+      />
+    );
+  } else if (response.status === 403) {
     const problem = (await response.json()) as { code?: string };
     content = (
       <StatePanel

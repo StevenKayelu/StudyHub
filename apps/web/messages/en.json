@@ -139,7 +139,11 @@
       "balanceOverdue": "The balance of {balance} was due on {date}. You keep the lessons your deposit opened; pay the balance to open the rest.",
       "lockedTitle": "This lesson opens when you pay the balance",
       "lockedHint": "Your deposit opened the first {percent}% of the lessons. Pay the balance of {balance} to open this one and the rest of the {courseLower}.",
-      "payBalance": "Pay the balance"
+      "payBalance": "Pay the balance",
+      "quizLocked": "This quiz opens when you pay the balance",
+      "practiceLocked": "Practice opens when you pay the balance",
+      "lockedElsewhereHint": "Your deposit opened part of this {courseLower}. Pay the balance to open the rest.",
+      "openCourse": "Open the {courseLower}"
     },
     "video": {
       "simulated": "Practice video",

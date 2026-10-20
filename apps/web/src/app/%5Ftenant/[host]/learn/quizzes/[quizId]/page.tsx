@@ -9,7 +9,7 @@ import { cache } from 'react';
 import { LearnFrame } from '../../../../../../components/learn-frame';
 import { RichText } from '../../../../../../components/rich-text';
 import { StartAttempt } from '../../../../../../components/start-attempt';
-import { fetchLearning, UUID } from '../../../../../../lib/learn-api';
+import { fetchGated, UUID } from '../../../../../../lib/learn-api';
 import { learnTexts } from '../../../../../../lib/learn-texts';
 import { currentTenant, getTerms } from '../../../../../../lib/tenant';
 
@@ -17,7 +17,7 @@ type Params = Promise<{ quizId: string }>;
 
 const load = cache(async (quizId: string) => {
   if (!UUID.test(quizId)) notFound();
-  const intro = await fetchLearning(`/api/v1/learn/quizzes/${quizId}`, quizIntroSchema);
+  const intro = await fetchGated(`/api/v1/learn/quizzes/${quizId}`, quizIntroSchema);
   if (intro === null) notFound();
   return intro;
 });
@@ -25,7 +25,10 @@ const load = cache(async (quizId: string) => {
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const intro = await load((await params).quizId);
   return {
-    title: intro === 'locked' ? (await getTranslations('learn'))('title') : intro.quiz.title,
+    title:
+      intro === 'locked' || 'balanceCourseId' in intro
+        ? (await getTranslations('learn'))('title')
+        : intro.quiz.title,
     robots: { index: false },
   };
 }
@@ -47,6 +50,26 @@ export default async function QuizIntroPage({ params }: { params: Params }) {
     return (
       <LearnFrame tenant={tenant} current="learning">
         <StatePanel kind="permission" headingLevel={1} title={t('course.previewCta', terms)} />
+      </LearnFrame>
+    );
+  }
+  if ('balanceCourseId' in intro) {
+    // Deposit plans: a quiz outside the lessons the deposit opened (decision 2).
+    return (
+      <LearnFrame tenant={tenant} current="learning">
+        <StatePanel
+          kind="permission"
+          headingLevel={1}
+          title={t('learn.player.quizLocked')}
+          message={t('learn.player.lockedElsewhereHint', terms)}
+          actions={
+            intro.balanceCourseId === '' ? undefined : (
+              <NextLink href={`/learn/courses/${intro.balanceCourseId}`} className={buttonClasses('primary')}>
+                {t('learn.player.openCourse', terms)}
+              </NextLink>
+            )
+          }
+        />
       </LearnFrame>
     );
   }

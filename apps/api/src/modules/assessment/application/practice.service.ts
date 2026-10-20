@@ -251,7 +251,7 @@ export class PracticeService {
         course.status === 'PUBLISHED' || grant !== null ? 'ENROLMENT_INACTIVE' : 'NOT_FOUND',
       );
     }
-    requireFullAccess(grant);
+    requireFullAccess(grant, course.id);
     return course;
   }
 

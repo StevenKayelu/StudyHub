@@ -294,7 +294,7 @@ function row(
     status: 'PENDING' | 'PAID' | 'EXPIRED' | 'CANCELLED' | 'REFUNDED';
     totalMinor: bigint;
     currency: string;
-    items: { titleSnapshot: string }[];
+    items: { titleSnapshot: string; part: 'FULL' | 'DEPOSIT' | 'BALANCE' }[];
     receipt: { number: string } | null;
     payments: {
       method: 'MOBILE_MONEY' | 'CARD';
@@ -312,6 +312,7 @@ function row(
     buyerName: buyer?.name ?? '',
     buyerEmail: buyer?.email ?? '',
     courseTitle: order.items[0]?.titleSnapshot ?? '',
+    part: order.items[0]?.part ?? 'FULL',
     total: { amountMinor: Number(order.totalMinor), currency: order.currency },
     method: payment?.method ?? null,
     network: payment?.network ?? null,

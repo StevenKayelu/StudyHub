@@ -155,7 +155,9 @@ export default async function AdminOrdersPage({ searchParams }: { searchParams: 
                         </NextLink>
                       </td>
                       <td className="p-3">{order.buyerName}</td>
-                      <td className="p-3">{order.courseTitle}</td>
+                      <td className="p-3">
+                        {t(`commerce.parts.${order.part}`, { title: order.courseTitle })}
+                      </td>
                       <td className="tabular p-3 text-right">{money(order.total)}</td>
                       <td className="p-3">
                         {order.method !== null ? t(`commerce.methods.${order.method}`) : '—'}

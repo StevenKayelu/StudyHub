@@ -284,6 +284,7 @@ export const adminOrderRowSchema = z.object({
   buyerName: z.string(),
   buyerEmail: z.string(),
   courseTitle: z.string(),
+  part: orderPartSchema,
   total: moneySchema,
   method: paymentMethodSchema.nullable(),
   network: mobileNetworkSchema.nullable(),

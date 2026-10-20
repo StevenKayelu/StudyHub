@@ -1,6 +1,6 @@
 # Design note: deposit payment plans (pay part now, the balance later)
 
-- **Status:** IN PROGRESS (2026-10-20). Scope addition requested by the product owner before M10 is finished. Items marked **PROPOSED** are implementation defaults awaiting the client's confirmation.
+- **Status:** DONE (2026-10-20). Scope addition requested by the product owner before M10 is finished. Decisions 1–5 in §4 were confirmed by the product owner on 2026-10-20; items 6–7 are still **PROPOSED** implementation details.
 - **Changes the blueprint:** 03 §F24 says "one-time purchase only (subscriptions LATER, Q-BIZ-5)". A deposit plan is still a one-time price, paid in two parts; subscriptions, coupons and bundles stay LATER.
 - **Baseline:** `m10-wip` commit `e53ece9`. Builds on the M8 fake payment provider only (Q-PAY-3 is still open).
 
@@ -26,25 +26,30 @@ Decisions taken with the product owner (2026-10-20):
   - `access_limit_pct`: the share of lessons open now (null = everything);
   - `plan_lesson_pct`, `balance_minor` and `balance_due_at`: what the learner agreed at deposit time (snapshots: later price or plan changes do not change them);
   - `balance_order_item_id`: set once the balance is paid.
-- **Access rule:** with a limit, the open lessons are the first `ceil(total × pct / 100)` lessons in reading order (sections by position, then lessons by position), plus every preview lesson. **PROPOSED:** the count follows the course as it is today, so lessons added later count too. Locked lessons, their videos, files and lesson quizzes return `BALANCE_REQUIRED` (402). **PROPOSED:** question-bank practice and quizzes not attached to an open lesson need the full course.
+- **Access rule:** with a limit, the open lessons are the first `ceil(total × pct / 100)` lessons in reading order (sections by position, then lessons by position), plus every preview lesson. **Decision 1:** the count follows the course as it is today, so lessons added later count too. Locked lessons, their videos, files and lesson quizzes return `BALANCE_REQUIRED` (402). **Decision 2:** question-bank practice and quizzes not attached to an open lesson need the full course.
 - **Balance:** `POST /orders` with `part: 'BALANCE'` for a learner whose enrolment has an unpaid balance. The amount is the enrolment's `balance_minor` snapshot. When it is paid, the limit is lifted (`access_limit_pct = null`) and the enrolment keeps its start date and expiry.
-- **Deadline:** passing it changes nothing in access (decision above). The learner sees the balance as overdue. **PROPOSED:** a reminder email 3 days before the deadline and one on the deadline, queued when the deposit is paid. The balance is still payable after the deadline.
+- **Deadline:** passing it changes nothing in access (decision above). The learner sees the balance as overdue. **Decision 3:** a reminder email 3 days before the deadline and one on the deadline, queued when the deposit is paid. The balance is still payable after the deadline.
 
 ## 3. Refunds
 
 - **Balance refunded:** the enrolment goes back to the deposit limit (`access_limit_pct = plan_lesson_pct`, `balance_order_item_id = null`); the balance becomes payable again.
-- **Deposit refunded:** as today, the enrolment is revoked. **PROPOSED:** refused while the balance is paid. Refund the balance first, so a learner is never left with a paid balance and no access.
+- **Deposit refunded:** as today, the enrolment is revoked. **Decision 4:** refused while the balance is paid. Refund the balance first, so a learner is never left with a paid balance and no access.
 - Full refunds only, as in M8.
 
-## 4. PROPOSED decisions (to confirm with the client)
+## 4. Decisions
+
+Confirmed by the product owner (2026-10-20):
 
 1. Lessons added after the deposit count towards the open share (the percentage applies to the course as it is now).
 2. Practice and quizzes outside open lessons need the full course.
 3. Two reminder emails (3 days before, on the deadline); no reminders after the deadline.
 4. Refunding a deposit is refused while the balance is paid.
 5. School rule defaults: off, minimum deposit 20 % of the price, at most 90 days to pay.
+
+Still **PROPOSED** (implementation details):
+
 6. Receipts show the part ("Deposit" or "Balance") after the course title.
-7. HTTP 402 `BALANCE_REQUIRED` for locked lessons, with the balance amount and due date in the problem.
+7. HTTP 402 `BALANCE_REQUIRED` for locked content, with the course id, balance amount, due date and open share in the problem.
 
 ## 5. What was built
 
@@ -58,4 +63,4 @@ Decisions taken with the product owner (2026-10-20):
 
 One earlier full run had an intermittent failure in the existing M8 hosted-card test (`commerce.int.test.ts`, F25 AC 4); it passed alone and in the next two full runs.
 
-Not covered yet: browser (e2e) tests of the new screens, admin order screens showing the part, and a learner-facing quiz page that explains a balance lock (a direct quiz link shows the generic locked panel).
+Follow-up (same day): admin order list and detail show the part; a locked quiz or practice page explains the balance and links to the course (the 402 problem carries the course id); `deposit-plans.spec.ts` adds 3 isolated browser checks with axe (school rules, tutor pricing form, deposit → locked lesson → balance, purchases and admin orders, switching plans off). Final results are in the commit message.
