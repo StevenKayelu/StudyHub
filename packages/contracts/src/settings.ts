@@ -18,6 +18,13 @@ export const DOCUMENT_TYPES = [
 ] as const;
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
+/**
+ * Who decides content protection and downloads (docs/design/content-protection.md): the tutor, per
+ * course (protection) and per lesson (downloads), or the school for every course.
+ */
+export const contentPolicySchema = z.enum(['TUTOR_CHOOSES', 'ALWAYS', 'NEVER']);
+export type ContentPolicy = z.infer<typeof contentPolicySchema>;
+
 export const contentSettingsSchema = z.object({
   /** BR-56: how instructors join. */
   instructorOnboardingMode: z.enum(['INVITE_ONLY', 'APPLICATION']).default('INVITE_ONLY'),
@@ -57,6 +64,10 @@ export const contentSettingsSchema = z.object({
       mistakesModeEnabled: z.boolean().default(true),
     })
     .default({ questionsPerSession: 10, mistakesModeEnabled: true }),
+  /** Watermark, no copying or printing. TUTOR_CHOOSES: protected unless the tutor turns it off. */
+  contentProtection: contentPolicySchema.default('TUTOR_CHOOSES'),
+  /** Whether learners may save lesson files and videos (offline, to save data) or only stream and view. */
+  downloadPolicy: contentPolicySchema.default('TUTOR_CHOOSES'),
   /** Commerce (BR-04): minimum price of a paid course, in minor units. */
   minPaidPriceMinor: z.number().int().min(0).default(1000),
 });
@@ -157,6 +168,8 @@ export const settingsPatchSchema = z
     defaultAccessDays: z.number().int().min(1).max(3650).nullable().optional(),
     quizDefaults: contentSettingsSchema.shape.quizDefaults.unwrap().optional(),
     practiceDefaults: contentSettingsSchema.shape.practiceDefaults.unwrap().optional(),
+    contentProtection: contentPolicySchema.optional(),
+    downloadPolicy: contentPolicySchema.optional(),
     // Legal pages, per enabled locale (F36 per school)
     legalPages: legalPagesSchema.optional(),
     // Commerce (M8)

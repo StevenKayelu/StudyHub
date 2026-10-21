@@ -94,7 +94,10 @@ export const playerLessonSchema = z.object({
   access: learnAccessSchema,
   readOnly: z.boolean(),
   isRequired: z.boolean(),
+  /** Learners may save the lesson's files (and video, where offered); else stream and view only. */
   downloadable: z.boolean(),
+  /** Protected content (docs/design/content-protection.md): show the watermark; no copying or printing. */
+  protection: z.object({ watermark: z.string() }).nullable(),
   durationSeconds: z.number().nullable(),
   /** Allowlisted rich text (F10); images reference `asset:{id}`, resolved through `images`. */
   content: z.unknown().nullable(),
@@ -103,6 +106,8 @@ export const playerLessonSchema = z.object({
     .object({
       status: z.enum(['PENDING_UPLOAD', 'UPLOADED', 'SCANNING', 'PROCESSING', 'READY', 'REJECTED']),
       durationSeconds: z.number().nullable(),
+      /** The video can be saved for offline viewing (downloads allowed and the video service offers it). */
+      downloadable: z.boolean(),
     })
     .nullable(),
   attachments: z.array(

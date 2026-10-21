@@ -30,6 +30,7 @@ export function LessonEditor({
   editable,
   texts,
   quizzes = [],
+  downloadPolicy = 'TUTOR_CHOOSES',
 }: {
   courseId: string;
   initial: LessonDetail;
@@ -37,6 +38,8 @@ export function LessonEditor({
   texts: StudioTexts;
   /** QUIZ lessons: the course's quizzes to choose from. */
   quizzes?: { id: string; title: string; status: 'DRAFT' | 'READY' }[];
+  /** Who decides downloads at this school (docs/design/content-protection.md). */
+  downloadPolicy?: 'TUTOR_CHOOSES' | 'ALWAYS' | 'NEVER';
 }) {
   const router = useRouter();
   const l = texts.studio.lesson;
@@ -80,7 +83,8 @@ export function LessonEditor({
               ...(lesson.type === 'TEXT' && content.current !== null && { content: content.current }),
               isPreview: data.get('isPreview') === 'on',
               isRequired: data.get('isRequired') === 'on',
-              ...(lesson.type === 'FILE' && { downloadable: data.get('downloadable') === 'on' }),
+              ...(lesson.type !== 'QUIZ' &&
+                downloadPolicy === 'TUTOR_CHOOSES' && { downloadable: data.get('downloadable') === 'on' }),
             }),
           );
           if (result !== null) {
@@ -128,8 +132,22 @@ export function LessonEditor({
             defaultChecked={lesson.isPreview}
           />
           <Checkbox name="isRequired" label={l.isRequired} defaultChecked={lesson.isRequired} />
-          {lesson.type === 'FILE' ? (
-            <Checkbox name="downloadable" label={l.downloadable} defaultChecked={lesson.downloadable} />
+          {lesson.type !== 'QUIZ' ? (
+            <Checkbox
+              name="downloadable"
+              label={l.downloadable}
+              hint={
+                downloadPolicy === 'ALWAYS'
+                  ? l.downloadsAlways
+                  : downloadPolicy === 'NEVER'
+                    ? l.downloadsNever
+                    : l.downloadableHint
+              }
+              disabled={downloadPolicy !== 'TUTOR_CHOOSES'}
+              defaultChecked={
+                downloadPolicy === 'TUTOR_CHOOSES' ? lesson.downloadable : downloadPolicy === 'ALWAYS'
+              }
+            />
           ) : null}
           <div>
             <Button type="submit" variant="primary">

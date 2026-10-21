@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Header, HttpCode, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { grantEnrollmentSchema, progressUpdateSchema, revokeEnrollmentSchema } from '@studyhub/contracts';
 
 import { z } from 'zod';
@@ -54,8 +65,20 @@ export class LearningController {
 
   @Get('learn/lessons/:id/files/:assetId/url')
   @Header('Cache-Control', 'private, no-store')
-  fileUrl(@Param('id', uuid()) id: string, @Param('assetId', uuid()) assetId: string) {
-    return this.learning.fileUrl(currentActor(), id, assetId);
+  fileUrl(
+    @Param('id', uuid()) id: string,
+    @Param('assetId', uuid()) assetId: string,
+    @Query('mode') mode: unknown,
+  ) {
+    const parsed = parseOrThrow(z.enum(['download', 'view']).optional(), mode);
+    return this.learning.fileUrl(currentActor(), id, assetId, parsed);
+  }
+
+  /** Content protection: save the lesson's video for offline viewing (docs/design/content-protection.md). */
+  @Get('learn/lessons/:id/video/download')
+  @Header('Cache-Control', 'private, no-store')
+  videoDownload(@Param('id', uuid()) id: string) {
+    return this.learning.videoDownload(currentActor(), id);
   }
 
   @Put('learn/lessons/:id/progress')

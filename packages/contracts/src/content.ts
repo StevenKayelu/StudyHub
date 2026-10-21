@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { richTextSchema } from './rich-text';
-import { depositPlanRulesSchema } from './settings';
+import { contentPolicySchema, depositPlanRulesSchema } from './settings';
 
 /**
  * Catalogue and authoring contracts (M5; blueprint 05 §4.2–4.5). Shared by the API and the web app.
@@ -268,6 +268,8 @@ export const updateCourseSchema = z.object({
   depositPlan: depositPlanSchema.nullable().optional(),
   /** The course's term, semester or seminar; null: an open course. */
   periodId: z.uuid().nullable().optional(),
+  /** Content protection while the school lets tutors choose; null follows the default (protected). */
+  protectContent: z.boolean().nullable().optional(),
 });
 
 export const lessonSummarySchema = z.object({
@@ -365,6 +367,10 @@ export const studioCourseSchema = z.object({
   /** The school's rules for deposit plans (the pricing form's limits). */
   depositRules: depositPlanRulesSchema,
   periodId: z.uuid().nullable(),
+  /** The tutor's choice (null: the default, protected); applies while the school lets tutors choose. */
+  protectContent: z.boolean().nullable(),
+  /** Who decides protection and downloads at this school (docs/design/content-protection.md). */
+  contentRules: z.object({ contentProtection: contentPolicySchema, downloadPolicy: contentPolicySchema }),
   /** Set by an administrator; wins over the period. */
   accessOverride: courseAccessOverrideSchema.nullable(),
   /** The course's content is closed to learners now. */

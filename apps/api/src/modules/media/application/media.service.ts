@@ -25,6 +25,8 @@ export const MEDIA_PROCESS_JOB = 'media.process';
 const SLOT_TTL_MS = 60 * 60_000;
 const PRESIGN_SECONDS = 15 * 60;
 const DOWNLOAD_SECONDS = 10 * 60;
+/** View-only links (no download) last one minute: enough to open, too short to pass around. */
+const VIEW_SECONDS = 60;
 
 export interface UploadSlot {
   assetId: string;
@@ -255,6 +257,37 @@ export class MediaService {
       expiresSeconds: DOWNLOAD_SECONDS,
       downloadName: asset.originalName,
     });
+    return { url, expiresAt: new Date(Date.now() + DOWNLOAD_SECONDS * 1000).toISOString() };
+  }
+
+  /**
+   * A short-lived URL that opens a READY file in the browser without saving it, for lessons that are
+   * stream and view only (docs/design/content-protection.md). Short, so it isn't worth sharing.
+   */
+  async fileViewUrl(asset: {
+    status: string;
+    storageKey: string | null;
+    storageLocationId: string | null;
+  }): Promise<{ url: string; expiresAt: string }> {
+    if (asset.status !== 'READY' || asset.storageKey === null) throw new AppError('NOT_FOUND');
+    const storage = await this.locations.at(asset.storageLocationId, requireTenantId());
+    const url = await storage.presignGet(asset.storageKey, { expiresSeconds: VIEW_SECONDS });
+    return { url, expiresAt: new Date(Date.now() + VIEW_SECONDS * 1000).toISOString() };
+  }
+
+  /** Whether the video service offers videos learners can save for offline viewing. */
+  get videoDownloads(): boolean {
+    return this.video.supportsDownload;
+  }
+
+  /** A short-lived URL to save a READY video for offline viewing, or NOT_FOUND when none is offered. */
+  async videoDownload(
+    asset: { status: string; providerVideoId: string | null },
+    name: string,
+  ): Promise<{ url: string; expiresAt: string }> {
+    if (asset.status !== 'READY' || asset.providerVideoId === null) throw new AppError('INVALID_STATE');
+    const url = await this.video.download(asset.providerVideoId, { expiresSeconds: DOWNLOAD_SECONDS, name });
+    if (url === null) throw new AppError('NOT_FOUND');
     return { url, expiresAt: new Date(Date.now() + DOWNLOAD_SECONDS * 1000).toISOString() };
   }
 

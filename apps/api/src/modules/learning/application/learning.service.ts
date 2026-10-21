@@ -15,6 +15,7 @@ import type { TenantActor } from '../../identity';
 import { MediaService } from '../../media';
 import { AppError, isSchoolReadOnly, requireTenantId, TenantDb, type TenantTx } from '../../platform';
 import { readContentSettings } from '../../tenancy';
+import { canDownload, isProtected, viewableInBrowser } from '../domain/content-policy';
 import { courseLock } from '../domain/period-access';
 import { courseProgress, type LessonProgressStatus, nextLessonState } from '../domain/progress-rules';
 import {
@@ -37,6 +38,7 @@ const COURSE_FOR_ACCESS = {
   ownerMembershipId: true,
   firstPublishedAt: true,
   currency: true,
+  protectContent: true,
 } as const;
 
 /** A deposit enrolment's unpaid balance for the player (null with full access). */
@@ -55,6 +57,22 @@ const UNIQUE_VIOLATION = 'P2002';
 function requireActor(actor: TenantActor | null): TenantActor {
   if (actor === null) throw new AppError('UNAUTHENTICATED');
   return actor;
+}
+
+/**
+ * The watermark on protected content: who is looking, so a screenshot or photo of the screen shows who
+ * shared it (docs/design/content-protection.md). A visitor on a preview sees the school's name.
+ */
+async function watermarkFor(tx: TenantTx, actor: TenantActor | null): Promise<string> {
+  if (actor !== null) {
+    const account = await tx.userAccount.findUnique({
+      where: { id: actor.userId },
+      select: { displayName: true, email: true },
+    });
+    if (account !== null) return `${account.displayName} · ${account.email}`;
+  }
+  const tenant = await tx.tenant.findUnique({ where: { id: requireTenantId() }, select: { name: true } });
+  return tenant?.name ?? '';
 }
 
 /** Every lesson of a course in reading order (sections by position, then lessons by position). */
@@ -268,6 +286,13 @@ export class LearningService {
       });
       const fileById = new Map(files.map((f) => [f.id, f]));
       const settings = await readContentSettings(tx);
+      // Owners and administrators previewing are never limited (docs/design/content-protection.md).
+      const learner = access === 'ENROLLED' || access === 'PREVIEW';
+      const downloadable = !learner || canDownload(settings.downloadPolicy, lesson.downloadable);
+      const protection =
+        learner && isProtected(settings.contentProtection, course.protectContent)
+          ? { watermark: await watermarkFor(tx, actor) }
+          : null;
       return {
         id: lesson.id,
         courseId: course.id,
@@ -278,11 +303,19 @@ export class LearningService {
         access,
         readOnly: isSchoolReadOnly(),
         isRequired: lesson.isRequired,
-        downloadable: lesson.downloadable,
+        downloadable,
+        protection,
         durationSeconds: lesson.durationSeconds ?? video?.durationSeconds ?? null,
         content: lesson.contentJson,
         images: {} as Record<string, string>,
-        video: video === null ? null : { status: video.status, durationSeconds: video.durationSeconds },
+        video:
+          video === null
+            ? null
+            : {
+                status: video.status,
+                durationSeconds: video.durationSeconds,
+                downloadable: downloadable && this.media.videoDownloads,
+              },
         attachments: attachments.flatMap((a) => {
           const file = fileById.get(a.assetId);
           return file === undefined
@@ -326,19 +359,60 @@ export class LearningService {
   }
 
   /** A signed download URL for one of the lesson's files. */
-  async fileUrl(actor: TenantActor | null, lessonId: string, assetId: string) {
-    const asset = await this.run(async (tx, expired) => {
-      const { lesson } = await this.openLesson(tx, actor, lessonId, expired);
+  /**
+   * A short-lived link to a lesson file: `download` saves it, `view` opens it in the browser. A stream
+   * and view only lesson refuses downloads (DOWNLOAD_NOT_ALLOWED) and opens only PDFs and images.
+   */
+  async fileUrl(
+    actor: TenantActor | null,
+    lessonId: string,
+    assetId: string,
+    mode: 'download' | 'view' = 'download',
+  ) {
+    const { asset, downloadable } = await this.run(async (tx, expired) => {
+      const { lesson, access } = await this.openLesson(tx, actor, lessonId, expired);
       const attached = await tx.lessonAttachment.findFirst({ where: { lessonId: lesson.id, assetId } });
       if (attached === null) throw new AppError('NOT_FOUND');
       const found = await tx.asset.findUnique({
         where: { id: assetId },
-        select: { status: true, storageKey: true, storageLocationId: true, originalName: true },
+        select: { status: true, storageKey: true, storageLocationId: true, originalName: true, mime: true },
       });
       if (found === null) throw new AppError('NOT_FOUND');
-      return found;
+      const learner = access === 'ENROLLED' || access === 'PREVIEW';
+      const settings = await readContentSettings(tx);
+      return {
+        asset: found,
+        downloadable: !learner || canDownload(settings.downloadPolicy, lesson.downloadable),
+      };
     });
+    if (mode === 'view') {
+      if (!viewableInBrowser(asset.mime)) throw new AppError('NOT_FOUND');
+      return this.media.fileViewUrl(asset);
+    }
+    if (!downloadable) throw new AppError('DOWNLOAD_NOT_ALLOWED');
     return this.media.fileUrl(asset);
+  }
+
+  /** Saves a lesson's video for offline viewing, where downloads are allowed and the service offers it. */
+  async videoDownload(actor: TenantActor | null, lessonId: string) {
+    const { asset, downloadable, title } = await this.run(async (tx, expired) => {
+      const { lesson, access } = await this.openLesson(tx, actor, lessonId, expired);
+      if (lesson.videoAssetId === null) throw new AppError('NOT_FOUND');
+      const found = await tx.asset.findUnique({
+        where: { id: lesson.videoAssetId },
+        select: { status: true, providerVideoId: true },
+      });
+      if (found === null) throw new AppError('NOT_FOUND');
+      const learner = access === 'ENROLLED' || access === 'PREVIEW';
+      const settings = await readContentSettings(tx);
+      return {
+        asset: found,
+        title: lesson.title,
+        downloadable: !learner || canDownload(settings.downloadPolicy, lesson.downloadable),
+      };
+    });
+    if (!downloadable) throw new AppError('DOWNLOAD_NOT_ALLOWED');
+    return this.media.videoDownload(asset, title);
   }
 
   /**
@@ -561,7 +635,8 @@ export class LearningService {
       },
     });
     if (lesson === null) throw new AppError('NOT_FOUND');
-    const course: CourseForAccess & { slug: string; title: string } = lesson.course;
+    const course: CourseForAccess & { slug: string; title: string; protectContent: boolean | null } =
+      lesson.course;
     const grant = await grantFor(tx, actor, course, expired);
     if (grant !== null) {
       // Before the course's period opens, or beyond what a deposit opened: no content, video or files.

@@ -128,7 +128,14 @@ export class StudioService {
       });
       const { depositPlans } = await readCommerceSettings(tx);
       const lock = await readCourseLock(tx, courseId);
-      return { ...found, reviewNote: note?.notes ?? null, depositRules: depositPlans, lock };
+      const { contentProtection, downloadPolicy } = await readContentSettings(tx);
+      return {
+        ...found,
+        reviewNote: note?.notes ?? null,
+        depositRules: depositPlans,
+        lock,
+        contentRules: { contentProtection, downloadPolicy },
+      };
     });
     const covers = await this.coverUrls([course.coverAssetId]);
     return {
@@ -151,6 +158,8 @@ export class StudioService {
       depositPlan: storedDepositPlan(course),
       depositRules: course.depositRules,
       periodId: course.periodId,
+      protectContent: course.protectContent,
+      contentRules: course.contentRules,
       accessOverride: course.accessOverride,
       lock: lockView(course.lock),
       status: course.status,
@@ -180,6 +189,7 @@ export class StudioService {
       accessDays?: number | null | undefined;
       depositPlan?: DepositPlanInput | null | undefined;
       periodId?: string | null | undefined;
+      protectContent?: boolean | null | undefined;
     },
   ): Promise<StudioCourse> {
     await this.db.run(async (tx) => {
@@ -197,6 +207,21 @@ export class StudioService {
       // Keeping an archived period is fine; choosing one needs a current period of this school.
       if (input.periodId !== undefined && input.periodId !== null && input.periodId !== course.periodId) {
         await requirePeriod(tx, input.periodId);
+      }
+      // Content protection is the tutor's to choose only while the school lets them.
+      if (
+        input.protectContent !== undefined &&
+        (await readContentSettings(tx)).contentProtection !== 'TUTOR_CHOOSES'
+      ) {
+        throw new AppError('VALIDATION_FAILED', {
+          errors: [
+            {
+              field: 'protectContent',
+              code: 'school_decides',
+              message: 'Your school decides content protection',
+            },
+          ],
+        });
       }
       const neverPublished = course.firstPublishedAt === null;
       await tx.course.update({
@@ -222,6 +247,7 @@ export class StudioService {
           ...(input.tags !== undefined && { tags: [...new Set(input.tags)] }),
           ...(input.subjectId !== undefined && { subjectId: input.subjectId }),
           ...(input.periodId !== undefined && { periodId: input.periodId }),
+          ...(input.protectContent !== undefined && { protectContent: input.protectContent }),
           ...(input.coverAssetId !== undefined && { coverAssetId: input.coverAssetId }),
           // A price change applies to new orders only (F12): orders snapshot the price (BR-08).
           ...(input.priceMinor !== undefined && { priceMinor: BigInt(input.priceMinor) }),

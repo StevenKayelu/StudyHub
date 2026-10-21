@@ -744,6 +744,8 @@ model Course {
   periodId          String?                  @map("period_id") @db.Uuid
   /// An administrator's lock or opening of this course; wins over the period.
   accessOverride    CourseAccessOverride?    @map("access_override")
+  /// Content protection (docs/design/content-protection.md): null follows the default (protected).
+  protectContent    Boolean?                 @map("protect_content")
   status            CourseStatus             @default(DRAFT)
   firstPublishedAt  DateTime?                @map("first_published_at") @db.Timestamptz(3)
   publishedAt       DateTime?                @map("published_at") @db.Timestamptz(3)

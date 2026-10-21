@@ -35,3 +35,16 @@
   font-family: var(--font-mono, monospace);
   overflow-x: auto;
 }
+
+/* Protected lesson content (docs/design/content-protection.md): printing shows a notice instead. */
+[data-protected-notice] {
+  display: none;
+}
+@media print {
+  [data-protected] {
+    display: none !important;
+  }
+  [data-protected-notice] {
+    display: block !important;
+  }
+}

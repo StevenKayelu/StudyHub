@@ -33,6 +33,16 @@ export interface VideoProvider {
   parseWebhook(rawBody: Buffer, headers: Record<string, string | string[] | undefined>): VideoEvent | null;
   /** A playback URL for one viewer, valid for `expiresSeconds`. */
   playback(providerVideoId: string, options: { expiresSeconds: number }): Promise<VideoPlayback>;
+  /** Whether this provider has a rendition learners can save for offline viewing. */
+  readonly supportsDownload: boolean;
+  /**
+   * A file a learner can save for offline viewing (docs/design/content-protection.md), valid for
+   * `expiresSeconds`; null when this provider has no downloadable rendition.
+   */
+  download(
+    providerVideoId: string,
+    options: { expiresSeconds: number; name: string },
+  ): Promise<string | null>;
 }
 
 /** Signature header of the fake provider: hex HMAC-SHA256 of the raw body. */
@@ -44,6 +54,8 @@ export const FAKE_VIDEO_SIGNATURE_HEADER = 'x-fake-video-signature';
  */
 export class FakeVideoProvider implements VideoProvider {
   readonly name = 'fake';
+  /** The fake provider keeps no bytes, so there is nothing to save. */
+  readonly supportsDownload = false;
 
   constructor(
     private readonly secret: string,
@@ -57,6 +69,13 @@ export class FakeVideoProvider implements VideoProvider {
 
   playback(_providerVideoId: string, _options: { expiresSeconds: number }): Promise<VideoPlayback> {
     return Promise.resolve({ kind: 'simulated', url: null });
+  }
+
+  download(
+    _providerVideoId: string,
+    _options: { expiresSeconds: number; name: string },
+  ): Promise<string | null> {
+    return Promise.resolve(null);
   }
 
   sign(rawBody: Buffer | string): string {

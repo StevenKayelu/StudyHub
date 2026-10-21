@@ -149,7 +149,14 @@
       "notOpenManual": "This {courseLower} isn’t open yet. Your school will open it; until then you can see the outline and the preview lessons.",
       "notOpenTitle": "This lesson isn’t open yet",
       "quizNotOpen": "This quiz opens with the {courseLower}",
-      "practiceNotOpen": "Practice opens with the {courseLower}"
+      "practiceNotOpen": "Practice opens with the {courseLower}",
+      "view": "View",
+      "viewName": "View {name}",
+      "closeViewer": "Close",
+      "viewOnly": "These files can be viewed here but not downloaded.",
+      "notViewable": "Not available to view online",
+      "saveVideo": "Save video to watch offline",
+      "protectedNotice": "This lesson is protected and can’t be printed."
     },
     "video": {
       "simulated": "Practice video",
@@ -366,7 +373,15 @@
       "periodHint": "Learners can enrol any time; the lessons open when the term opens. Choose an open {courseLower} for skills that are always available.",
       "openCourse": "Open {courseLower} (no term)",
       "lockedByAdmin": "An administrator has locked this {courseLower}.",
-      "openedByAdmin": "An administrator has opened this {courseLower}."
+      "openedByAdmin": "An administrator has opened this {courseLower}.",
+      "protect": "Content protection",
+      "protectHint": "Protected lessons show the learner’s name as a watermark and can’t be copied or printed. Screenshots can’t be blocked in a browser, but the name shows who shared them.",
+      "protectOptions": {
+        "DEFAULT": "Protected (recommended)",
+        "OFF": "Not protected"
+      },
+      "protectAlways": "Your school protects all lesson content.",
+      "protectNever": "Your school doesn’t protect lesson content."
     },
     "pricing": {
       "title": "Pricing and access",
@@ -415,7 +430,7 @@
       "isPreview": "Free preview",
       "isPreviewHint": "Visitors can open this lesson before enrolling.",
       "isRequired": "Required for completion",
-      "downloadable": "Learners can download files",
+      "downloadable": "Learners can download this lesson’s files and video",
       "video": "Video",
       "uploadVideo": "Upload video",
       "videoHint": "MP4, WebM or MOV.",
@@ -430,7 +445,10 @@
       "noQuiz": "No quiz chosen",
       "noQuizzes": "This {courseLower} has no quizzes yet.",
       "manageQuizzes": "Manage quizzes",
-      "quizDraft": "This quiz is still a draft: make it available in the quiz builder."
+      "quizDraft": "This quiz is still a draft: make it available in the quiz builder.",
+      "downloadableHint": "Lets learners save to watch or read offline and use less data. Off: stream and view only.",
+      "downloadsAlways": "Your school lets learners download all lessons.",
+      "downloadsNever": "Your school allows streaming and viewing only."
     },
     "upload": {
       "uploading": "Uploading…",
@@ -1792,7 +1810,20 @@
       },
       "reason": "Why are you changing this? (shown in the audit log)",
       "save": "Save {group}",
-      "saved": "Saved"
+      "saved": "Saved",
+      "contentProtection": "Protect lesson content (name watermark, no copying or printing)",
+      "downloadPolicy": "Downloads (lesson files and videos)",
+      "contentProtections": {
+        "TUTOR_CHOOSES": "Each {instructorLower} chooses per {courseLower} (protected unless they turn it off)",
+        "ALWAYS": "Always protect",
+        "NEVER": "Never protect"
+      },
+      "downloadPolicies": {
+        "TUTOR_CHOOSES": "Each {instructorLower} chooses per lesson",
+        "ALWAYS": "Always allow (learners can save to watch offline)",
+        "NEVER": "Never allow (stream and view only)"
+      },
+      "downloadsDefault": "New lessons allow downloads (when each {instructorLower} chooses)"
     },
     "support": {
       "title": "Support access",

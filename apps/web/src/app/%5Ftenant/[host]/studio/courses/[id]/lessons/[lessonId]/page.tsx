@@ -56,6 +56,7 @@ export default async function LessonPage({ params }: { params: Params }) {
         editable={EDITABLE.has(course.status)}
         texts={await studioTexts(terms)}
         quizzes={quizzes}
+        downloadPolicy={course.contentRules.downloadPolicy}
       />
     </StudioCourseFrame>
   );

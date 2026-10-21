@@ -56,6 +56,8 @@ export const ERROR_DEFINITIONS = {
   BALANCE_REQUIRED: { status: 402, title: 'Pay the balance to open this lesson', active: true },
   // Course periods (docs/design/course-periods.md): the course's term hasn't opened yet.
   COURSE_NOT_OPEN: { status: 403, title: 'This course is not open yet', active: true },
+  // Content protection (docs/design/content-protection.md): this lesson is stream and view only.
+  DOWNLOAD_NOT_ALLOWED: { status: 403, title: 'This file can be viewed but not downloaded', active: true },
   IDEMPOTENCY_KEY_REUSED: {
     status: 422,
     title: 'This request key was already used for another request',

@@ -74,6 +74,11 @@ export function CourseDetailsForm({
             requirements: lines(text(data, 'requirements')),
             level: text(data, 'level'),
             subjectId: text(data, 'subjectId') === '' ? null : text(data, 'subjectId'),
+            // Content protection: the tutor's choice while the school lets them choose.
+            ...(course.contentRules.contentProtection === 'TUTOR_CHOOSES' &&
+              text(data, 'protectContent') !== (course.protectContent === false ? 'OFF' : 'DEFAULT') && {
+                protectContent: text(data, 'protectContent') === 'OFF' ? false : null,
+              }),
             // Sent only when changed, so a course in an archived term keeps it.
             ...(text(data, 'periodId') !== (course.periodId ?? '') && {
               periodId: text(data, 'periodId') === '' ? null : text(data, 'periodId'),
@@ -197,6 +202,28 @@ export function CourseDetailsForm({
             ) : null}
           </label>
         </div>
+        {course.contentRules.contentProtection === 'TUTOR_CHOOSES' ? (
+          <label className="flex flex-col gap-1 text-label text-ink">
+            {d.protect}
+            <select
+              id="protectContent"
+              name="protectContent"
+              defaultValue={course.protectContent === false ? 'OFF' : 'DEFAULT'}
+              aria-describedby="protectContent-hint"
+              className={selectClasses}
+            >
+              <option value="DEFAULT">{d.protectOptions.DEFAULT}</option>
+              <option value="OFF">{d.protectOptions.OFF}</option>
+            </select>
+            <span id="protectContent-hint" className="text-body-sm font-normal text-muted">
+              {d.protectHint}
+            </span>
+          </label>
+        ) : (
+          <p className="text-body-sm text-muted">
+            {course.contentRules.contentProtection === 'ALWAYS' ? d.protectAlways : d.protectNever}
+          </p>
+        )}
         {periods.length > 0 || course.periodId !== null ? (
           <label className="flex flex-col gap-1 text-label text-ink">
             {d.period}

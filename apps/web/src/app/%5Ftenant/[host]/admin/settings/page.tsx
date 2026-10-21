@@ -19,6 +19,8 @@ import { commerceTexts } from '../../../../../lib/commerce-texts';
 import { fetchContent } from '../../../../../lib/content-api';
 import { currentTenant, getTerms } from '../../../../../lib/tenant';
 
+const POLICIES = ['TUTOR_CHOOSES', 'ALWAYS', 'NEVER'] as const;
+
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getTranslations('commerce.admin.settings'))('title') };
 }
@@ -165,6 +167,33 @@ export default async function AdminSettingsPage() {
             name: 'videoCompletionThresholdPct',
             label: s('videoThreshold'),
             defaultValue: content.videoCompletionThresholdPct,
+          },
+          // Content protection and downloads (docs/design/content-protection.md).
+          {
+            kind: 'select',
+            name: 'contentProtection',
+            label: s('contentProtection'),
+            options: POLICIES.map((value) => ({
+              value,
+              label: t(`schoolAdmin.settings.contentProtections.${value}`, terms),
+            })),
+            defaultValue: content.contentProtection,
+          },
+          {
+            kind: 'select',
+            name: 'downloadPolicy',
+            label: s('downloadPolicy'),
+            options: POLICIES.map((value) => ({
+              value,
+              label: t(`schoolAdmin.settings.downloadPolicies.${value}`, terms),
+            })),
+            defaultValue: content.downloadPolicy,
+          },
+          {
+            kind: 'checkbox',
+            name: 'downloadsAllowedDefault',
+            label: s('downloadsDefault', terms),
+            defaultValue: content.downloadsAllowedDefault,
           },
           {
             kind: 'number',

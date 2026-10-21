@@ -2,7 +2,7 @@
 
 import type { PlayerLesson, ProgressResult } from '@studyhub/contracts';
 import { Alert, Button, buttonClasses } from '@studyhub/ui';
-import { CircleCheck, Download, Pause, Play, RotateCcw, RotateCw } from 'lucide-react';
+import { CircleCheck, Download, Eye, Pause, Play, RotateCcw, RotateCw, X } from 'lucide-react';
 import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -10,6 +10,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { callApi } from '../lib/client-api';
 import { fill } from '../lib/fill';
 import type { LearnTexts } from '../lib/learn-texts-type';
+import { ProtectedContent, Watermark } from './protected-content';
 
 /** Seconds of playback between automatic saves (F15 AC 1). */
 const SAVE_EVERY_SECONDS = 15;
@@ -144,7 +145,7 @@ export function LessonPlayer({
   const manualComplete =
     lesson.type === 'TEXT' || lesson.type === 'FILE' || (lesson.type === 'VIDEO' && !videoKnownLength);
 
-  return (
+  const body = (
     <div className="flex flex-col gap-6">
       {lesson.type === 'VIDEO' ? (
         <VideoPlayer
@@ -161,6 +162,8 @@ export function LessonPlayer({
       ) : null}
 
       {children}
+
+      {lesson.video?.downloadable === true ? <SaveVideo lessonId={lesson.id} texts={texts} /> : null}
 
       {lesson.attachments.length > 0 ? <FileList lesson={lesson} texts={texts} /> : null}
 
@@ -215,17 +218,82 @@ export function LessonPlayer({
       </div>
     </div>
   );
+  return lesson.protection === null ? (
+    body
+  ) : (
+    <ProtectedContent watermark={lesson.protection.watermark} notice={p.protectedNotice}>
+      {body}
+    </ProtectedContent>
+  );
 }
 
-/** Downloads: a fresh signed URL per click (they last minutes, so they're never put in the page). */
+/** Saves the video for offline viewing, where the lesson allows downloads (content-protection.md). */
+function SaveVideo({ lessonId, texts }: { lessonId: string; texts: LearnTexts }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="flex flex-col gap-2">
+      {failed ? <Alert tone="danger">{texts.player.downloadFailed}</Alert> : null}
+      <Button
+        variant="secondary"
+        className="self-start"
+        icon={<Download aria-hidden="true" className="size-4" />}
+        onClick={async () => {
+          setFailed(false);
+          const result = await callApi<{ url: string }>(
+            'GET',
+            `/api/v1/learn/lessons/${lessonId}/video/download`,
+          );
+          if (result.ok) window.location.assign(result.data.url);
+          else setFailed(true);
+        }}
+      >
+        {texts.player.saveVideo}
+      </Button>
+    </div>
+  );
+}
+
+/** Files a browser opens by itself, so a stream-and-view-only lesson can still show them. */
+const viewable = (mime: string) => mime === 'application/pdf' || mime.startsWith('image/');
+
+/**
+ * Lesson files: Download where the lesson allows it, else View (PDFs and images, in the page, with the
+ * watermark when protected). Links are fresh per click and short-lived, so they're never in the page.
+ */
 function FileList({ lesson, texts }: { lesson: PlayerLesson; texts: LearnTexts }) {
   const [failed, setFailed] = useState(false);
+  const [open, setOpen] = useState<{ name: string; mime: string; url: string } | null>(null);
   return (
     <section aria-labelledby="files" className="flex flex-col gap-2">
       <h2 id="files" className="text-h3">
         {texts.player.attachments}
       </h2>
+      {!lesson.downloadable ? <p className="text-body-sm text-muted">{texts.player.viewOnly}</p> : null}
       {failed ? <Alert tone="danger">{texts.player.downloadFailed}</Alert> : null}
+      {open !== null ? (
+        <div className="flex flex-col gap-2" data-testid="file-viewer">
+          <div className="flex items-center gap-2">
+            <p className="min-w-0 flex-1 truncate text-label">{open.name}</p>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<X aria-hidden="true" className="size-4" />}
+              onClick={() => setOpen(null)}
+            >
+              {texts.player.closeViewer}
+            </Button>
+          </div>
+          <div className="relative h-[70vh] overflow-hidden rounded-md border border-line bg-surface">
+            {open.mime === 'application/pdf' ? (
+              <iframe title={open.name} src={`${open.url}#toolbar=0&navpanes=0`} className="h-full w-full" />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL
+              <img src={open.url} alt={open.name} className="h-full w-full object-contain" />
+            )}
+            {lesson.protection !== null ? <Watermark text={lesson.protection.watermark} /> : null}
+          </div>
+        </div>
+      ) : null}
       <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface">
         {lesson.attachments.map((file) => (
           <li key={file.assetId} className="flex items-center gap-3 p-3">
@@ -233,23 +301,45 @@ function FileList({ lesson, texts }: { lesson: PlayerLesson; texts: LearnTexts }
             <span className="tabular text-caption text-muted">
               {Math.max(1, Math.round(file.sizeBytes / 1024))} KB
             </span>
-            <Button
-              size="sm"
-              variant="secondary"
-              icon={<Download aria-hidden="true" className="size-4" />}
-              aria-label={fill(texts.player.downloadName, { name: file.name })}
-              onClick={async () => {
-                setFailed(false);
-                const result = await callApi<{ url: string }>(
-                  'GET',
-                  `/api/v1/learn/lessons/${lesson.id}/files/${file.assetId}/url`,
-                );
-                if (result.ok) window.location.assign(result.data.url);
-                else setFailed(true);
-              }}
-            >
-              {texts.player.download}
-            </Button>
+            {lesson.downloadable ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Download aria-hidden="true" className="size-4" />}
+                aria-label={fill(texts.player.downloadName, { name: file.name })}
+                onClick={async () => {
+                  setFailed(false);
+                  const result = await callApi<{ url: string }>(
+                    'GET',
+                    `/api/v1/learn/lessons/${lesson.id}/files/${file.assetId}/url`,
+                  );
+                  if (result.ok) window.location.assign(result.data.url);
+                  else setFailed(true);
+                }}
+              >
+                {texts.player.download}
+              </Button>
+            ) : viewable(file.mime) ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Eye aria-hidden="true" className="size-4" />}
+                aria-label={fill(texts.player.viewName, { name: file.name })}
+                onClick={async () => {
+                  setFailed(false);
+                  const result = await callApi<{ url: string }>(
+                    'GET',
+                    `/api/v1/learn/lessons/${lesson.id}/files/${file.assetId}/url?mode=view`,
+                  );
+                  if (result.ok) setOpen({ name: file.name, mime: file.mime, url: result.data.url });
+                  else setFailed(true);
+                }}
+              >
+                {texts.player.view}
+              </Button>
+            ) : (
+              <span className="text-caption text-muted">{texts.player.notViewable}</span>
+            )}
           </li>
         ))}
       </ul>

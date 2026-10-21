@@ -88,6 +88,7 @@ const CONTENT_ROUTES: readonly string[] = [
   'GET /api/v1/learn/lessons/:id',
   'GET /api/v1/learn/lessons/:id/files/:assetId/url',
   'GET /api/v1/learn/lessons/:id/playback',
+  'GET /api/v1/learn/lessons/:id/video/download',
   'GET /api/v1/learn/quizzes/:id',
   'GET /api/v1/learn/quizzes/:id/attempts',
   'GET /api/v1/me/assessments',
