@@ -15,6 +15,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { applyDocumentObjectRecovery, planDocumentObjectRecovery } from '../../src/modules/admin';
 import {
+  BOOTSTRAP_STORAGE_LOCATION_ID,
   EicarOnlyScanner,
   OBJECT_STORAGE,
   type ObjectStorage,
@@ -104,7 +105,7 @@ describe('school-scoped native-version document recovery (M10)', () => {
       requestChecksumCalculation: 'WHEN_REQUIRED',
       responseChecksumValidation: 'WHEN_REQUIRED',
     });
-    recovery = new S3VersionRecoveryStorage(options);
+    recovery = new S3VersionRecoveryStorage(options, BOOTSTRAP_STORAGE_LOCATION_ID);
     await s3.send(new CreateBucketCommand({ Bucket: bucket }));
     await s3.send(
       new PutBucketVersioningCommand({ Bucket: bucket, VersioningConfiguration: { Status: 'Enabled' } }),
@@ -118,8 +119,9 @@ describe('school-scoped native-version document recovery (M10)', () => {
     selectedVersion = await put(sourceKey, oldBytes);
     await put(sourceKey, damagedBytes);
     await observer.query(
-      `UPDATE asset SET storage_key=$2, derivative_key=NULL, kind='DOCUMENT', mime='application/pdf',size_bytes=2048,status='READY' WHERE id=$1`,
-      [assetId, sourceKey],
+      `UPDATE asset SET storage_key=$2, derivative_key=NULL, kind='DOCUMENT', mime='application/pdf',size_bytes=2048,status='READY',
+         storage_location_id=$3 WHERE id=$1`,
+      [assetId, sourceKey, BOOTSTRAP_STORAGE_LOCATION_ID],
     );
   });
   afterAll(async () => {
@@ -223,6 +225,13 @@ describe('school-scoped native-version document recovery (M10)', () => {
     expect(await snapshot()).toEqual(changed);
   });
 
+  it('refuses recovery through storage for another location than the document’s', async () => {
+    await observer.query(`UPDATE asset SET storage_location_id=NULL WHERE id=$1`, [assetId]);
+    const before = await snapshot();
+    await expect(plan()).rejects.toThrow('not the storage location recorded for this document');
+    expect(await snapshot()).toEqual(before);
+  });
+
   it('rejects mismatched file type/size and malware without changing the asset pointer', async () => {
     const malformed = await put(sourceKey, Buffer.alloc(2048, 'x'));
     const selected = await plan(malformed);
@@ -280,6 +289,7 @@ describe('school-scoped native-version document recovery (M10)', () => {
     const reviewed = await plan();
     const staged = {
       inspect: recovery.inspect.bind(recovery),
+      locationId: recovery.locationId,
       read: recovery.read.bind(recovery),
       stage: async (tenantId: string, bytes: Buffer, contentType: string) => {
         const key = await recovery.stage(tenantId, bytes, contentType);

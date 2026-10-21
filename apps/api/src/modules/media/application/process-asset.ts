@@ -55,11 +55,12 @@ export function createProcessAssetHandler(deps: ProcessAssetDeps) {
     const reject = async (reason: string) => {
       await storage.delete(key).catch(() => undefined);
       await runInTenantTx(deps.prisma, async (tx) => {
-        await tx.asset.update({
-          where: { id: assetId },
+        // Only while this worker still holds the claim (a purge may have retired it).
+        const claimed = await tx.asset.updateMany({
+          where: { id: assetId, status: 'SCANNING' },
           data: { status: 'REJECTED', rejectReason: reason, updatedAt: new Date() },
         });
-        await adjustUsage(tx, { reserved: -size });
+        if (claimed.count > 0) await adjustUsage(tx, { reserved: -size });
       });
       logger.warn({ assetId, reason }, 'Upload rejected');
       return { status: 'REJECTED' };
@@ -97,13 +98,22 @@ export function createProcessAssetHandler(deps: ProcessAssetDeps) {
       }
     }
 
-    await runInTenantTx(deps.prisma, async (tx) => {
-      await tx.asset.update({
-        where: { id: assetId },
+    const finished = await runInTenantTx(deps.prisma, async (tx) => {
+      // Only while this worker still holds the claim: a purge retires scans abandoned for a day.
+      const claimed = await tx.asset.updateMany({
+        where: { id: assetId, status: 'SCANNING' },
         data: { status: 'READY', width, height, derivativeKey, updatedAt: new Date() },
       });
+      if (claimed.count === 0) return false;
       await adjustUsage(tx, { reserved: -size, storage: size });
+      return true;
     });
+    if (!finished) {
+      // Retired while this worker was stalled: leave nothing behind in a school being purged.
+      if (derivativeKey !== null) await storage.delete(derivativeKey).catch(() => undefined);
+      logger.warn({ assetId }, 'Upload processing finished after its claim was retired; output removed');
+      return { status: 'abandoned' };
+    }
     logger.info({ assetId, scanner: deps.scanner.name }, 'Upload ready');
     return { status: 'READY' };
   };

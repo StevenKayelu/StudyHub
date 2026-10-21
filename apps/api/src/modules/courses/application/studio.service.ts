@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   type Checklist,
   type LessonDetail,
@@ -14,14 +14,8 @@ import { AuditService } from '../../audit';
 import { type DepositPlanInput, depositPlanProblems, paymentsProblem } from '../../commerce';
 import type { TenantActor } from '../../identity';
 import { lockView, readCourseLock } from '../../learning';
-import {
-  AppError,
-  requireTenantId,
-  STORAGE_LOCATIONS,
-  type StorageLocations,
-  TenantDb,
-  type TenantTx,
-} from '../../platform';
+import { MediaService } from '../../media';
+import { AppError, requireTenantId, TenantDb, type TenantTx } from '../../platform';
 import { readCommerceSettings, readContentSettings } from '../../tenancy';
 import {
   type CourseAction,
@@ -63,7 +57,7 @@ export class StudioService {
     private readonly db: TenantDb,
     private readonly audit: AuditService,
     private readonly instructors: InstructorsService,
-    @Inject(STORAGE_LOCATIONS) private readonly locations: StorageLocations,
+    private readonly media: MediaService,
   ) {}
 
   // --- Courses -----------------------------------------------------------------------------------
@@ -882,25 +876,7 @@ export class StudioService {
   /** Short-lived URLs for cover images (the web-sized derivative when it exists). */
   async coverUrls(assetIds: (string | null)[]): Promise<Map<string, string>> {
     const ids = assetIds.filter((id): id is string => id !== null);
-    if (ids.length === 0) return new Map();
-    const assets = await this.db.run((tx) =>
-      tx.asset.findMany({
-        where: { id: { in: ids }, status: 'READY' },
-        select: { id: true, storageKey: true, derivativeKey: true, storageLocationId: true },
-      }),
-    );
-    const entries = await Promise.all(
-      assets.map(async (a) => {
-        const storage = await this.locations.at(a.storageLocationId, requireTenantId());
-        return [
-          a.id,
-          await storage.presignGet(a.derivativeKey ?? a.storageKey!, {
-            expiresSeconds: COVER_URL_SECONDS,
-          }),
-        ] as const;
-      }),
-    );
-    return new Map(entries);
+    return this.media.readUrls(ids, { expiresSeconds: COVER_URL_SECONDS });
   }
 }
 

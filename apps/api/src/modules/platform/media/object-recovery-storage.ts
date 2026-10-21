@@ -23,6 +23,11 @@ export interface RecoveryObjectVersion {
  * Implementations may use native versions or application-managed snapshots (the R2 path).
  */
 export interface VersionRecoveryStorage {
+  /**
+   * The storage location (platform_storage_location) these credentials open. Recovery refuses a document
+   * recorded at another location, so a restored key never points into the wrong bucket (M10 review).
+   */
+  readonly locationId: string;
   inspect(tenantId: string, key: string, versionId: string): Promise<RecoveryObjectVersion>;
   read(tenantId: string, key: string, version: RecoveryObjectVersion, maximumBytes: number): Promise<Buffer>;
   stage(tenantId: string, bytes: Buffer, contentType: string): Promise<string>;
@@ -45,7 +50,11 @@ function versionId(value: string): void {
 
 export class S3VersionRecoveryStorage implements VersionRecoveryStorage {
   private readonly client: S3Client;
-  constructor(private readonly options: S3StorageOptions) {
+  constructor(
+    private readonly options: S3StorageOptions,
+    readonly locationId: string,
+  ) {
+    z.uuid().parse(locationId);
     this.client = new S3Client({
       region: options.region,
       ...(options.endpoint ? { endpoint: options.endpoint } : {}),

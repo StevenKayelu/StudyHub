@@ -27,7 +27,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('native-version recovery storage fails closed', () => {
   it('rejects disabled/unsupported versioning without reading an object', async () => {
     const send = vi.spyOn(S3Client.prototype, 'send').mockResolvedValueOnce({ Status: 'Suspended' } as never);
-    const storage = new S3VersionRecoveryStorage(options);
+    const storage = new S3VersionRecoveryStorage(options, '24000000-0000-4000-8000-000000000001');
     try {
       await expect(storage.inspect(tenant, key, version.versionId)).rejects.toThrow('unavailable');
       expect(send).toHaveBeenCalledTimes(1);
@@ -44,7 +44,7 @@ describe('native-version recovery storage fails closed', () => {
         ContentLength: 4,
         ContentType: version.contentType,
       } as never);
-    const storage = new S3VersionRecoveryStorage(options);
+    const storage = new S3VersionRecoveryStorage(options, '24000000-0000-4000-8000-000000000001');
     try {
       await expect(storage.inspect(tenant, key, version.versionId)).rejects.toThrow(
         'selected immutable version',
@@ -55,7 +55,7 @@ describe('native-version recovery storage fails closed', () => {
   });
   it('rejects foreign, traversal and null-version requests before provider access', async () => {
     const send = vi.spyOn(S3Client.prototype, 'send');
-    const storage = new S3VersionRecoveryStorage(options);
+    const storage = new S3VersionRecoveryStorage(options, '24000000-0000-4000-8000-000000000001');
     try {
       for (const objectKey of ['t/other-school/file', `t/${tenant}/../file`, `t/${tenant}/x\\file`])
         await expect(storage.inspect(tenant, objectKey, version.versionId)).rejects.toThrow();
@@ -74,7 +74,7 @@ describe('native-version recovery storage fails closed', () => {
       ContentType: version.contentType,
       ContentLength: 4,
     } as never);
-    const storage = new S3VersionRecoveryStorage(options);
+    const storage = new S3VersionRecoveryStorage(options, '24000000-0000-4000-8000-000000000001');
     try {
       await expect(storage.read(tenant, key, version, 4)).rejects.toThrow();
       expect(body.destroyed).toBe(true);
@@ -91,7 +91,7 @@ describe('native-version recovery storage fails closed', () => {
       ContentType: version.contentType,
       ContentLength: 4,
     } as never);
-    const storage = new S3VersionRecoveryStorage(options);
+    const storage = new S3VersionRecoveryStorage(options, '24000000-0000-4000-8000-000000000001');
     try {
       await expect(storage.read(tenant, key, version, 4)).rejects.toThrow('metadata changed');
       expect(body.destroyed).toBe(true);
@@ -101,7 +101,7 @@ describe('native-version recovery storage fails closed', () => {
   });
   it('stages only to fresh school keys with a conditional create, never overwriting source keys', async () => {
     const send = vi.spyOn(S3Client.prototype, 'send').mockResolvedValue({} as never);
-    const storage = new S3VersionRecoveryStorage(options);
+    const storage = new S3VersionRecoveryStorage(options, '24000000-0000-4000-8000-000000000001');
     try {
       const first = await storage.stage(tenant, Buffer.from('test'), 'application/pdf');
       const second = await storage.stage(tenant, Buffer.from('test'), 'application/pdf');

@@ -76,7 +76,10 @@ export class S3DocumentBackupStorage implements VersionRecoveryStorage {
   constructor(
     private readonly liveOptions: S3StorageOptions,
     private readonly backupOptions: S3StorageOptions,
+    /** The live storage location these documents are recorded at. */
+    readonly locationId: string,
   ) {
+    z.uuid().parse(locationId);
     if (liveOptions.bucket === backupOptions.bucket && liveOptions.endpoint === backupOptions.endpoint)
       throw new Error('Backups require a separate bucket');
     this.live = client(liveOptions);

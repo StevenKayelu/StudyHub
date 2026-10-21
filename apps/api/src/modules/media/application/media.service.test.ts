@@ -1,3 +1,4 @@
+import type { Logger } from 'pino';
 import 'reflect-metadata';
 
 import { describe, expect, it, vi } from 'vitest';
@@ -175,6 +176,36 @@ describe('stored media locations', () => {
     expect(firstGet).toHaveBeenCalledWith(assets[0]!.derivativeKey, { expiresSeconds: 600 });
     expect(secondGet).toHaveBeenCalledWith(assets[1]!.storageKey, { expiresSeconds: 600 });
     expect(active).not.toHaveBeenCalled();
+  });
+
+  it('leaves out an image whose storage is unavailable instead of failing the whole page', async () => {
+    const assets = [
+      { id: 'lost', storageKey: `t/${tenantId}/lost`, derivativeKey: null, storageLocationId: null },
+      {
+        id: 'kept',
+        storageKey: `t/${tenantId}/kept`,
+        derivativeKey: null,
+        storageLocationId: originalLocation,
+      },
+    ];
+    const tx = { asset: { findMany: vi.fn().mockResolvedValue(assets) } };
+    const at = vi.fn(async (locationId: string | null) => {
+      if (locationId === null) throw new AppError('SERVICE_UNAVAILABLE');
+      return { presignGet: vi.fn().mockResolvedValue('https://original.example/kept') };
+    });
+    const warn = vi.fn();
+    const service = new MediaService(
+      { run: (work: (value: unknown) => Promise<unknown>) => work(tx) } as unknown as TenantDb,
+      {} as ConfigService,
+      { active: vi.fn(), at } as unknown as StorageLocations,
+      new FakeVideoProvider('test-secret', '/video'),
+      { warn } as unknown as Logger,
+    );
+    const urls = await runWithContext({ requestId: 'test', tenantId }, () =>
+      service.readUrls(['lost', 'kept'], { expiresSeconds: 3600 }),
+    );
+    expect([...urls]).toEqual([['kept', 'https://original.example/kept']]);
+    expect(warn).toHaveBeenCalledWith({ assetId: 'lost' }, 'Image left out: its storage is unavailable');
   });
 
   it('refuses a lesson download when its recorded location is unavailable', async () => {

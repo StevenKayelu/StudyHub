@@ -1,7 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import type { Logger } from 'pino';
 
 import { can, type TenantActor } from '../../identity';
 import {
+  APP_LOGGER,
   addToOutbox,
   AppError,
   ConfigService,
@@ -69,6 +71,7 @@ export class MediaService {
     private readonly config: ConfigService,
     @Inject(STORAGE_LOCATIONS) private readonly locations: StorageLocations,
     @Inject(VIDEO_PROVIDER) private readonly video: VideoProvider,
+    @Optional() @Inject(APP_LOGGER) private readonly logger?: Logger,
   ) {}
 
   async createUpload(
@@ -220,7 +223,10 @@ export class MediaService {
   // entitlement checks). Only READY assets of the current school are ever signed.
 
   /** Short-lived inline URLs (web-sized derivative when there is one) for READY images. */
-  async readUrls(assetIds: readonly string[]): Promise<Map<string, string>> {
+  async readUrls(
+    assetIds: readonly string[],
+    options: { expiresSeconds: number } = { expiresSeconds: DOWNLOAD_SECONDS },
+  ): Promise<Map<string, string>> {
     if (assetIds.length === 0) return new Map();
     const assets = await this.db.run((tx) =>
       tx.asset.findMany({
@@ -228,20 +234,21 @@ export class MediaService {
         select: { id: true, storageKey: true, derivativeKey: true, storageLocationId: true },
       }),
     );
-    const entries = await Promise.all(
-      assets
-        .filter((a) => (a.derivativeKey ?? a.storageKey) !== null)
-        .map(async (a) => {
-          const storage = await this.locations.at(a.storageLocationId, requireTenantId());
-          return [
-            a.id,
-            await storage.presignGet(a.derivativeKey ?? a.storageKey!, {
-              expiresSeconds: DOWNLOAD_SECONDS,
-            }),
-          ] as const;
-        }),
+    // Each image on its own: one that can't be signed (its storage location unavailable) is left out
+    // and logged, instead of failing the whole page that lists it (M10 review).
+    const signable = assets.filter((a) => (a.derivativeKey ?? a.storageKey) !== null);
+    const results = await Promise.allSettled(
+      signable.map(async (a) => {
+        const storage = await this.locations.at(a.storageLocationId, requireTenantId());
+        return [a.id, await storage.presignGet(a.derivativeKey ?? a.storageKey!, options)] as const;
+      }),
     );
-    return new Map(entries);
+    const urls = new Map<string, string>();
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') urls.set(result.value[0], result.value[1]);
+      else this.logger?.warn({ assetId: signable[index]!.id }, 'Image left out: its storage is unavailable');
+    });
+    return urls;
   }
 
   /** A short-lived download URL for a READY file, named as uploaded. */

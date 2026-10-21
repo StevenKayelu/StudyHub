@@ -156,6 +156,12 @@ export function createUsageMeterHandler(deps: { prisma: PrismaClient; box: Secre
  * deletes every other school row and marks the school DELETED after all retained object locations
  * have been cleaned. A failed cleanup leaves lifecycle metadata intact so the job can retry.
  */
+/**
+ * A scan or export with no progress for this long is abandoned: jobs expire after minutes and retries
+ * back off over hours, so no live worker is this old. The purge retires it instead of waiting forever.
+ */
+export const ABANDONED_WRITER_MS = 24 * 3600_000;
+
 export function createPurgeHandler(deps: { prisma: PrismaClient; locations: StorageLocations }) {
   return async (_envelope: JobEnvelope, logger: Logger): Promise<{ deleted: number }> => {
     const tenantId = requireTenantId();
@@ -164,7 +170,23 @@ export function createPurgeHandler(deps: { prisma: PrismaClient; locations: Stor
         if ((await lockTenantLifecycle(tx, tenantId))?.purgeDue !== true) return null;
         // Export/media workers claim these states under this same tenant lock. Existing writers
         // finish first; new claims are refused once offboarding is due, so no object can appear
-        // after its retained location has been cleaned.
+        // after its retained location has been cleaned. A writer stuck for a day is retired here;
+        // its worker, if it ever resumes, finds its claim gone and deletes what it wrote.
+        const stale = new Date(Date.now() - ABANDONED_WRITER_MS);
+        const retiredExports = await tx.dataExport.updateMany({
+          where: { status: 'RUNNING', createdAt: { lt: stale } },
+          data: { status: 'FAILED', error: 'ABANDONED' },
+        });
+        const retiredAssets = await tx.asset.updateMany({
+          where: { status: 'SCANNING', updatedAt: { lt: stale } },
+          data: { status: 'REJECTED', rejectReason: 'Processing never finished.', updatedAt: new Date() },
+        });
+        if (retiredExports.count > 0 || retiredAssets.count > 0) {
+          logger.warn(
+            { retiredExports: retiredExports.count, retiredAssets: retiredAssets.count },
+            'School purge retired abandoned object writers',
+          );
+        }
         return {
           exports: await tx.dataExport.count({ where: { status: 'RUNNING' } }),
           assets: await tx.asset.count({ where: { status: 'SCANNING' } }),
@@ -207,10 +229,20 @@ export function createPurgeHandler(deps: { prisma: PrismaClient; locations: Stor
           'Recorded objects have unresolved storage locations. Capture their original storage before retrying cleanup.',
       });
     }
-    // Resolve every retained adapter before starting destructive work. Missing credentials or an
-    // invalid registry snapshot must leave all objects and database metadata available for repair.
+    // Resolve adapters before starting destructive work. A location holding this school's recorded
+    // objects is required: missing credentials leave everything in place for repair. Other retained
+    // (superseded) locations are cleaned when they can be opened; one whose credentials were revoked
+    // is logged and skipped rather than blocking every purge (M10 review).
+    const referenced = new Set(references.map((reference) => reference.locationId));
     const adapters = [];
-    for (const locationId of locations) adapters.push(await deps.locations.at(locationId, tenantId));
+    for (const locationId of locations) {
+      try {
+        adapters.push(await deps.locations.at(locationId, tenantId));
+      } catch (error) {
+        if (referenced.has(locationId)) throw error;
+        logger.warn({ locationId }, 'School purge skipped a superseded storage location it could not open');
+      }
+    }
     let objects = 0;
     for (const storage of adapters) {
       // Recheck after adapter resolution and immediately before destructive I/O. Cancellation is

@@ -231,3 +231,16 @@ Still open from the review: one stuck SCANNING asset or RUNNING export still del
 Verification also fixed WIP test gaps: an incomplete transaction mock, unused imports, eight unformatted files, a missing storage capture in the identity suite and the four configuration routes missing from the T-ISO-12 route list.
 
 `pnpm verify` **passed end to end** with Docker Desktop running: lint/format, typecheck, boundaries, **406 unit tests** (API 359, contracts 35, UI 12), **918 integration tests in 21 files**, production build, **8 security browser tests**, **62 isolated e2e checks**, **198 Storybook checks**, OpenAPI and the secret scan (no leaks). M10 remains IN PROGRESS: the DoD items above (load/noisy-neighbour, RTO on real infrastructure, ASVS L2 evidence) are not met.
+
+### Review leftovers closed, 2026-10-21
+
+The four items left open by the 2026-10-20 review are fixed (branch `m10-hardening-wip`, on top of the 2026-10-21 scope additions):
+
+- **One unresolvable image failed a whole page:** `MediaService.readUrls` signs each image on its own; one whose storage location can't be opened is left out and logged, and the rest of the page renders. Studio's covers now use the same path (one signing implementation instead of two).
+- **Document recovery storage vs recorded location:** a `VersionRecoveryStorage` carries the `locationId` its credentials open, and recovery refuses a document recorded at another location (it would have pointed the restored key into a bucket the document isn't read from).
+- **Stuck writers delayed a purge forever:** the purge retires scans and exports with no progress for 24 hours (**PROPOSED** threshold: jobs expire after minutes and retries back off over hours), logging how many. Workers now finish only while they still hold their claim; one that resumes after being retired deletes what it wrote, so nothing is left in a purged school's storage.
+- **Revoked superseded locations blocked purges:** locations holding the school's recorded objects stay required; other retained locations are cleaned when they can be opened, and one that can't is logged and skipped. **PROPOSED:** stray, unrecorded objects in a revoked old location may then outlive the purge; they're under the deleted school's prefix and unreachable.
+
+Tests: unit (a failing location leaves one image out), recovery (wrong location refused), admin AC 5 (a fresh scan holds the purge; a 2-day-old scan and export are retired; a revoked superseded location is skipped).
+
+`pnpm verify` passed on 2026-10-21: 431 unit (API 384, contracts 35, UI 12), 937 integration in 25 files, build, 8 security, 70 isolated e2e, 198 Storybook, OpenAPI, secret scan. M10 stays IN PROGRESS: load/noisy-neighbour at the target profile, RTO on real infrastructure and ASVS L2 evidence still need staging or people.

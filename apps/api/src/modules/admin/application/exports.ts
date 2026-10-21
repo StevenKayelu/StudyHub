@@ -456,9 +456,10 @@ export function createExportHandler(deps: ExportDeps) {
       });
       const key = `t/${tenantId}/exports/${exportId}.${built.ext}`;
       await storage.put(key, built.body, built.type);
-      await runInTenantTx(deps.prisma, async (tx) => {
-        const row = await tx.dataExport.update({
-          where: { id: exportId },
+      const finished = await runInTenantTx(deps.prisma, async (tx) => {
+        // Only while this worker still holds the claim: a purge retires exports abandoned for a day.
+        const claimed = await tx.dataExport.updateMany({
+          where: { id: exportId, status: 'RUNNING' },
           data: {
             status: 'READY',
             storageKey: key,
@@ -468,6 +469,10 @@ export function createExportHandler(deps: ExportDeps) {
             completedAt: new Date(),
             expiresAt: new Date(Date.now() + EXPORT_TTL_MS),
           },
+        });
+        if (claimed.count === 0) return false;
+        const row = await tx.dataExport.findUniqueOrThrow({
+          where: { id: exportId },
           select: { requestedBy: true },
         });
         const requester = await tx.tenantMembership.findFirst({
@@ -491,13 +496,20 @@ export function createExportHandler(deps: ExportDeps) {
             },
           });
         }
+        return true;
       });
+      if (!finished) {
+        // Retired while this worker was stalled: leave nothing behind in a school being purged.
+        await storage.delete(key).catch(() => undefined);
+        logger.warn({ exportId }, 'Export finished after its claim was retired; file removed');
+        return { status: 'abandoned' };
+      }
       logger.info({ exportId, type: job.type, rows: built.rows, bytes: built.body.length }, 'Export ready');
       return { status: 'READY' };
     } catch (error) {
       await runInTenantTx(deps.prisma, (tx) =>
-        tx.dataExport.update({
-          where: { id: exportId },
+        tx.dataExport.updateMany({
+          where: { id: exportId, status: 'RUNNING' },
           data: { status: 'FAILED', error: error instanceof Error ? error.message.slice(0, 300) : 'failed' },
         }),
       );

@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createExportHandler, createPurgeHandler, EXPORT_JOB, readZip } from '../../src/modules/admin';
 import {
+  BOOTSTRAP_STORAGE_LOCATION_ID,
   createLogger,
   DEV_IDENTITY_ENCRYPTION_KEY,
   hashPassword,
@@ -1574,6 +1575,33 @@ describe('tenant administration, white-label and platform console (M9)', () => {
       ),
     ).toEqual({ deleted: 0 });
     await platformSql(`UPDATE tenant SET delete_after = now() - interval '1 minute' WHERE id = $1`, [delta]);
+    // A file still being scanned holds the purge; one stuck for a day (and a stuck export) is retired.
+    const scanning = (
+      await sql(
+        delta,
+        `INSERT INTO asset (tenant_id, owner_membership_id, kind, purpose, original_name, mime, size_bytes,
+           storage_key, storage_location_id, status)
+         VALUES ($1, $2, 'DOCUMENT', 'LESSON_FILE', 'scan.pdf', 'application/pdf', 10, $3, $4, 'SCANNING')
+         RETURNING id`,
+        [delta, ownerId, `t/${delta}/lesson_file/scan.pdf`, BOOTSTRAP_STORAGE_LOCATION_ID],
+      )
+    ).rows[0].id;
+    expect(await run()).toEqual({ deleted: 0 });
+    await sql(delta, `UPDATE asset SET updated_at = now() - interval '2 days' WHERE id = $1`, [scanning]);
+    await sql(
+      delta,
+      `INSERT INTO data_export (tenant_id, type, status, requested_by, created_at)
+       VALUES ($1, 'TENANT_FULL', 'RUNNING', $2, now() - interval '2 days')`,
+      [delta, ownerId],
+    );
+    // A superseded storage location whose credentials can't be opened doesn't block the purge.
+    const revoked = '00000000-0000-4000-8000-0000000000ee';
+    await platformSql(
+      `INSERT INTO platform_storage_location (id, provider, config, credentials_enc, fingerprint)
+       SELECT $1, provider, config, $2, repeat('e', 64) FROM platform_storage_location WHERE id = $3`,
+      [revoked, Buffer.alloc(32), BOOTSTRAP_STORAGE_LOCATION_ID],
+    );
+    // (Locations are immutable and stay registered; this suite's database is disposable.)
     const result = await run();
     expect(result.deleted).toBeGreaterThan(5);
 

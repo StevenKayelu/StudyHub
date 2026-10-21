@@ -26,6 +26,7 @@ interface Target extends Record<string, unknown> {
   status: string;
   mime: string;
   size_bytes: number;
+  storage_location_id: string | null;
 }
 export interface DocumentRecoveryPlan {
   scope: typeof SCOPE;
@@ -40,6 +41,7 @@ async function target(
   tx: TenantTx,
   tenantId: string,
   assetId: string,
+  locationId: string,
 ): Promise<{ row: Target; actorId: string }> {
   const actorId = await requireRecoveryOwner(tx);
   const rows = await tx.$queryRaw<Array<{ data: Target }>>`
@@ -58,6 +60,10 @@ async function target(
   ) {
     throw new Error('Recovery requires an existing ready school document without derivatives, at most 25 MB');
   }
+  // The recovery storage must be the document's recorded location, or the restored key would point
+  // into a bucket the document isn't read from.
+  if (row.storage_location_id !== locationId)
+    throw new Error('Recovery storage is not the storage location recorded for this document');
   return { row, actorId };
 }
 function stamp(tenantId: string, row: Target, actorId: string, version: RecoveryObjectVersion): string {
@@ -74,7 +80,7 @@ export async function planDocumentObjectRecovery(
   z.uuid().parse(tenantId);
   z.uuid().parse(assetId);
   const { row, actorId } = await runInPlatformTenantTx(prisma, tenantId, (tx) =>
-    target(tx, tenantId, assetId),
+    target(tx, tenantId, assetId, storage.locationId),
   );
   // All provider I/O is outside database transactions. Storage must positively identify immutable
   // history; no fallback to latest bytes when the requested version/backup cannot be identified.
@@ -125,7 +131,7 @@ export async function applyDocumentObjectRecovery(
   if (!storageKey.startsWith(`t/${tenantId}/recovery/`) || storageKey === plan.sourceKey)
     throw new Error('Invalid staged recovery key');
   await runInPlatformTenantTx(prisma, tenantId, async (tx) => {
-    const { row, actorId } = await target(tx, tenantId, assetId);
+    const { row, actorId } = await target(tx, tenantId, assetId, storage.locationId);
     if (stamp(tenantId, row, actorId, plan.version) !== approval.digest)
       throw new Error('Object recovery target changed while preparing bytes');
     await tx.asset.update({

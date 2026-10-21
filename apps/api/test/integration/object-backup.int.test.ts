@@ -14,6 +14,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { applyDocumentObjectRecovery, planDocumentObjectRecovery } from '../../src/modules/admin';
 import {
+  BOOTSTRAP_STORAGE_LOCATION_ID,
   EicarOnlyScanner,
   OBJECT_STORAGE,
   type ObjectStorage,
@@ -108,7 +109,11 @@ describe('application-managed backups without native versioning (R2-compatible o
     expect((await s3.send(new GetBucketVersioningCommand({ Bucket: backupBucket }))).Status).not.toBe(
       'Enabled',
     );
-    backups = new S3DocumentBackupStorage(options, { ...options, bucket: backupBucket });
+    backups = new S3DocumentBackupStorage(
+      options,
+      { ...options, bucket: backupBucket },
+      BOOTSTRAP_STORAGE_LOCATION_ID,
+    );
     assetId = ref('asset', h.tenants.acme);
     betaKey = `t/${h.tenants.beta}/lesson_file/beta.pdf`;
     await put(liveBucket, betaKey, pdf('Other school'));
@@ -123,8 +128,9 @@ describe('application-managed backups without native versioning (R2-compatible o
     backupId = captured.backupId;
     await put(liveBucket, key, damaged);
     await observer.query(
-      `UPDATE asset SET storage_key=$2,derivative_key=NULL,kind='DOCUMENT',mime='application/pdf',size_bytes=2048,status='READY' WHERE id=$1`,
-      [assetId, key],
+      `UPDATE asset SET storage_key=$2,derivative_key=NULL,kind='DOCUMENT',mime='application/pdf',size_bytes=2048,status='READY',
+         storage_location_id=$3 WHERE id=$1`,
+      [assetId, key, BOOTSTRAP_STORAGE_LOCATION_ID],
     );
   });
   afterAll(async () => {
@@ -246,6 +252,8 @@ describe('application-managed backups without native versioning (R2-compatible o
       forcePathStyle: true,
       createBucket: false,
     };
-    expect(() => new S3DocumentBackupStorage(options, options)).toThrow('separate bucket');
+    expect(() => new S3DocumentBackupStorage(options, options, BOOTSTRAP_STORAGE_LOCATION_ID)).toThrow(
+      'separate bucket',
+    );
   });
 });
