@@ -556,7 +556,8 @@ export class AuthService {
   async listSessions(actor: TenantActor) {
     const sessions = await this.tenantDb.run((tx) =>
       tx.session.findMany({
-        where: { userId: actor.userId },
+        // A session replaced by a sign-in on another device is already signed out.
+        where: { userId: actor.userId, replacedAt: null },
         orderBy: { lastSeenAt: 'desc' },
         select: { id: true, createdAt: true, lastSeenAt: true, userAgent: true },
       }),

@@ -143,6 +143,7 @@ export const settingsPatchSchema = z
     learnerRegistrationMode: generalSettingsSchema.shape.learnerRegistrationMode.unwrap().optional(),
     allowedEmailDomains: generalSettingsSchema.shape.allowedEmailDomains.unwrap().optional(),
     unverifiedFreeEnrolment: z.boolean().optional(),
+    singleDeviceLearners: z.boolean().optional(),
     catalogVisibility: z.enum(['PUBLIC', 'MEMBERS_ONLY']).optional(),
     // Instructors and review (BR-05, BR-56)
     instructorOnboardingMode: z.enum(['INVITE_ONLY', 'APPLICATION']).optional(),

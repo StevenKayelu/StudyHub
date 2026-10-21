@@ -144,7 +144,7 @@ export class UsersService {
         },
       });
       const sessions = await tx.session.findMany({
-        where: { membershipId },
+        where: { membershipId, replacedAt: null },
         orderBy: { lastSeenAt: 'desc' },
         select: { id: true, createdAt: true, lastSeenAt: true, userAgent: true, ip: true },
       });

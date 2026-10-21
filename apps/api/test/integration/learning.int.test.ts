@@ -356,6 +356,8 @@ describe('learning experience (M6)', () => {
 
     it('M6 AC 2: the saved position comes back exactly, on another device too', async () => {
       await progress(ACME, free.lessons[2]!, cookies.learner, { positionSeconds: 37 });
+      // Two devices at once: this school lets learners do that (single-device-learners.md).
+      await h.setSetting(h.tenants.acme, 'singleDeviceLearners', false);
       const otherDevice = await h.signIn(ACME, 'learner@example.com');
       const player = (await get(ACME, `/api/v1/learn/courses/${free.id}`, otherDevice)).json();
       expect(player.resume).toEqual({ lessonId: free.lessons[2], positionSeconds: 37 });
@@ -363,6 +365,7 @@ describe('learning experience (M6)', () => {
       expect(lesson.progress).toEqual({ status: 'COMPLETED', positionSeconds: 37 });
       const mine = (await get(ACME, '/api/v1/me/enrollments', otherDevice)).json();
       expect(mine.items[0].resume).toMatchObject({ lessonId: free.lessons[2], positionSeconds: 37 });
+      await h.setSetting(h.tenants.acme, 'singleDeviceLearners', true);
     });
 
     it('plays the video through the provider port (simulated by the fake provider)', async () => {

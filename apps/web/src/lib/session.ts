@@ -33,13 +33,24 @@ export async function apiGet(path: string): Promise<Response> {
   });
 }
 
-/** The signed-in person on this school host, or null. One API call per request. */
-export const getMe = cache(async (): Promise<MeResponse | null> => {
+/**
+ * The signed-in person on this school host (or null), and whether the browser's session was just
+ * replaced by a sign-in on another device (docs/design/single-device-learners.md). One API call per request.
+ */
+const meState = cache(async (): Promise<{ me: MeResponse | null; replaced: boolean }> => {
   const response = await apiGet('/api/v1/me');
-  if (response.status === 401) return null;
+  if (response.status === 401) {
+    return { me: null, replaced: response.headers.get('x-studyhub-session-ended') === 'replaced' };
+  }
   if (!response.ok) throw new Error(`The API returned ${response.status} for /me.`);
-  return meResponseSchema.parse(await response.json());
+  return { me: meResponseSchema.parse(await response.json()), replaced: false };
 });
+
+/** The signed-in person on this school host, or null. */
+export const getMe = cache(async (): Promise<MeResponse | null> => (await meState()).me);
+
+/** The browser's session ended because the account signed in on another device. */
+export const sessionReplaced = cache(async (): Promise<boolean> => (await meState()).replaced);
 
 /** The signed-in, TOTP-verified staff member on the console host, or null. */
 export const getConsoleMe = cache(async (): Promise<ConsoleMeResponse | null> => {
@@ -58,7 +69,10 @@ export async function requestedPath(): Promise<string> {
 /** Signed-in member of this school, or a redirect to sign-in that comes back here afterwards. */
 export async function requireMember(): Promise<MeResponse> {
   const me = await getMe();
-  if (me === null) redirect(`/sign-in?returnTo=${encodeURIComponent(await requestedPath())}`);
+  if (me === null) {
+    const reason = (await sessionReplaced()) ? 'reason=replaced&' : '';
+    redirect(`/sign-in?${reason}returnTo=${encodeURIComponent(await requestedPath())}`);
+  }
   return me;
 }
 

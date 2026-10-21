@@ -181,6 +181,8 @@ export const generalSettingsSchema = z.object({
     .max(50)
     .default([]),
   unverifiedFreeEnrolment: z.boolean().default(true),
+  /** A learner's new sign-in signs out their other devices (docs/design/single-device-learners.md). */
+  singleDeviceLearners: z.boolean().default(true),
   legalPages: legalPagesSchema.default({}),
 });
 export type GeneralSettings = z.infer<typeof generalSettingsSchema>;

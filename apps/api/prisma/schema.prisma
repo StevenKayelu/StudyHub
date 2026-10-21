@@ -399,17 +399,19 @@ model MembershipRole {
 
 /// A signed-in browser on one school host (D4). RLS: tenant_isolation.
 model Session {
-  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String   @map("tenant_id") @db.Uuid
-  userId            String   @map("user_id") @db.Uuid
-  membershipId      String   @map("membership_id") @db.Uuid
-  tokenHash         Bytes    @map("token_hash")
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  lastSeenAt        DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(3)
-  idleExpiresAt     DateTime @map("idle_expires_at") @db.Timestamptz(3)
-  absoluteExpiresAt DateTime @map("absolute_expires_at") @db.Timestamptz(3)
-  ip                String?  @db.Inet
-  userAgent         String?  @map("user_agent")
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  membershipId      String    @map("membership_id") @db.Uuid
+  tokenHash         Bytes     @map("token_hash")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt        DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  idleExpiresAt     DateTime  @map("idle_expires_at") @db.Timestamptz(3)
+  absoluteExpiresAt DateTime  @map("absolute_expires_at") @db.Timestamptz(3)
+  ip                String?   @db.Inet
+  userAgent         String?   @map("user_agent")
+  /// A learner signed in on another device (docs/design/single-device-learners.md); no longer valid.
+  replacedAt        DateTime? @map("replaced_at") @db.Timestamptz(3)
 
   tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   user       UserAccount      @relation(fields: [userId], references: [id], onDelete: Cascade)

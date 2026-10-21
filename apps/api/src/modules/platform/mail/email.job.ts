@@ -48,6 +48,7 @@ const sealContext = (tenantId: string, to: string) => `email:${tenantId}:${to}`;
  */
 const NOTIFY: Partial<Record<EmailTemplate, { link: string; category?: 'learning' | 'earnings' }>> = {
   'password-changed': { link: '/account' },
+  'signed-in-elsewhere': { link: '/account' },
   receipt: { link: '/account/purchases' },
   'refund-learner': { link: '/account/purchases' },
   'refund-instructor': { link: '/studio/earnings', category: 'earnings' },

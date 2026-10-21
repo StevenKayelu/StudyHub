@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 
 import { currentContext, sendProblem } from '../../platform';
-import type { SessionService } from '../application/sessions';
+import { REPLACED, type SessionService } from '../application/sessions';
 import type { SupportSessionService } from '../application/support-sessions';
 import { supportVerdict } from '../domain/support-policy';
 import {
@@ -9,6 +9,7 @@ import {
   currentActor,
   parseCookies,
   SESSION_COOKIE,
+  SESSION_ENDED_HEADER,
   setCookie,
   setCurrentActor,
   SUPPORT_COOKIE,
@@ -36,10 +37,12 @@ export function registerSessionHook(
     const token = cookies.get(SESSION_COOKIE);
     if (token !== undefined && token !== '') {
       const actor = await sessions.authenticate(token);
-      if (actor !== null) {
+      if (actor !== null && actor !== REPLACED) {
         setCurrentActor(actor);
         return undefined;
       }
+      // Signed in on another device (single-device-learners.md): the web app says why on sign-in.
+      if (actor === REPLACED) reply.header(SESSION_ENDED_HEADER, 'replaced');
       setCookie(reply, clearCookie(SESSION_COOKIE));
     }
 

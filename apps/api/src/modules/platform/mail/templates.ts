@@ -9,6 +9,8 @@ export type EmailTemplate =
   | 'reset-password'
   | 'password-changed'
   | 'invitation'
+  // One device at a time for learners (docs/design/single-device-learners.md)
+  | 'signed-in-elsewhere'
   // Commerce (M8)
   | 'receipt'
   | 'refund-learner'
@@ -116,6 +118,12 @@ export function renderEmail(template: EmailTemplate, vars: EmailVariables): Rend
         hello,
         `The password for your account was changed from ${school}. You have been signed out on your other devices and at your other schools.`,
         "If this wasn't you, reset your password now and contact the school's support.",
+      ]);
+    case 'signed-in-elsewhere':
+      return render(`Your account was signed in on another device`, [
+        hello,
+        `Your account at ${school} was just signed in on ${vars.detail ?? 'another device'}, so it was signed out on the device you used before. At ${school}, a learner account can be used on one device at a time.`,
+        "If this wasn't you, sign in again and change your password from your Account page, then tell the school's support. Don't share your sign-in details with anyone.",
       ]);
     case 'invitation':
       return render(

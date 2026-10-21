@@ -117,6 +117,13 @@ export default async function AdminSettingsPage() {
           label: s('unverifiedFree'),
           defaultValue: general.unverifiedFreeEnrolment,
         },
+        {
+          kind: 'checkbox',
+          name: 'singleDeviceLearners',
+          label: s('singleDevice'),
+          hint: s('singleDeviceHint'),
+          defaultValue: general.singleDeviceLearners,
+        },
       ])}
       {configuration !== null && configuration !== 'denied' ? (
         <ConfigurationEditor initial={configuration} />

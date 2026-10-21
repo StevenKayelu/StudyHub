@@ -1,3 +1,4 @@
+import { Alert } from '@studyhub/ui';
 import type { Metadata } from 'next';
 import NextLink from 'next/link';
 import { redirect } from 'next/navigation';
@@ -5,7 +6,7 @@ import { getTranslations } from 'next-intl/server';
 
 import { SignInForm } from '../../../../../components/auth-forms';
 import { AuthPage } from '../../../../../components/auth-page';
-import { getMe, safeReturnTo } from '../../../../../lib/session';
+import { getMe, safeReturnTo, sessionReplaced } from '../../../../../lib/session';
 import { currentTenant } from '../../../../../lib/tenant';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -20,8 +21,11 @@ export default async function SignInPage({
 }) {
   const tenant = await currentTenant();
   if (tenant === null) return null;
-  const returnTo = safeReturnTo((await searchParams).returnTo);
+  const params = await searchParams;
+  const returnTo = safeReturnTo(params.returnTo);
   if ((await getMe()) !== null) redirect(returnTo);
+  // Signed out because the account signed in on another device (single-device-learners.md).
+  const replaced = params.reason === 'replaced' || (await sessionReplaced());
   const t = await getTranslations();
   const school = tenant.branding.displayName;
   return (
@@ -38,6 +42,13 @@ export default async function SignInPage({
         </div>
       }
     >
+      {replaced ? (
+        <div data-testid="signed-in-elsewhere">
+          <Alert tone="warning" role="status" title={t('auth.signIn.replacedTitle')}>
+            {t('auth.signIn.replaced', { school })}
+          </Alert>
+        </div>
+      ) : null}
       <SignInForm
         returnTo={returnTo}
         texts={{

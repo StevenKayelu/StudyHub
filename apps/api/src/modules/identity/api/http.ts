@@ -5,6 +5,8 @@ import type { TenantActor } from '../domain/policy';
 
 /** Tenant-realm session cookie: host-only (`__Host-`), so one per school host (04 §8, BR-44). */
 export const SESSION_COOKIE = '__Host-sh_session';
+/** Set when the request's session was replaced by a sign-in on another device (single-device-learners.md). */
+export const SESSION_ENDED_HEADER = 'x-studyhub-session-ended';
 /** Console-realm session cookie, set only on the console host (04 §17.5). */
 export const CONSOLE_COOKIE = '__Host-sh_console';
 /** A platform staff member's support session on ONE school host (F44, M9). */

@@ -8,6 +8,7 @@ const TEMPLATES: EmailTemplate[] = [
   'reset-password',
   'password-changed',
   'invitation',
+  'signed-in-elsewhere',
   'receipt',
   'refund-learner',
   'refund-instructor',

@@ -861,7 +861,9 @@
       "joinTitle": "Join {school}?",
       "joinBody": "You have an account, but you are not a member of {school} yet. Join to start learning here.",
       "joinSubmit": "Join {school}",
-      "joinCancel": "Not now"
+      "joinCancel": "Not now",
+      "replacedTitle": "You were signed out",
+      "replaced": "Your account was signed in on another device. At {school}, a learner account can be used on one device at a time. If this wasn’t you, sign in and change your password."
     },
     "signUp": {
       "title": "Create your {school} account",
@@ -1733,6 +1735,8 @@
       },
       "allowedDomains": "Allowed email domains (comma-separated)",
       "unverifiedFree": "Allow free courses before the email is verified",
+      "singleDevice": "Learners can be signed in on one device at a time",
+      "singleDeviceHint": "A learner’s new sign-in signs out their other device and emails them, so two people can’t share one account. Instructors and administrators can use several devices.",
       "catalogVisibility": "Who sees the catalogue",
       "catalogVisibilities": {
         "PUBLIC": "Everyone",

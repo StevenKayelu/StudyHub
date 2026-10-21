@@ -363,6 +363,13 @@ describe('identity realms (M4)', () => {
     });
 
     it('BR-69: changing the password ends the other sessions in every school, keeping this one', async () => {
+      // Several devices at once: Acme lets learners do that here (single-device-learners.md).
+      await asTenant(tenants.acme, () =>
+        migrator.query(
+          `INSERT INTO tenant_setting (tenant_id, key, value) VALUES ($1, 'singleDeviceLearners', 'false')`,
+          [tenants.acme],
+        ),
+      );
       const email = 'mutale@example.com';
       const acmeCookie = await member(ACME, tenants.acme, email, 'Mutale');
       const offer = await signIn(BETA, email);
@@ -383,6 +390,9 @@ describe('identity realms (M4)', () => {
       expect((await call('GET', '/api/v1/me', { host: ACME, cookie: otherAcme })).statusCode).toBe(401);
       expect((await call('GET', '/api/v1/me', { host: BETA, cookie: betaCookie })).statusCode).toBe(401);
       expect((await signIn(BETA, email, 'an even longer passphrase')).statusCode).toBe(200);
+      await asTenant(tenants.acme, () =>
+        migrator.query(`DELETE FROM tenant_setting WHERE key = 'singleDeviceLearners'`),
+      );
     });
 
     it('BR-69: revoking a membership ends that school’s sessions only', async () => {
