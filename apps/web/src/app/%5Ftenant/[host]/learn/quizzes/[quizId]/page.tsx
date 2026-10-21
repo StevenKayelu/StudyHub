@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const intro = await load((await params).quizId);
   return {
     title:
-      intro === 'locked' || 'balanceCourseId' in intro
+      intro === 'locked' || 'balanceCourseId' in intro || 'notOpenCourseId' in intro
         ? (await getTranslations('learn'))('title')
         : intro.quiz.title,
     robots: { index: false },
@@ -50,6 +50,25 @@ export default async function QuizIntroPage({ params }: { params: Params }) {
     return (
       <LearnFrame tenant={tenant} current="learning">
         <StatePanel kind="permission" headingLevel={1} title={t('course.previewCta', terms)} />
+      </LearnFrame>
+    );
+  }
+  if ('notOpenCourseId' in intro) {
+    // Course periods: the quiz opens with its course's term.
+    return (
+      <LearnFrame tenant={tenant} current="learning">
+        <StatePanel
+          kind="permission"
+          headingLevel={1}
+          title={t('learn.player.quizNotOpen', terms)}
+          actions={
+            intro.notOpenCourseId === '' ? undefined : (
+              <NextLink href={`/learn/courses/${intro.notOpenCourseId}`} className={buttonClasses('primary')}>
+                {t('learn.player.openCourse', terms)}
+              </NextLink>
+            )
+          }
+        />
       </LearnFrame>
     );
   }

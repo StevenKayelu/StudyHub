@@ -3364,6 +3364,7 @@
               "COURSE_NOT_PURCHASABLE",
               "ORDER_NOT_PAYABLE",
               "BALANCE_REQUIRED",
+              "COURSE_NOT_OPEN",
               "IDEMPOTENCY_KEY_REUSED",
               "IDEMPOTENCY_IN_PROGRESS",
               "SUPPORT_READ_ONLY",

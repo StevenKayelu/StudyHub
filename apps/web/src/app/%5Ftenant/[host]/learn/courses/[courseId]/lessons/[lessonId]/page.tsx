@@ -24,10 +24,10 @@ const load = cache(async (courseId: string, lessonId: string) => {
   ]);
   if (course === null || lesson === null) notFound();
   if (course !== 'locked' && typeof lesson !== 'string' && lesson.courseId !== course.course.id) notFound();
-  // A lesson beyond the deposit must belong to this course's outline to show the balance panel.
+  // A locked lesson must belong to this course's outline to show its panel.
   if (
     course !== 'locked' &&
-    lesson === 'balance' &&
+    (lesson === 'balance' || lesson === 'notOpen') &&
     !course.sections.some((section) => section.lessons.some((l) => l.id === lessonId))
   ) {
     notFound();
@@ -66,6 +66,15 @@ export default async function LessonPage({ params }: { params: Params }) {
           }
         />
       </main>
+    );
+  }
+
+  if (lesson === 'notOpen') {
+    // Course periods: the term hasn't opened; the frame's banner says when. The outline stays.
+    return (
+      <PlayerFrame course={course} currentLessonId={lessonId} terms={terms}>
+        <StatePanel kind="permission" headingLevel={1} title={t('learn.player.notOpenTitle')} />
+      </PlayerFrame>
     );
   }
 

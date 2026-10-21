@@ -49,11 +49,21 @@ export async function PlayerFrame({
       }),
     };
   }
+  // Course periods: before its term opens, only the outline and previews (docs/design/course-periods.md).
+  const lockNotice =
+    course.lock === null
+      ? null
+      : course.lock.opensAt === null
+        ? p('notOpenManual')
+        : p('notOpen', {
+            date: (await getFormatter()).dateTime(new Date(course.lock.opensAt), { dateStyle: 'long' }),
+          });
   // F22: practice for enrolled learners, while the school has the practice feature (F40). Practice draws
-  // on the whole question bank, so it opens with the balance (PROPOSED 2, payment plans).
+  // on the whole question bank, so it opens with the balance (PROPOSED 2, payment plans) and the term.
   const practice =
     course.access === 'ENROLLED' &&
     balance === null &&
+    course.lock === null &&
     (await currentTenant())?.features.practiceMode === true;
 
   const outline = (
@@ -64,7 +74,13 @@ export async function PlayerFrame({
           <ol className="flex flex-col border-s-[3px] border-line">
             {section.lessons.map((lesson) => {
               const current = lesson.id === currentLessonId;
-              const state = current ? 'CURRENT' : lesson.locked ? 'LOCKED' : lesson.status;
+              const state = current
+                ? 'CURRENT'
+                : lesson.locked
+                  ? course.lock !== null
+                    ? 'NOT_OPEN'
+                    : 'LOCKED'
+                  : lesson.status;
               const Icon =
                 lesson.status === 'COMPLETED'
                   ? CircleCheck
@@ -144,7 +160,8 @@ export async function PlayerFrame({
           {notice}
         </Banner>
       ))}
-      {balanceNotice !== null ? (
+      {lockNotice !== null ? <Banner tone="info">{lockNotice}</Banner> : null}
+      {balanceNotice !== null && lockNotice === null ? (
         <Banner tone={balanceNotice.overdue ? 'warning' : 'info'}>
           {balanceNotice.text} <NextLink href={`/c/${course.course.slug}`}>{p('payBalance')}</NextLink>
         </Banner>

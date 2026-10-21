@@ -13,10 +13,12 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  adminCoursePeriodSchema,
   catalogueQuerySchema,
   createCategorySchema,
   createCourseSchema,
   createLessonSchema,
+  createPeriodSchema,
   createSectionSchema,
   createSubjectSchema,
   instructorApplicationSchema,
@@ -26,6 +28,7 @@ import {
   updateCategorySchema,
   updateCourseSchema,
   updateLessonSchema,
+  updatePeriodSchema,
   updateSectionSchema,
 } from '@studyhub/contracts';
 import { z } from 'zod';
@@ -36,6 +39,7 @@ import { CatalogueService } from '../application/catalogue.service';
 import { CategoriesService } from '../application/categories.service';
 import { CoursesAdminService } from '../application/courses-admin.service';
 import { InstructorsService } from '../application/instructors.service';
+import { PeriodsService } from '../application/periods.service';
 import { StudioService } from '../application/studio.service';
 
 function requireActor(): TenantActor {
@@ -52,12 +56,21 @@ export class CatalogueController {
   constructor(
     private readonly catalogue: CatalogueService,
     private readonly categories: CategoriesService,
+    private readonly periods: PeriodsService,
   ) {}
 
   @Get('categories')
   @Header('Cache-Control', 'private, max-age=60')
   categoryTree() {
     return this.categories.tree(false);
+  }
+
+  /** Terms, semesters and seminars (docs/design/course-periods.md). Whether one is open changes by date. */
+  @Get('periods')
+  @Header('Cache-Control', 'private, no-store')
+  async periodList() {
+    await this.catalogue.requireCatalogue(currentActor());
+    return this.periods.list();
   }
 
   @Get('courses')
@@ -230,7 +243,32 @@ export class ContentAdminController {
     private readonly categories: CategoriesService,
     private readonly instructors: InstructorsService,
     private readonly courses: CoursesAdminService,
+    private readonly periods: PeriodsService,
   ) {}
+
+  @Get('periods')
+  @Header('Cache-Control', 'private, no-store')
+  periodList() {
+    return this.periods.adminList(requireActor());
+  }
+
+  @Post('periods')
+  @HttpCode(201)
+  createPeriod(@Body() body: unknown) {
+    return this.periods.create(requireActor(), parseOrThrow(createPeriodSchema, body));
+  }
+
+  @Patch('periods/:id')
+  @HttpCode(204)
+  async updatePeriod(@Param('id', uuid()) id: string, @Body() body: unknown): Promise<void> {
+    await this.periods.update(requireActor(), id, parseOrThrow(updatePeriodSchema, body));
+  }
+
+  @Patch('courses/:id/period')
+  @HttpCode(204)
+  async coursePeriod(@Param('id', uuid()) id: string, @Body() body: unknown): Promise<void> {
+    await this.periods.setCoursePeriod(requireActor(), id, parseOrThrow(adminCoursePeriodSchema, body));
+  }
 
   @Get('categories')
   @Header('Cache-Control', 'private, no-store')

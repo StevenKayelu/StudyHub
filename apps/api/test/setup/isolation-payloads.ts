@@ -1,4 +1,5 @@
 import {
+  adminCoursePeriodSchema,
   createCourseSchema,
   createOrderSchema,
   createLessonSchema,
@@ -20,6 +21,7 @@ import {
   updateCategorySchema,
   updateCourseSchema,
   updateLessonSchema,
+  updatePeriodSchema,
   updateQuizSchema,
   updateSectionSchema,
 } from '@studyhub/contracts';
@@ -89,6 +91,10 @@ export const ISOLATION_PAYLOADS: Readonly<Record<string, (ids: Ids) => unknown>>
     createSubjectSchema.parse({ categoryId: id(ids, 'category'), name: 'Isolation probe' }),
   'PATCH /api/v1/admin/categories/:id': () => updateCategorySchema.parse({ name: 'Isolation probe' }),
   'PATCH /api/v1/admin/subjects/:id': () => updateCategorySchema.parse({ name: 'Isolation probe' }),
+  'PATCH /api/v1/admin/periods/:id': () =>
+    updatePeriodSchema.parse({ name: 'Isolation probe', mode: 'OPEN' }),
+  'PATCH /api/v1/admin/courses/:id/period': (ids) =>
+    adminCoursePeriodSchema.parse({ periodId: id(ids, 'academic_period'), accessOverride: 'OPEN' }),
   'POST /api/v1/admin/courses/:id/enrollments': () =>
     grantEnrollmentSchema.parse({ email: 'probe@beta.test', reason: 'Isolation probe' }),
   'POST /api/v1/admin/enrollments/:id/revoke': () =>

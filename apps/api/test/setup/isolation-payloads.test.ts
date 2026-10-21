@@ -8,10 +8,9 @@ import {
 } from './isolation-payloads';
 
 const ids = Object.fromEntries(
-  ['subject', 'asset', 'section', 'lesson', 'category', 'question', 'course'].map((name, index) => [
-    name,
-    `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
-  ]),
+  ['subject', 'asset', 'section', 'lesson', 'category', 'question', 'course', 'academic_period'].map(
+    (name, index) => [name, `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`],
+  ),
 );
 
 describe('schema-valid cross-school mutation payloads', () => {

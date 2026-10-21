@@ -130,7 +130,8 @@
         "IN_PROGRESS": "In progress",
         "NOT_STARTED": "Not started",
         "CURRENT": "Current lesson",
-        "LOCKED": "Locked until the balance is paid"
+        "LOCKED": "Locked until the balance is paid",
+        "NOT_OPEN": "Opens with the term"
       },
       "keyboardHint": "Tip: use the ← and → keys for the previous and next lesson.",
       "downloadName": "Download {name}",
@@ -143,7 +144,12 @@
       "quizLocked": "This quiz opens when you pay the balance",
       "practiceLocked": "Practice opens when you pay the balance",
       "lockedElsewhereHint": "Your deposit opened part of this {courseLower}. Pay the balance to open the rest.",
-      "openCourse": "Open the {courseLower}"
+      "openCourse": "Open the {courseLower}",
+      "notOpen": "This {courseLower} opens on {date}. Until then you can see the outline and the preview lessons.",
+      "notOpenManual": "This {courseLower} isn’t open yet. Your school will open it; until then you can see the outline and the preview lessons.",
+      "notOpenTitle": "This lesson isn’t open yet",
+      "quizNotOpen": "This quiz opens with the {courseLower}",
+      "practiceNotOpen": "Practice opens with the {courseLower}"
     },
     "video": {
       "simulated": "Practice video",
@@ -281,7 +287,9 @@
       "practiseThese": "Practise these again",
       "again": "New practice set",
       "off": "Practice is switched off for this school."
-    }
+    },
+    "opensOn": "Opens {date}",
+    "notOpenYet": "Not open yet"
   },
   "studio": {
     "navLabel": "Studio",
@@ -353,7 +361,12 @@
       "tagsHint": "Up to 5, separated by commas",
       "cover": "Cover image",
       "coverHint": "JPEG, PNG or WebP, up to 5 MB. Shown at 16:9.",
-      "uploadCover": "Upload cover"
+      "uploadCover": "Upload cover",
+      "period": "Term or semester",
+      "periodHint": "Learners can enrol any time; the lessons open when the term opens. Choose an open {courseLower} for skills that are always available.",
+      "openCourse": "Open {courseLower} (no term)",
+      "lockedByAdmin": "An administrator has locked this {courseLower}.",
+      "openedByAdmin": "An administrator has opened this {courseLower}."
     },
     "pricing": {
       "title": "Pricing and access",
@@ -595,7 +608,8 @@
       "instructors": "{instructors}",
       "orders": "Orders & payments",
       "payouts": "Earnings & payouts",
-      "payments": "Payment account"
+      "payments": "Payment account",
+      "periods": "Terms & semesters"
     },
     "title": "Overview",
     "queues": {
@@ -658,7 +672,18 @@
       "reason": "Reason",
       "by": "by {name}",
       "empty": "No {coursesLower} yet.",
-      "access": "Access"
+      "access": "Access",
+      "period": "Term",
+      "openCourse": "Open course (no term)",
+      "override": "Access",
+      "overrides": {
+        "FOLLOW": "Follow the term",
+        "OPEN": "Open now",
+        "LOCKED": "Locked"
+      },
+      "opensOn": "Opens {date}",
+      "notOpen": "Locked",
+      "savePeriod": "Save"
     },
     "enrollments": {
       "title": "Access to {course}",
@@ -684,6 +709,41 @@
         "PURCHASE": "Purchase",
         "ADMIN_GRANT": "Given by an administrator"
       }
+    },
+    "periods": {
+      "title": "Terms & semesters",
+      "intro": "Arrange {coursesLower} into terms, semesters or seminars. Learners can enrol any time; lessons open when the term opens. {courses} without a term are open all the time.",
+      "add": "Add term",
+      "name": "Name",
+      "namePlaceholder": "Term 1 2027",
+      "kind": "Type",
+      "kinds": {
+        "TERM": "Term",
+        "SEMESTER": "Semester",
+        "SEMINAR": "Seminar"
+      },
+      "startsOn": "Opens on",
+      "endsOn": "Ends on (optional)",
+      "endsHint": "Shown to learners. {courses} stay open after the end date.",
+      "dates": "{start} – {end}",
+      "from": "From {start}",
+      "open": "Open",
+      "locked": "Locked",
+      "opensOn": "Opens {date}",
+      "modes": {
+        "AUTO": "Follow dates",
+        "OPEN": "Open now",
+        "LOCKED": "Keep locked"
+      },
+      "modeLabel": "Opening",
+      "courseCount": "{count, plural, =0 {No {coursesLower}} one {# {courseLower}} other {# {coursesLower}}}",
+      "archive": "Archive",
+      "restore": "Restore",
+      "archived": "Archived",
+      "empty": "No terms yet. All {coursesLower} are open.",
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel"
     }
   },
   "console": {
@@ -914,7 +974,12 @@
       "ALL_LEVELS": "All levels"
     },
     "noCover": "No cover image",
-    "by": "by {name}"
+    "by": "by {name}",
+    "period": "Term",
+    "anyPeriod": "Any term",
+    "openCourses": "Open {coursesLower} (no term)",
+    "opensOn": "Opens {date}",
+    "notOpen": "Not open yet"
   },
   "course": {
     "whatYouLearn": "What you’ll learn",
@@ -959,7 +1024,9 @@
     },
     "previewTitle": "Preview: {title}",
     "previewLink": "Preview {title}",
-    "previewCta": "Enrol to open every lesson"
+    "previewCta": "Enrol to open every lesson",
+    "lockNotice": "Part of {period}. You can enrol now; the lessons open on {date}.",
+    "lockNoticeManual": "This {courseLower} isn’t open yet. You can enrol now; the school will open it."
   },
   "teach": {
     "title": "Become a {instructorLower}",

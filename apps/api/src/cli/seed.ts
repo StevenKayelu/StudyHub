@@ -204,7 +204,7 @@ const doc = (...paragraphs: string[]) => ({
   content: paragraphs.map((text) => ({ type: 'paragraph', content: [{ type: 'text', text }] })),
 });
 
-/** Demo catalogue for Acme: categories, the tutor's approved profile and two published free courses. */
+/** Demo catalogue for Acme: categories, the tutor's approved profile and its published courses. */
 const DEMO_CATALOGUE = {
   categories: [
     {
@@ -279,8 +279,49 @@ const DEMO_CATALOGUE = {
       ),
       sections: [{ title: 'Describing data', lessons: ['Averages', 'Spread'] }],
     },
+    {
+      id: '0d6c2b1e-0000-4000-8000-0000000cc004',
+      slug: 'chemistry-semester-two',
+      title: 'Chemistry for semester two',
+      subtitle: 'Atoms, reactions and the periodic table',
+      subjectId: '0d6c2b1e-0000-4000-8000-0000000cb002',
+      level: 'BEGINNER',
+      tags: ['atoms', 'reactions'],
+      outcomes: ['Describe the structure of an atom', 'Balance simple equations', 'Use the periodic table'],
+      description: doc(
+        'A first chemistry course for the second semester. Learners can enrol now; the lessons open ' +
+          'when the semester starts.',
+        'It is a demo of course periods: an administrator can open it early in Terms & semesters.',
+      ),
+      sections: [{ title: 'Atoms', lessons: ['What is an atom?', 'The periodic table'] }],
+    },
   ],
 } as const;
+
+/**
+ * Course periods (docs/design/course-periods.md): a term already open, holding Biology foundations, and
+ * an upcoming semester an administrator can put courses into to see them locked. Other courses are open.
+ */
+const DEMO_PERIODS = [
+  {
+    id: '0d6c2b1e-0000-4000-8000-0000000c9001',
+    name: 'Term 1',
+    kind: 'TERM',
+    startsInDays: -30,
+    endsInDays: 60,
+  },
+  {
+    id: '0d6c2b1e-0000-4000-8000-0000000c9002',
+    name: 'Semester 2',
+    kind: 'SEMESTER',
+    startsInDays: 90,
+    endsInDays: 210,
+  },
+] as const;
+const DEMO_COURSE_PERIODS: Readonly<Record<string, string>> = {
+  'biology-foundations': '0d6c2b1e-0000-4000-8000-0000000c9001',
+  'chemistry-semester-two': '0d6c2b1e-0000-4000-8000-0000000c9002',
+};
 
 /** M8: paid demo course prices (minor units); every other demo course is free. */
 const DEMO_PRICES: Readonly<Record<string, number>> = { 'statistics-in-practice': 25_000 };
@@ -320,6 +361,15 @@ async function seedCatalogue(client: Client, tenantId: string): Promise<void> {
         );
       }
     }
+    for (const [position, period] of DEMO_PERIODS.entries()) {
+      await client.query(
+        `INSERT INTO academic_period (id, tenant_id, name, kind, starts_at, ends_at, position)
+         VALUES ($1, $2, $3, $4::"PeriodKind", date_trunc('day', now()) + make_interval(days => $5),
+                 date_trunc('day', now()) + make_interval(days => $6), $7)
+         ON CONFLICT DO NOTHING`,
+        [period.id, tenantId, period.name, period.kind, period.startsInDays, period.endsInDays, position],
+      );
+    }
     for (const course of DEMO_CATALOGUE.courses) {
       const inserted = await client.query(
         `INSERT INTO course (id, tenant_id, owner_membership_id, subject_id, slug, title, subtitle, description_json,
@@ -343,6 +393,10 @@ async function seedCatalogue(client: Client, tenantId: string): Promise<void> {
         ],
       );
       if (inserted.rowCount === 0) continue; // already seeded: leave any local edits alone
+      const periodId = DEMO_COURSE_PERIODS[course.slug];
+      if (periodId !== undefined) {
+        await client.query('UPDATE course SET period_id = $2 WHERE id = $1', [course.id, periodId]);
+      }
       for (const [sectionIndex, section] of course.sections.entries()) {
         const created = await client.query<{ id: string }>(
           'INSERT INTO section (tenant_id, course_id, title, position) VALUES ($1, $2, $3, $4) RETURNING id',

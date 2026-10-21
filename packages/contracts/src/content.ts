@@ -86,6 +86,90 @@ export const updateCategorySchema = z.object({
   archived: z.boolean().optional(),
 });
 
+// --- Course periods: terms, semesters, seminars (docs/design/course-periods.md) ---------------------
+
+export const periodKindSchema = z.enum(['TERM', 'SEMESTER', 'SEMINAR']);
+/** AUTO opens the period at `startsAt`; OPEN and LOCKED are an administrator's manual switch. */
+export const periodModeSchema = z.enum(['AUTO', 'OPEN', 'LOCKED']);
+/** An administrator's opening or lock of one course; wins over its period. */
+export const courseAccessOverrideSchema = z.enum(['OPEN', 'LOCKED']);
+
+/** Why a course's content is closed now; `opensAt` null: when an administrator opens it. */
+export const courseLockSchema = z.object({
+  periodName: z.string().nullable(),
+  opensAt: z.iso.datetime().nullable(),
+});
+
+/** A course's period as learners see it (null: an open course). */
+export const coursePeriodRefSchema = z.object({ id: z.uuid(), name: z.string(), kind: periodKindSchema });
+
+/** GET /periods: the school's current periods, for the catalogue filter and the Studio picker. */
+export const periodListSchema = z.object({
+  periods: z.array(
+    coursePeriodRefSchema.extend({
+      startsAt: z.iso.datetime(),
+      endsAt: z.iso.datetime().nullable(),
+      /** Its courses are open now (unless a course is locked on its own). */
+      open: z.boolean(),
+    }),
+  ),
+});
+
+/** GET /admin/periods: every period, archived ones too. */
+export const adminPeriodListSchema = z.object({
+  periods: z.array(
+    coursePeriodRefSchema.extend({
+      startsAt: z.iso.datetime(),
+      endsAt: z.iso.datetime().nullable(),
+      mode: periodModeSchema,
+      open: z.boolean(),
+      archived: z.boolean(),
+      courseCount: z.number().int(),
+    }),
+  ),
+});
+
+const periodFields = {
+  name: z.string().trim().min(1).max(80),
+  kind: periodKindSchema,
+  startsAt: z.iso.datetime({ offset: true }),
+  endsAt: z.iso.datetime({ offset: true }).nullable(),
+};
+const endsAfterStart = (p: { startsAt?: string | undefined; endsAt?: string | null | undefined }) =>
+  p.startsAt === undefined ||
+  p.endsAt === undefined ||
+  p.endsAt === null ||
+  new Date(p.endsAt) > new Date(p.startsAt);
+const endsAfterStartIssue = { message: 'End after the start', path: ['endsAt'] };
+
+export const createPeriodSchema = z
+  .object({ ...periodFields, endsAt: periodFields.endsAt.optional(), mode: periodModeSchema.optional() })
+  .refine(endsAfterStart, endsAfterStartIssue);
+export const updatePeriodSchema = z
+  .object({
+    name: periodFields.name.optional(),
+    kind: periodKindSchema.optional(),
+    startsAt: periodFields.startsAt.optional(),
+    endsAt: periodFields.endsAt.optional(),
+    mode: periodModeSchema.optional(),
+    archived: z.boolean().optional(),
+  })
+  .refine(endsAfterStart, endsAfterStartIssue);
+
+/** PATCH /admin/courses/{id}/period: an administrator moves a course or opens/locks it. */
+export const adminCoursePeriodSchema = z.object({
+  /** null: an open course. */
+  periodId: z.uuid().nullable().optional(),
+  /** null: follow the period. */
+  accessOverride: courseAccessOverrideSchema.nullable().optional(),
+});
+
+export type CourseLock = z.infer<typeof courseLockSchema>;
+export type PeriodList = z.infer<typeof periodListSchema>;
+export type AdminPeriodList = z.infer<typeof adminPeriodListSchema>;
+export type PeriodKind = z.infer<typeof periodKindSchema>;
+export type PeriodMode = z.infer<typeof periodModeSchema>;
+
 // --- Instructors (F06, F07) ----------------------------------------------------------------------------
 
 export const instructorStatusSchema = z.enum([
@@ -182,6 +266,8 @@ export const updateCourseSchema = z.object({
   accessDays: z.number().int().min(1).max(3650).nullable().optional(),
   /** null removes the plan. */
   depositPlan: depositPlanSchema.nullable().optional(),
+  /** The course's term, semester or seminar; null: an open course. */
+  periodId: z.uuid().nullable().optional(),
 });
 
 export const lessonSummarySchema = z.object({
@@ -278,6 +364,11 @@ export const studioCourseSchema = z.object({
   depositPlan: depositPlanSchema.nullable(),
   /** The school's rules for deposit plans (the pricing form's limits). */
   depositRules: depositPlanRulesSchema,
+  periodId: z.uuid().nullable(),
+  /** Set by an administrator; wins over the period. */
+  accessOverride: courseAccessOverrideSchema.nullable(),
+  /** The course's content is closed to learners now. */
+  lock: courseLockSchema.nullable(),
   status: courseStatusSchema,
   version: z.number(),
   publishedAt: z.iso.datetime().nullable(),
@@ -330,6 +421,9 @@ export const adminCourseListSchema = z.object({
       status: courseStatusSchema,
       updatedAt: z.iso.datetime(),
       instructorName: z.string(),
+      period: coursePeriodRefSchema.nullable(),
+      accessOverride: courseAccessOverrideSchema.nullable(),
+      lock: courseLockSchema.nullable(),
     }),
   ),
 });
@@ -342,6 +436,8 @@ export const catalogueQuerySchema = z.object({
   subject: z.string().max(80).optional(),
   level: courseLevelSchema.optional(),
   price: z.enum(['free', 'paid']).optional(),
+  /** A period's id, or `open` for courses without one. */
+  period: z.union([z.literal('open'), z.uuid()]).optional(),
   sort: z.enum(['relevance', 'newest', 'popular']).optional(),
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(48).optional(),
@@ -359,6 +455,9 @@ export const courseCardSchema = z.object({
   durationSeconds: z.number(),
   instructor: z.object({ name: z.string(), slug: z.string().nullable() }),
   subject: z.object({ slug: z.string(), name: z.string() }).nullable(),
+  period: coursePeriodRefSchema.nullable(),
+  /** Visible and open to enrolment, but its content is closed until then. */
+  lock: courseLockSchema.nullable(),
 });
 
 export const catalogueResponseSchema = z.object({

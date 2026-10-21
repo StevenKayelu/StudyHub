@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { lessonTypeSchema } from './content';
+import { courseLockSchema, lessonTypeSchema } from './content';
 import { emailSchema } from './identity';
 
 /**
@@ -41,6 +41,8 @@ export const playerCourseSchema = z.object({
   access: learnAccessSchema.exclude(['PREVIEW']),
   /** The school is suspended (BR-52): content is readable, nothing is saved. */
   readOnly: z.boolean(),
+  /** For an enrolled learner: the course's term hasn't opened, so only previews are open. */
+  lock: courseLockSchema.nullable(),
   enrollment: z
     .object({
       id: z.uuid(),
@@ -70,7 +72,7 @@ export const playerCourseSchema = z.object({
           durationSeconds: z.number().nullable(),
           isPreview: z.boolean(),
           isRequired: z.boolean(),
-          /** Beyond what the deposit opened: the balance must be paid first. */
+          /** Before the course opens (`lock`), or beyond what the deposit opened (balance first). */
           locked: z.boolean(),
           ...lessonStateFields,
         }),
@@ -163,6 +165,8 @@ export const myLearningSchema = z.object({
         coverUrl: z.string().nullable(),
         instructorName: z.string(),
       }),
+      /** The course's term hasn't opened yet. */
+      lock: courseLockSchema.nullable(),
       resume: z
         .object({ lessonId: z.uuid(), lessonTitle: z.string(), positionSeconds: z.number() })
         .nullable(),

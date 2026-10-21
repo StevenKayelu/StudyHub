@@ -1,6 +1,6 @@
 'use client';
 
-import type { CategoryTree, StudioCourse } from '@studyhub/contracts';
+import type { CategoryTree, PeriodList, StudioCourse } from '@studyhub/contracts';
 import { Alert, Button, TextArea, TextField } from '@studyhub/ui';
 import type { JSONContent } from '@tiptap/react';
 import { useRouter } from 'next/navigation';
@@ -25,11 +25,14 @@ const selectClasses = 'h-11 rounded-md border border-strong bg-surface px-3 text
 export function CourseDetailsForm({
   course,
   categories,
+  periods,
   editable,
   texts,
 }: {
   course: StudioCourse;
   categories: CategoryTree['categories'];
+  /** The school's current terms and semesters (docs/design/course-periods.md). */
+  periods: PeriodList['periods'];
   editable: boolean;
   texts: StudioTexts;
 }) {
@@ -71,6 +74,10 @@ export function CourseDetailsForm({
             requirements: lines(text(data, 'requirements')),
             level: text(data, 'level'),
             subjectId: text(data, 'subjectId') === '' ? null : text(data, 'subjectId'),
+            // Sent only when changed, so a course in an archived term keeps it.
+            ...(text(data, 'periodId') !== (course.periodId ?? '') && {
+              periodId: text(data, 'periodId') === '' ? null : text(data, 'periodId'),
+            }),
             tags: text(data, 'tags')
               .split(',')
               .map((tag) => tag.trim().toLowerCase())
@@ -190,6 +197,40 @@ export function CourseDetailsForm({
             ) : null}
           </label>
         </div>
+        {periods.length > 0 || course.periodId !== null ? (
+          <label className="flex flex-col gap-1 text-label text-ink">
+            {d.period}
+            <select
+              id="periodId"
+              name="periodId"
+              defaultValue={course.periodId ?? ''}
+              aria-describedby="periodId-hint"
+              className={selectClasses}
+            >
+              <option value="">{d.openCourse}</option>
+              {periods.map((period) => (
+                <option key={period.id} value={period.id}>
+                  {period.name}
+                </option>
+              ))}
+              {course.periodId !== null && !periods.some((period) => period.id === course.periodId) ? (
+                <option value={course.periodId}>
+                  {course.lock?.periodName ?? texts.admin.periods.archived}
+                </option>
+              ) : null}
+            </select>
+            <span id="periodId-hint" className="text-body-sm font-normal text-muted">
+              {course.accessOverride === 'LOCKED'
+                ? d.lockedByAdmin
+                : course.accessOverride === 'OPEN'
+                  ? d.openedByAdmin
+                  : d.periodHint}
+            </span>
+            {form.fieldError('periodId') !== undefined ? (
+              <span className="text-body-sm font-normal text-danger">{form.fieldError('periodId')}</span>
+            ) : null}
+          </label>
+        ) : null}
         <TextField
           id="tags"
           name="tags"

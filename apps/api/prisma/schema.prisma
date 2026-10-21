@@ -677,6 +677,44 @@ model InstructorProfile {
   @@map("instructor_profile")
 }
 
+enum PeriodKind {
+  TERM
+  SEMESTER
+  SEMINAR
+}
+
+enum PeriodMode {
+  AUTO
+  OPEN
+  LOCKED
+}
+
+enum CourseAccessOverride {
+  OPEN
+  LOCKED
+}
+
+/// A term, semester or seminar (docs/design/course-periods.md). AUTO opens it at starts_at.
+model AcademicPeriod {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String     @map("tenant_id") @db.Uuid
+  name       String
+  kind       PeriodKind @default(TERM)
+  startsAt   DateTime   @map("starts_at") @db.Timestamptz(3)
+  endsAt     DateTime?  @map("ends_at") @db.Timestamptz(3)
+  mode       PeriodMode @default(AUTO)
+  position   Int        @default(0)
+  archivedAt DateTime?  @map("archived_at") @db.Timestamptz(3)
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime   @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  courses Course[]
+
+  @@unique([tenantId, id], map: "academic_period_tenant_id_id_key")
+  @@index([tenantId, startsAt], map: "academic_period_tenant_starts_idx")
+  @@map("academic_period")
+}
+
 model Course {
   id                String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId          String                   @map("tenant_id") @db.Uuid
@@ -700,6 +738,10 @@ model Course {
   depositMinor      BigInt?                  @map("deposit_minor")
   depositLessonPct  Int?                     @map("deposit_lesson_pct") @db.SmallInt
   balanceDueDays    Int?                     @map("balance_due_days")
+  /// Course periods (docs/design/course-periods.md): null = an open course.
+  periodId          String?                  @map("period_id") @db.Uuid
+  /// An administrator's lock or opening of this course; wins over the period.
+  accessOverride    CourseAccessOverride?    @map("access_override")
   status            CourseStatus             @default(DRAFT)
   firstPublishedAt  DateTime?                @map("first_published_at") @db.Timestamptz(3)
   publishedAt       DateTime?                @map("published_at") @db.Timestamptz(3)
@@ -711,6 +753,7 @@ model Course {
   searchVector      Unsupported("tsvector")? @map("search_vector")
 
   subject     Subject?           @relation(fields: [tenantId, subjectId], references: [tenantId, id], onDelete: Restrict)
+  period      AcademicPeriod?    @relation(fields: [tenantId, periodId], references: [tenantId, id], onDelete: Restrict)
   sections    Section[]
   lessons     Lesson[]
   submissions CourseSubmission[]
@@ -723,6 +766,7 @@ model Course {
   @@unique([tenantId, slug], map: "course_tenant_slug_key")
   @@unique([tenantId, id], map: "course_tenant_id_id_key")
   @@index([tenantId, ownerMembershipId, status], map: "course_tenant_owner_status_idx")
+  @@index([tenantId, periodId], map: "course_tenant_period_idx")
   @@map("course")
 }
 

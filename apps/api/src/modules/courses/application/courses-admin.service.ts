@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { ReviewQueue } from '@studyhub/contracts';
 
 import { can, type TenantActor } from '../../identity';
+import { courseLock, lockView } from '../../learning';
 import { AppError, TenantDb } from '../../platform';
 import { nextStatus } from '../domain/course-rules';
 import { StudioService } from './studio.service';
@@ -86,8 +87,18 @@ export class CoursesAdminService {
         where: status === undefined ? {} : { status: status as never },
         orderBy: { updatedAt: 'desc' },
         take: 200,
-        select: { id: true, slug: true, title: true, status: true, updatedAt: true, ownerMembershipId: true },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          status: true,
+          updatedAt: true,
+          ownerMembershipId: true,
+          accessOverride: true,
+          period: { select: { id: true, name: true, kind: true, startsAt: true, mode: true } },
+        },
       });
+      const now = new Date();
       const owners = await tx.instructorProfile.findMany({
         where: { membershipId: { in: rows.map((r) => r.ownerMembershipId) } },
         select: { membershipId: true, displayName: true },
@@ -100,6 +111,9 @@ export class CoursesAdminService {
           status: r.status,
           updatedAt: r.updatedAt.toISOString(),
           instructorName: owners.find((o) => o.membershipId === r.ownerMembershipId)?.displayName ?? '',
+          period: r.period === null ? null : { id: r.period.id, name: r.period.name, kind: r.period.kind },
+          accessOverride: r.accessOverride,
+          lock: lockView(courseLock(r.period, r.accessOverride, now)),
         })),
       };
     });

@@ -1,4 +1,9 @@
-import { catalogueQuerySchema, catalogueResponseSchema, categoryTreeSchema } from '@studyhub/contracts';
+import {
+  catalogueQuerySchema,
+  catalogueResponseSchema,
+  categoryTreeSchema,
+  periodListSchema,
+} from '@studyhub/contracts';
 import { buttonClasses, StatePanel } from '@studyhub/ui';
 import type { Metadata } from 'next';
 import NextLink from 'next/link';
@@ -27,9 +32,9 @@ function filtersFrom(raw: Record<string, string | string[] | undefined>): Record
   );
   const parsed = catalogueQuerySchema.safeParse(flat);
   if (!parsed.success) return {};
-  const { q, subject, level, price, sort, cursor } = parsed.data;
+  const { q, subject, level, price, period, sort, cursor } = parsed.data;
   return Object.fromEntries(
-    Object.entries({ q, subject, level, price, sort, cursor }).filter(
+    Object.entries({ q, subject, level, price, period, sort, cursor }).filter(
       (entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1] !== '',
     ),
   );
@@ -50,13 +55,15 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
   const filters = filtersFrom(await searchParams);
   const { cursor, ...withoutCursor } = filters;
   const { q, ...keptOnSearch } = withoutCursor;
-  const [result, tree] = await Promise.all([
+  const [result, tree, periodList] = await Promise.all([
     fetchContent(
       `/api/v1/courses?${new URLSearchParams({ ...filters, limit: String(PAGE_SIZE) }).toString()}`,
       catalogueResponseSchema,
     ),
     fetchContent('/api/v1/categories', categoryTreeSchema),
+    fetchContent('/api/v1/periods', periodListSchema),
   ]);
+  const periods = periodList?.periods ?? [];
   const items = result?.items ?? [];
   const filtered = Object.keys(withoutCursor).length > 0;
   const nextCursor = result?.page.hasMore === true ? result.page.nextCursor : null;
@@ -79,7 +86,9 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
           aria-label={t('catalogue.filters')}
         >
           {q !== undefined ? <input type="hidden" name="q" value={q} /> : null}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div
+            className={`grid gap-3 sm:grid-cols-2 ${periods.length > 0 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}
+          >
             <label className="flex flex-col gap-1 text-label text-ink">
               {t('catalogue.subject')}
               <select name="subject" defaultValue={filters.subject ?? ''} className={selectClasses}>
@@ -95,6 +104,20 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
                 ))}
               </select>
             </label>
+            {periods.length > 0 ? (
+              <label className="flex flex-col gap-1 text-label text-ink">
+                {t('catalogue.period')}
+                <select name="period" defaultValue={filters.period ?? ''} className={selectClasses}>
+                  <option value="">{t('catalogue.anyPeriod')}</option>
+                  {periods.map((period) => (
+                    <option key={period.id} value={period.id}>
+                      {period.name}
+                    </option>
+                  ))}
+                  <option value="open">{t('catalogue.openCourses', terms)}</option>
+                </select>
+              </label>
+            ) : null}
             <label className="flex flex-col gap-1 text-label text-ink">
               {t('catalogue.level')}
               <select name="level" defaultValue={filters.level ?? ''} className={selectClasses}>

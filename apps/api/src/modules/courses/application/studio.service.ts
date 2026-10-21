@@ -13,6 +13,7 @@ import { Prisma } from '../../../generated/prisma/client';
 import { AuditService } from '../../audit';
 import { type DepositPlanInput, depositPlanProblems, paymentsProblem } from '../../commerce';
 import type { TenantActor } from '../../identity';
+import { lockView, readCourseLock } from '../../learning';
 import {
   AppError,
   requireTenantId,
@@ -32,6 +33,7 @@ import {
   slugify,
 } from '../domain/course-rules';
 import { InstructorsService } from './instructors.service';
+import { requirePeriod } from './periods.service';
 
 const COVER_URL_SECONDS = 3600;
 /** Reading speed for the estimated duration of text lessons. */
@@ -125,7 +127,8 @@ export class StudioService {
         select: { notes: true },
       });
       const { depositPlans } = await readCommerceSettings(tx);
-      return { ...found, reviewNote: note?.notes ?? null, depositRules: depositPlans };
+      const lock = await readCourseLock(tx, courseId);
+      return { ...found, reviewNote: note?.notes ?? null, depositRules: depositPlans, lock };
     });
     const covers = await this.coverUrls([course.coverAssetId]);
     return {
@@ -147,6 +150,9 @@ export class StudioService {
       accessDays: course.accessDays,
       depositPlan: storedDepositPlan(course),
       depositRules: course.depositRules,
+      periodId: course.periodId,
+      accessOverride: course.accessOverride,
+      lock: lockView(course.lock),
       status: course.status,
       version: course.version,
       publishedAt: course.publishedAt?.toISOString() ?? null,
@@ -173,6 +179,7 @@ export class StudioService {
       priceMinor?: number | undefined;
       accessDays?: number | null | undefined;
       depositPlan?: DepositPlanInput | null | undefined;
+      periodId?: string | null | undefined;
     },
   ): Promise<StudioCourse> {
     await this.db.run(async (tx) => {
@@ -187,6 +194,10 @@ export class StudioService {
         await this.requireAssets(tx, richTextAssetIds(input.description), { kind: 'IMAGE', readyOnly: true });
       }
       await this.checkDepositPlan(tx, course, input);
+      // Keeping an archived period is fine; choosing one needs a current period of this school.
+      if (input.periodId !== undefined && input.periodId !== null && input.periodId !== course.periodId) {
+        await requirePeriod(tx, input.periodId);
+      }
       const neverPublished = course.firstPublishedAt === null;
       await tx.course.update({
         where: { id: courseId },
@@ -210,6 +221,7 @@ export class StudioService {
           ...(input.language !== undefined && { language: input.language }),
           ...(input.tags !== undefined && { tags: [...new Set(input.tags)] }),
           ...(input.subjectId !== undefined && { subjectId: input.subjectId }),
+          ...(input.periodId !== undefined && { periodId: input.periodId }),
           ...(input.coverAssetId !== undefined && { coverAssetId: input.coverAssetId }),
           // A price change applies to new orders only (F12): orders snapshot the price (BR-08).
           ...(input.priceMinor !== undefined && { priceMinor: BigInt(input.priceMinor) }),

@@ -56,10 +56,15 @@ export default async function CourseLandingPage({ params }: { params: Params }) 
       <article className="grid gap-8 py-4 lg:grid-cols-[1fr_20rem]">
         <div className="flex flex-col gap-6">
           <header className="flex flex-col gap-2">
-            {course.subject !== null ? (
-              <NextLink href={`/browse?subject=${course.subject.slug}`} className="text-label">
-                {course.subject.name}
-              </NextLink>
+            {course.subject !== null || course.period !== null ? (
+              <p className="flex flex-wrap gap-x-3 text-label">
+                {course.subject !== null ? (
+                  <NextLink href={`/browse?subject=${course.subject.slug}`}>{course.subject.name}</NextLink>
+                ) : null}
+                {course.period !== null ? (
+                  <NextLink href={`/browse?period=${course.period.id}`}>{course.period.name}</NextLink>
+                ) : null}
+              </p>
             ) : null}
             <h1 className="text-h1">{course.title}</h1>
             {course.subtitle !== null ? <p className="text-body-lg text-muted">{course.subtitle}</p> : null}
@@ -202,6 +207,18 @@ export default async function CourseLandingPage({ params }: { params: Params }) 
             <p className="tabular text-h2" data-testid="course-price">
               {await formatPrice(course.priceMinor, course.currency)}
             </p>
+            {course.lock !== null ? (
+              <p className="text-body-sm text-muted" data-testid="course-lock">
+                {course.lock.opensAt === null || course.lock.periodName === null
+                  ? t('course.lockNoticeManual', terms)
+                  : t('course.lockNotice', {
+                      period: course.lock.periodName,
+                      date: (await getFormatter()).dateTime(new Date(course.lock.opensAt), {
+                        dateStyle: 'long',
+                      }),
+                    })}
+              </p>
+            ) : null}
             <CourseAction
               course={{ id: course.id, slug: course.slug, priceMinor: course.priceMinor }}
               viewer={course.viewer}

@@ -1,9 +1,23 @@
 import { Injectable } from '@nestjs/common';
-import type { CatalogueResponse, CourseCard, CourseLanding, InstructorPage } from '@studyhub/contracts';
+import type {
+  CatalogueResponse,
+  CourseCard,
+  CourseLanding,
+  InstructorPage,
+  PeriodKind,
+} from '@studyhub/contracts';
+
+import { Prisma } from '../../../generated/prisma/client';
 
 import { paymentsProblem, planOffered } from '../../commerce';
 import type { TenantActor } from '../../identity';
-import { EnrollmentsService } from '../../learning';
+import {
+  type AccessOverride,
+  courseLock,
+  EnrollmentsService,
+  lockView,
+  type PeriodMode,
+} from '../../learning';
 import { AppError, TenantDb, type TenantTx } from '../../platform';
 import { readCommerceSettings, readContentSettings, readFeatures } from '../../tenancy';
 import { StudioService } from './studio.service';
@@ -25,7 +39,17 @@ interface CardRow {
   instructor_slug: string | null;
   subject_slug: string | null;
   subject_name: string | null;
+  period_id: string | null;
+  period_name: string | null;
+  period_kind: PeriodKind | null;
+  period_starts_at: Date | null;
+  period_mode: PeriodMode | null;
+  access_override: AccessOverride | null;
 }
+
+/** The period columns every card query selects (`pd` is academic_period). */
+const PERIOD_COLUMNS = Prisma.sql`pd.id AS period_id, pd.name AS period_name, pd.kind AS period_kind,
+       pd.starts_at AS period_starts_at, pd.mode AS period_mode, c.access_override`;
 
 /**
  * The school's public catalogue (F13, BR-26, BR-28, BR-57). Only PUBLISHED courses whose instructor is
@@ -48,6 +72,7 @@ export class CatalogueService {
       subject?: string | undefined;
       level?: string | undefined;
       price?: 'free' | 'paid' | undefined;
+      period?: string | undefined;
       sort?: 'relevance' | 'newest' | 'popular' | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
@@ -64,7 +89,7 @@ export class CatalogueService {
                (SELECT count(*)::int FROM lesson l WHERE l.course_id = c.id) AS lesson_count,
                (SELECT coalesce(sum(l.duration_seconds), 0)::int FROM lesson l WHERE l.course_id = c.id) AS duration_seconds,
                p.display_name AS instructor_name, p.slug AS instructor_slug,
-               s.slug AS subject_slug, s.name AS subject_name,
+               s.slug AS subject_slug, s.name AS subject_name, ${PERIOD_COLUMNS},
                CASE WHEN ${q} = '' THEN 0::real
                     ELSE ts_rank(c.search_vector, websearch_to_tsquery('simple'::regconfig, ${q}))
                          + ext.similarity(c.title, ${q}) END AS rank
@@ -72,6 +97,7 @@ export class CatalogueService {
           LEFT JOIN instructor_profile p ON p.membership_id = c.owner_membership_id
           LEFT JOIN subject s ON s.id = c.subject_id
           LEFT JOIN category k ON k.id = s.category_id
+          LEFT JOIN academic_period pd ON pd.id = c.period_id
          WHERE c.status = 'PUBLISHED'
            AND coalesce(p.status::text, 'APPROVED') <> 'SUSPENDED'
            AND (${q} = '' OR c.search_vector @@ websearch_to_tsquery('simple'::regconfig, ${q})
@@ -82,6 +108,9 @@ export class CatalogueService {
            AND (${query.price ?? null}::text IS NULL
                 OR (${query.price ?? null} = 'free' AND c.price_minor = 0)
                 OR (${query.price ?? null} = 'paid' AND c.price_minor > 0))
+           AND (${query.period ?? null}::text IS NULL
+                OR (${query.period ?? null} = 'open' AND c.period_id IS NULL)
+                OR c.period_id::text = ${query.period ?? null})
          ORDER BY
            CASE WHEN ${sort} = 'relevance' THEN 0 ELSE 1 END,
            CASE WHEN ${sort} = 'relevance' THEN -(CASE WHEN ${q} = '' THEN 0::real
@@ -107,6 +136,7 @@ export class CatalogueService {
         where: { slug, status: 'PUBLISHED' },
         include: {
           subject: { select: { slug: true, name: true } },
+          period: { select: { id: true, name: true, kind: true, startsAt: true, mode: true } },
           sections: {
             orderBy: { position: 'asc' },
             select: {
@@ -173,6 +203,7 @@ export class CatalogueService {
       durationSeconds: lessons.reduce((total, l) => total + (l.durationSeconds ?? 0), 0),
       instructor: { name: profile?.displayName ?? '', slug: profile?.slug ?? null },
       subject: course.subject === null ? null : { slug: course.subject.slug, name: course.subject.name },
+      ...periodView(course.period, course.accessOverride, new Date()),
       description: course.descriptionJson,
       outcomes: course.outcomes,
       requirements: course.requirements,
@@ -202,8 +233,9 @@ export class CatalogueService {
                (SELECT count(*)::int FROM lesson l WHERE l.course_id = c.id) AS lesson_count,
                (SELECT coalesce(sum(l.duration_seconds), 0)::int FROM lesson l WHERE l.course_id = c.id) AS duration_seconds,
                ${profile.displayName}::text AS instructor_name, ${profile.slug}::text AS instructor_slug,
-               s.slug AS subject_slug, s.name AS subject_name
+               s.slug AS subject_slug, s.name AS subject_name, ${PERIOD_COLUMNS}
           FROM course c LEFT JOIN subject s ON s.id = c.subject_id
+          LEFT JOIN academic_period pd ON pd.id = c.period_id
          WHERE c.status = 'PUBLISHED' AND c.owner_membership_id = ${profile.membershipId}::uuid
          ORDER BY c.published_at DESC`,
     );
@@ -217,6 +249,11 @@ export class CatalogueService {
     };
   }
 
+  /** BR-57 for routes outside this service (the period list). */
+  async requireCatalogue(actor: TenantActor | null): Promise<void> {
+    await this.db.run((tx) => this.requireVisible(tx, actor));
+  }
+
   /** BR-57: a members-only catalogue needs a signed-in member of this school. */
   private async requireVisible(tx: TenantTx, actor: TenantActor | null): Promise<void> {
     if (actor !== null) return;
@@ -228,6 +265,7 @@ export class CatalogueService {
 
   private async cards(rows: CardRow[]): Promise<CourseCard[]> {
     const covers = await this.studio.coverUrls(rows.map((r) => r.cover_asset_id));
+    const now = new Date();
     return rows.map((r) => ({
       slug: r.slug,
       title: r.title,
@@ -240,8 +278,33 @@ export class CatalogueService {
       durationSeconds: r.duration_seconds,
       instructor: { name: r.instructor_name ?? '', slug: r.instructor_slug },
       subject: r.subject_slug === null ? null : { slug: r.subject_slug, name: r.subject_name ?? '' },
+      ...periodView(
+        r.period_id === null || r.period_name === null || r.period_kind === null
+          ? null
+          : {
+              id: r.period_id,
+              name: r.period_name,
+              kind: r.period_kind,
+              startsAt: r.period_starts_at ?? now,
+              mode: r.period_mode ?? 'AUTO',
+            },
+        r.access_override,
+        now,
+      ),
     }));
   }
+}
+
+/** A course's period and whether its content is closed now (docs/design/course-periods.md). */
+function periodView(
+  period: { id: string; name: string; kind: PeriodKind; startsAt: Date; mode: PeriodMode } | null,
+  override: AccessOverride | null,
+  now: Date,
+): Pick<CourseCard, 'period' | 'lock'> {
+  return {
+    period: period === null ? null : { id: period.id, name: period.name, kind: period.kind },
+    lock: lockView(courseLock(period, override, now)),
+  };
 }
 
 /** Opaque page cursor (an offset; the catalogue is small per school). */

@@ -139,6 +139,18 @@ export const FIXTURES: Readonly<
         ),
       ),
   },
+  academic_period: {
+    granted: true,
+    insert: async (c, tenantId) =>
+      remember(
+        'academic_period',
+        tenantId,
+        await c.query<{ id: string }>(
+          `INSERT INTO academic_period (tenant_id, name, starts_at) VALUES ($1, 'Fixture term', now()) RETURNING id`,
+          [tenantId],
+        ),
+      ),
+  },
   asset: {
     granted: true,
     insert: async (c, tenantId) =>

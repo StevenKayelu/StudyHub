@@ -15,15 +15,17 @@ import type { TenantActor } from '../../identity';
 import { MediaService } from '../../media';
 import { AppError, isSchoolReadOnly, requireTenantId, TenantDb, type TenantTx } from '../../platform';
 import { readContentSettings } from '../../tenancy';
+import { courseLock } from '../domain/period-access';
 import { courseProgress, type LessonProgressStatus, nextLessonState } from '../domain/progress-rules';
 import {
   activeEnrollment,
-  balanceRequired,
   type CourseForAccess,
   type EnrollmentRow,
   grantFor,
   inCatalogue,
+  lessonRefusal,
   lockedLessons,
+  lockView,
   refusal,
 } from './access';
 
@@ -194,6 +196,7 @@ export class LearningService {
         course: { id: course.id, slug: course.slug, title: course.title, status: course.status },
         access: grant.access,
         readOnly: isSchoolReadOnly(),
+        lock: grant.access === 'ENROLLED' ? lockView(grant.lock) : null,
         enrollment:
           grant.enrollment === null
             ? null
@@ -437,7 +440,15 @@ export class LearningService {
           completedAt: true,
           lastLessonId: true,
           course: {
-            select: { id: true, slug: true, title: true, coverAssetId: true, ownerMembershipId: true },
+            select: {
+              id: true,
+              slug: true,
+              title: true,
+              coverAssetId: true,
+              ownerMembershipId: true,
+              accessOverride: true,
+              period: { select: { name: true, startsAt: true, mode: true } },
+            },
           },
         },
       });
@@ -469,6 +480,7 @@ export class LearningService {
       rows.live.flatMap((e) => (e.course.coverAssetId === null ? [] : [e.course.coverAssetId])),
     );
     const names = new Map(rows.profiles.map((p) => [p.membershipId, p.displayName]));
+    const now = new Date();
     return {
       items: rows.live.map((e) => {
         const lessons = rows.lessons.filter((l) => l.courseId === e.course.id);
@@ -489,6 +501,7 @@ export class LearningService {
             coverUrl: e.course.coverAssetId === null ? null : (covers.get(e.course.coverAssetId) ?? null),
             instructorName: names.get(e.course.ownerMembershipId) ?? '',
           },
+          lock: lockView(courseLock(e.course.period, e.course.accessOverride, now)),
           resume:
             resumeLesson === undefined
               ? null
@@ -551,10 +564,8 @@ export class LearningService {
     const course: CourseForAccess & { slug: string; title: string } = lesson.course;
     const grant = await grantFor(tx, actor, course, expired);
     if (grant !== null) {
-      // Beyond what a deposit opened: locked until the balance is paid (no content, video or files).
-      if (grant.enrollment !== null && (await lockedLessons(tx, grant, course.id)).has(lesson.id)) {
-        throw balanceRequired(grant.enrollment, course.id);
-      }
+      // Before the course's period opens, or beyond what a deposit opened: no content, video or files.
+      if ((await lockedLessons(tx, grant, course.id)).has(lesson.id)) throw lessonRefusal(grant, course.id);
       return { lesson, course, access: grant.access, enrollment: grant.enrollment };
     }
     if (lesson.isPreview && (await inCatalogue(tx, actor, course))) {

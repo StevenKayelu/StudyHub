@@ -51,8 +51,19 @@ export default async function PracticeSetupPage({ params }: { params: Promise<{ 
         kind="permission"
         headingLevel={2}
         title={
-          problem.code === 'FEATURE_NOT_ENABLED' ? t('learn.practice.off') : t('course.previewCta', terms)
+          problem.code === 'FEATURE_NOT_ENABLED'
+            ? t('learn.practice.off')
+            : problem.code === 'COURSE_NOT_OPEN'
+              ? t('learn.player.practiceNotOpen', terms)
+              : t('course.previewCta', terms)
         }
+        {...(problem.code === 'COURSE_NOT_OPEN' && {
+          actions: (
+            <NextLink href={`/learn/courses/${courseId}`} className={buttonClasses('primary')}>
+              {t('learn.player.openCourse', terms)}
+            </NextLink>
+          ),
+        })}
       />
     );
   } else {
