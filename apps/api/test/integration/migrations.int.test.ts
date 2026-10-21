@@ -52,6 +52,7 @@ describe('database migrations and roles (PostgreSQL 17)', () => {
       { migration_name: '0012_course_periods', finished: true },
       { migration_name: '0013_single_device_learners', finished: true },
       { migration_name: '0014_content_protection', finished: true },
+      { migration_name: '0015_saas_billing_foundation', finished: true },
     ]);
   });
 

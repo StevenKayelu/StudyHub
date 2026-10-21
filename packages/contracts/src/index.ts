@@ -1,5 +1,6 @@
 export * from './admin';
 export * from './assessment';
+export * from './billing';
 export * from './commerce';
 export * from './configuration';
 export * from './authz-matrix';

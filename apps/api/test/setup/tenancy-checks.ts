@@ -21,6 +21,19 @@ export const GLOBAL_TABLES: Readonly<Record<string, string>> = {
   platform_session: 'console realm; RLS platform_realm',
   platform_audit_log: 'console realm; RLS platform_realm',
   plan: 'plans (M9); readable by every school (plan_read), written in the console realm (platform_realm)',
+  // SaaS billing (docs/design/saas-billing.md): the platform's own records, kept when a school is purged.
+  commercial_plan:
+    'commercial plans; ACTIVE ones readable by schools (published_read), written by the platform',
+  commercial_plan_version:
+    'immutable plan versions; PUBLISHED ones readable by schools (published_read), written by the platform',
+  tenant_contract: 'platform record naming a school by tenant_ref; the school reads its own (school_read)',
+  usage_snapshot: 'platform record naming a school by tenant_ref; the school reads its own (school_read)',
+  saas_invoice: 'platform record naming a school by tenant_ref; the school reads its own (school_read)',
+  saas_invoice_line: 'platform record naming a school by tenant_ref; the school reads its own (school_read)',
+  saas_invoice_sequence: 'platform invoice numbering; platform realm only',
+  platform_ledger_account: 'platform chart of accounts; platform realm only',
+  platform_ledger_journal: 'platform ledger (append-only); platform realm only',
+  platform_ledger_line: 'platform ledger (append-only); platform realm only',
 };
 
 /**
@@ -38,7 +51,35 @@ export const GLOBAL_RLS_TABLES: Readonly<Record<string, string>> = {
   platform_audit_log: 'platform_realm',
   platform_storage_location: 'platform_realm',
   plan: 'platform_realm',
+  commercial_plan: 'platform_realm',
+  commercial_plan_version: 'platform_realm',
+  tenant_contract: 'platform_realm',
+  usage_snapshot: 'platform_realm',
+  saas_invoice: 'platform_realm',
+  saas_invoice_line: 'platform_realm',
+  saas_invoice_sequence: 'platform_realm',
+  platform_ledger_account: 'platform_realm',
+  platform_ledger_journal: 'platform_realm',
+  platform_ledger_line: 'platform_realm',
 };
+
+/**
+ * Platform billing records schools may read (docs/design/saas-billing.md): their school_read policy is a
+ * SELECT keyed on tenant_ref = app.tenant_id, and they carry no personal columns.
+ */
+export const SCHOOL_READABLE_PLATFORM_RECORDS: ReadonlySet<string> = new Set([
+  'tenant_contract',
+  'usage_snapshot',
+  'saas_invoice',
+  'saas_invoice_line',
+]);
+/** Platform-owned billing tables with a platform_realm policy (they hold no school data columns). */
+export const PLATFORM_BILLING_TABLES: ReadonlySet<string> = new Set([
+  'commercial_plan',
+  'commercial_plan_version',
+  'saas_invoice_sequence',
+  ...SCHOOL_READABLE_PLATFORM_RECORDS,
+]);
 
 /** Tables that carry RLS with a non-standard policy instead of tenant_isolation. */
 export const SPECIAL_POLICY_TABLES: Readonly<Record<string, string>> = {
@@ -96,13 +137,13 @@ export async function findPlatformPolicyViolations(client: Client): Promise<stri
   );
   for (const { tablename } of rows) {
     if (tablename.startsWith('platform_') && tablename !== 'platform_statement') continue;
-    if (tablename === 'plan') continue;
+    if (tablename === 'plan' || PLATFORM_BILLING_TABLES.has(tablename)) continue;
     if (!PLATFORM_VISIBLE_TABLES.has(tablename))
       violations.push(tablename + ': platform_realm policy on a table outside the ADR-0020 allowlist');
   }
   const columns = await client.query<{ table_name: string; column_name: string }>(
     "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ANY($1::text[])",
-    [[...PLATFORM_VISIBLE_TABLES]],
+    [[...PLATFORM_VISIBLE_TABLES, ...PLATFORM_BILLING_TABLES]],
   );
   for (const { table_name, column_name } of columns.rows) {
     const key = table_name + '.' + column_name;
@@ -195,6 +236,23 @@ export async function findTenancyViolations(client: Client): Promise<string[]> {
     const expected = GLOBAL_RLS_TABLES[table.table_name]!;
     if (!(table.policies ?? []).includes(expected))
       violations.push(`${table.table_name}: missing ${expected} policy`);
+  }
+
+  // Billing records schools read: a SELECT-only school_read policy keyed on tenant_ref = app.tenant_id.
+  const schoolRead = await client.query<{ tablename: string; cmd: string; qual: string | null }>(
+    `SELECT tablename, cmd, qual FROM pg_policies
+      WHERE schemaname = 'public' AND policyname = 'school_read' AND tablename = ANY($1::text[])`,
+    [[...SCHOOL_READABLE_PLATFORM_RECORDS]],
+  );
+  for (const name of SCHOOL_READABLE_PLATFORM_RECORDS) {
+    const policy = schoolRead.rows.find((row) => row.tablename === name);
+    if (policy === undefined) violations.push(`${name}: missing school_read policy`);
+    else if (
+      policy.cmd !== 'SELECT' ||
+      !/tenant_ref/.test(policy.qual ?? '') ||
+      !/app\.tenant_id/.test(policy.qual ?? '')
+    )
+      violations.push(`${name}: school_read must be SELECT on tenant_ref = app.tenant_id`);
   }
 
   // Views must use the caller's permissions; materialised views are not allowed.

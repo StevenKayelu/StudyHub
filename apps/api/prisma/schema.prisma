@@ -1839,3 +1839,260 @@ model TenantArchive {
   @@index([tenantId, sourceTable], map: "tenant_archive_tenant_table_idx")
   @@map("tenant_archive")
 }
+
+// --- SaaS billing (docs/design/saas-billing.md, migration 0015) ---------------------------------------
+// Platform records: schools are named by tenant_ref (FKs in SQL), so a school purge keeps them.
+
+enum CommercialPlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum PlanVisibility {
+  PUBLIC
+  CONTRACT_ONLY
+}
+
+enum PlanVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum BillingCycle {
+  MONTH
+  QUARTER
+  YEAR
+}
+
+enum ContractKind {
+  STANDARD
+  ENTERPRISE
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  ENDED
+}
+
+enum SaasInvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+}
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  REVENUE
+  EXPENSE
+  SUSPENSE
+}
+
+enum NormalBalance {
+  DEBIT
+  CREDIT
+}
+
+model CommercialPlan {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code          String               @unique(map: "commercial_plan_code_key")
+  name          String
+  description   String               @default("")
+  audience      TenantKind[]         @default([])
+  visibility    PlanVisibility       @default(PUBLIC)
+  featurePlanId String?              @map("feature_plan_id") @db.Uuid
+  status        CommercialPlanStatus @default(ACTIVE)
+  createdBy     String?              @map("created_by") @db.Uuid
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime             @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  versions CommercialPlanVersion[]
+
+  @@map("commercial_plan")
+}
+
+model CommercialPlanVersion {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  planId              String            @map("plan_id") @db.Uuid
+  version             Int
+  status              PlanVersionStatus @default(DRAFT)
+  currency            String            @db.Char(3)
+  billingCycle        BillingCycle      @map("billing_cycle")
+  trialDays           Int               @default(0) @map("trial_days")
+  graceDays           Int               @default(7) @map("grace_days")
+  paymentTermsDays    Int               @default(14) @map("payment_terms_days")
+  components          Json
+  allowedPaymentModes String[]          @map("allowed_payment_modes")
+  notes               String            @default("")
+  publishedAt         DateTime?         @map("published_at") @db.Timestamptz(3)
+  publishedBy         String?           @map("published_by") @db.Uuid
+  createdBy           String?           @map("created_by") @db.Uuid
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime          @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  plan      CommercialPlan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  contracts TenantContract[]
+  invoices  SaasInvoice[]
+
+  @@unique([planId, version], map: "commercial_plan_version_plan_version_key")
+  @@map("commercial_plan_version")
+}
+
+model TenantContract {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantRef        String         @map("tenant_ref") @db.Uuid
+  planVersionId    String         @map("plan_version_id") @db.Uuid
+  kind             ContractKind   @default(STANDARD)
+  overrides        Json           @default("[]")
+  enabledAddons    String[]       @default([]) @map("enabled_addons")
+  discounts        Json           @default("[]")
+  billingAnchorDay Int            @default(1) @map("billing_anchor_day") @db.SmallInt
+  startsOn         DateTime       @map("starts_on") @db.Date
+  endsOn           DateTime?      @map("ends_on") @db.Date
+  status           ContractStatus @default(DRAFT)
+  note             String         @default("")
+  activatedAt      DateTime?      @map("activated_at") @db.Timestamptz(3)
+  endedAt          DateTime?      @map("ended_at") @db.Timestamptz(3)
+  createdBy        String?        @map("created_by") @db.Uuid
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime       @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  planVersion CommercialPlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  invoices    SaasInvoice[]
+
+  @@index([tenantRef, createdAt(sort: Desc)], map: "tenant_contract_tenant_idx")
+  @@map("tenant_contract")
+}
+
+model UsageSnapshot {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantRef   String   @map("tenant_ref") @db.Uuid
+  periodStart DateTime @map("period_start") @db.Date
+  periodEnd   DateTime @map("period_end") @db.Date
+  students    Json
+  revenue     Json
+  rules       Json
+  takenAt     DateTime @default(now()) @map("taken_at") @db.Timestamptz(3)
+
+  invoices SaasInvoice[]
+
+  @@unique([tenantRef, periodStart, periodEnd], map: "usage_snapshot_tenant_period_key")
+  @@map("usage_snapshot")
+}
+
+model SaasInvoiceSequence {
+  year Int @id
+  last Int @default(0)
+
+  @@map("saas_invoice_sequence")
+}
+
+model SaasInvoice {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantRef     String            @map("tenant_ref") @db.Uuid
+  contractId    String            @map("contract_id") @db.Uuid
+  planVersionId String            @map("plan_version_id") @db.Uuid
+  snapshotId    String?           @map("snapshot_id") @db.Uuid
+  number        String?           @unique(map: "saas_invoice_number_key")
+  invoiceIndex  Int               @map("invoice_index")
+  periodStart   DateTime          @map("period_start") @db.Date
+  periodEnd     DateTime          @map("period_end") @db.Date
+  currency      String            @db.Char(3)
+  status        SaasInvoiceStatus @default(DRAFT)
+  subtotalMinor BigInt            @map("subtotal_minor")
+  discountMinor BigInt            @map("discount_minor")
+  taxMinor      BigInt            @default(0) @map("tax_minor")
+  totalMinor    BigInt            @map("total_minor")
+  issuedAt      DateTime?         @map("issued_at") @db.Timestamptz(3)
+  dueAt         DateTime?         @map("due_at") @db.Timestamptz(3)
+  paidAt        DateTime?         @map("paid_at") @db.Timestamptz(3)
+  voidedAt      DateTime?         @map("voided_at") @db.Timestamptz(3)
+  voidReason    String?           @map("void_reason")
+  createdBy     String?           @map("created_by") @db.Uuid
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime          @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  contract    TenantContract        @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  planVersion CommercialPlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  snapshot    UsageSnapshot?        @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  lines       SaasInvoiceLine[]
+
+  @@index([tenantRef, periodStart(sort: Desc)], map: "saas_invoice_tenant_idx")
+  @@index([status, dueAt], map: "saas_invoice_status_due_idx")
+  @@map("saas_invoice")
+}
+
+model SaasInvoiceLine {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId       String @map("invoice_id") @db.Uuid
+  tenantRef       String @map("tenant_ref") @db.Uuid
+  position        Int
+  kind            String
+  componentKey    String @map("component_key")
+  description     String
+  quantity        BigInt
+  unitAmountMinor BigInt @map("unit_amount_minor")
+  amountMinor     BigInt @map("amount_minor")
+  revenueAccount  String @map("revenue_account")
+  taxRateBps      Int    @default(0) @map("tax_rate_bps")
+  taxMinor        BigInt @default(0) @map("tax_minor")
+  calculation     Json   @default("{}")
+
+  invoice SaasInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([invoiceId, position], map: "saas_invoice_line_position_key")
+  @@map("saas_invoice_line")
+}
+
+model PlatformLedgerAccount {
+  code          String            @id
+  name          String
+  type          LedgerAccountType
+  normalBalance NormalBalance     @map("normal_balance")
+  perTenant     Boolean           @map("per_tenant")
+
+  lines PlatformLedgerLine[]
+
+  @@map("platform_ledger_account")
+}
+
+model PlatformLedgerJournal {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind              String
+  description       String
+  currency          String   @db.Char(3)
+  sourceType        String   @map("source_type")
+  sourceId          String   @map("source_id") @db.Uuid
+  reversesJournalId String?  @unique(map: "platform_ledger_journal_reverses_key") @map("reverses_journal_id") @db.Uuid
+  occurredAt        DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  createdBy         String?  @map("created_by") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  reverses   PlatformLedgerJournal? @relation("JournalReversal", fields: [reversesJournalId], references: [id], onDelete: Restrict)
+  reversedBy PlatformLedgerJournal? @relation("JournalReversal")
+  lines      PlatformLedgerLine[]
+
+  @@unique([sourceType, sourceId, kind], map: "platform_ledger_journal_source_key")
+  @@map("platform_ledger_journal")
+}
+
+model PlatformLedgerLine {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  journalId   String  @map("journal_id") @db.Uuid
+  accountCode String  @map("account_code")
+  tenantRef   String? @map("tenant_ref") @db.Uuid
+  debitMinor  BigInt  @default(0) @map("debit_minor")
+  creditMinor BigInt  @default(0) @map("credit_minor")
+  currency    String  @db.Char(3)
+  memo        String  @default("")
+
+  journal PlatformLedgerJournal @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  account PlatformLedgerAccount @relation(fields: [accountCode], references: [code], onDelete: Restrict)
+
+  @@index([journalId], map: "platform_ledger_line_journal_idx")
+  @@index([accountCode, tenantRef], map: "platform_ledger_line_account_tenant_idx")
+  @@map("platform_ledger_line")
+}
