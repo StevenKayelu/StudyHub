@@ -9,7 +9,7 @@ import {
 import { z } from 'zod';
 
 import { type ConsoleActor, recordInSchool, recordPlatform } from '../../console';
-import { AppError, TenantDb } from '../../platform';
+import { AppError, TenantDb, type TenantTx } from '../../platform';
 import { mergeComponents } from '../domain/pricing';
 
 const componentsSchema = z.array(planComponentSchema);
@@ -238,6 +238,7 @@ export class BillingCatalogueService {
           enabledAddons: input.enabledAddons,
           discounts: input.discounts as object[],
           billingAnchorDay: input.billingAnchorDay,
+          activationPolicy: input.activationPolicy,
           startsOn: new Date(`${input.startsOn}T00:00:00Z`),
           endsOn: input.endsOn === null ? null : new Date(`${input.endsOn}T00:00:00Z`),
           note: input.note,
@@ -270,52 +271,65 @@ export class BillingCatalogueService {
       tx.tenantContract.findUnique({ where: { id: contractId }, select: { tenantRef: true } }),
     );
     if (found === null) throw new AppError('NOT_FOUND');
-    return this.db.runPlatformIn(found.tenantRef, async (tx) => {
-      const [contract] = await tx.$queryRaw<{ id: string; status: string; starts_on: Date }[]>`
-        SELECT id, status, starts_on FROM tenant_contract WHERE id = ${contractId}::uuid FOR UPDATE`;
-      if (contract?.status !== 'DRAFT') {
-        throw new AppError('INVALID_STATE', { detail: 'Only a draft contract can be activated.' });
-      }
-      const current = await tx.tenantContract.findFirst({
-        where: { tenantRef: found.tenantRef, status: 'ACTIVE' },
+    await this.db.runPlatformIn(found.tenantRef, (tx) => activateContractTx(tx, actor, contractId));
+  }
+}
+
+/**
+ * Activates a draft contract in the caller's platform transaction (scoped to its school): the current
+ * active contract ends the day the new one starts. Returns the contract that ended, if any.
+ */
+export async function activateContractTx(
+  tx: TenantTx,
+  actor: { userId: string | null },
+  contractId: string,
+): Promise<{ endedContractId: string | null }> {
+  const [contract] = await tx.$queryRaw<
+    { id: string; status: string; starts_on: Date; tenant_ref: string }[]
+  >`
+    SELECT id, status, starts_on, tenant_ref FROM tenant_contract WHERE id = ${contractId}::uuid FOR UPDATE`;
+  if (contract?.status !== 'DRAFT') {
+    throw new AppError('INVALID_STATE', { detail: 'Only a draft contract can be activated.' });
+  }
+  const current = await tx.tenantContract.findFirst({
+    where: { tenantRef: contract.tenant_ref, status: 'ACTIVE' },
+  });
+  const now = new Date();
+  if (current !== null) {
+    if (contract.starts_on <= current.startsOn) {
+      throw new AppError('INVALID_STATE', {
+        detail: 'The new contract must start after the current one started.',
       });
-      const now = new Date();
-      if (current !== null) {
-        if (contract.starts_on <= current.startsOn) {
-          throw new AppError('INVALID_STATE', {
-            detail: 'The new contract must start after the current one started.',
-          });
-        }
-        await tx.tenantContract.update({
-          where: { id: current.id },
-          data: {
-            status: 'ENDED',
-            endsOn:
-              current.endsOn !== null && current.endsOn < contract.starts_on
-                ? current.endsOn
-                : contract.starts_on,
-            endedAt: now,
-            updatedAt: now,
-          },
-        });
-      }
-      await tx.tenantContract.update({
-        where: { id: contractId },
-        data: { status: 'ACTIVE', activatedAt: now, updatedAt: now },
-      });
-      const entry = {
-        actorId: actor.userId,
-        action: 'contract.activated',
-        entityType: 'tenant_contract',
-        entityId: contractId,
-        tenantRef: found.tenantRef,
-        ...(current !== null && { before: { contractId: current.id } }),
-        after: { contractId },
-      };
-      await recordPlatform(tx, entry);
-      await recordInSchool(tx, found.tenantRef, entry);
+    }
+    await tx.tenantContract.update({
+      where: { id: current.id },
+      data: {
+        status: 'ENDED',
+        endsOn:
+          current.endsOn !== null && current.endsOn < contract.starts_on
+            ? current.endsOn
+            : contract.starts_on,
+        endedAt: now,
+        updatedAt: now,
+      },
     });
   }
+  await tx.tenantContract.update({
+    where: { id: contractId },
+    data: { status: 'ACTIVE', activatedAt: now, updatedAt: now },
+  });
+  const entry = {
+    actorId: actor.userId,
+    action: 'contract.activated',
+    entityType: 'tenant_contract',
+    entityId: contractId,
+    tenantRef: contract.tenant_ref,
+    ...(current !== null && { before: { contractId: current.id } }),
+    after: { contractId },
+  };
+  await recordPlatform(tx, entry);
+  await recordInSchool(tx, contract.tenant_ref, entry);
+  return { endedContractId: current?.id ?? null };
 }
 
 function versionData(input: PlanVersionInput) {

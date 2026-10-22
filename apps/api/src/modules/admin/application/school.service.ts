@@ -77,6 +77,12 @@ export class SchoolService {
       if (state.status !== 'PROVISIONING') {
         throw new AppError('INVALID_STATE', { detail: 'Your school is already live.' });
       }
+      // SaaS billing (docs/design/saas-billing.md): a contract may require its setup invoice paid first.
+      const [gate] = await tx.$queryRaw<{ blocked: boolean }[]>`
+        SELECT (c.activation_policy = 'AFTER_SETUP_PAYMENT' AND s.setup_paid_at IS NULL) AS blocked
+          FROM tenant_subscription s JOIN tenant_contract c ON c.id = s.contract_id
+         WHERE s.status <> 'CANCELLED' ORDER BY s.created_at DESC LIMIT 1`;
+      if (gate?.blocked === true) throw new AppError('SETUP_PAYMENT_REQUIRED');
       if (!state.canGoLive) throw new AppError('ONBOARDING_INCOMPLETE');
       const now = new Date();
       await tx.tenant.update({

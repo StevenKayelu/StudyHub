@@ -1942,26 +1942,28 @@ model CommercialPlanVersion {
 }
 
 model TenantContract {
-  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantRef        String         @map("tenant_ref") @db.Uuid
-  planVersionId    String         @map("plan_version_id") @db.Uuid
-  kind             ContractKind   @default(STANDARD)
-  overrides        Json           @default("[]")
-  enabledAddons    String[]       @default([]) @map("enabled_addons")
-  discounts        Json           @default("[]")
-  billingAnchorDay Int            @default(1) @map("billing_anchor_day") @db.SmallInt
-  startsOn         DateTime       @map("starts_on") @db.Date
-  endsOn           DateTime?      @map("ends_on") @db.Date
-  status           ContractStatus @default(DRAFT)
-  note             String         @default("")
-  activatedAt      DateTime?      @map("activated_at") @db.Timestamptz(3)
-  endedAt          DateTime?      @map("ended_at") @db.Timestamptz(3)
-  createdBy        String?        @map("created_by") @db.Uuid
-  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime       @default(now()) @map("updated_at") @db.Timestamptz(3)
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantRef        String           @map("tenant_ref") @db.Uuid
+  planVersionId    String           @map("plan_version_id") @db.Uuid
+  kind             ContractKind     @default(STANDARD)
+  overrides        Json             @default("[]")
+  enabledAddons    String[]         @default([]) @map("enabled_addons")
+  discounts        Json             @default("[]")
+  billingAnchorDay Int              @default(1) @map("billing_anchor_day") @db.SmallInt
+  startsOn         DateTime         @map("starts_on") @db.Date
+  endsOn           DateTime?        @map("ends_on") @db.Date
+  status           ContractStatus   @default(DRAFT)
+  activationPolicy ActivationPolicy @default(IMMEDIATE) @map("activation_policy")
+  note             String           @default("")
+  activatedAt      DateTime?        @map("activated_at") @db.Timestamptz(3)
+  endedAt          DateTime?        @map("ended_at") @db.Timestamptz(3)
+  createdBy        String?          @map("created_by") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime         @default(now()) @map("updated_at") @db.Timestamptz(3)
 
-  planVersion CommercialPlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
-  invoices    SaasInvoice[]
+  planVersion   CommercialPlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  invoices      SaasInvoice[]
+  subscriptions TenantSubscription[]
 
   @@index([tenantRef, createdAt(sort: Desc)], map: "tenant_contract_tenant_idx")
   @@map("tenant_contract")
@@ -1991,34 +1993,37 @@ model SaasInvoiceSequence {
 }
 
 model SaasInvoice {
-  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantRef     String            @map("tenant_ref") @db.Uuid
-  contractId    String            @map("contract_id") @db.Uuid
-  planVersionId String            @map("plan_version_id") @db.Uuid
-  snapshotId    String?           @map("snapshot_id") @db.Uuid
-  number        String?           @unique(map: "saas_invoice_number_key")
-  invoiceIndex  Int               @map("invoice_index")
-  periodStart   DateTime          @map("period_start") @db.Date
-  periodEnd     DateTime          @map("period_end") @db.Date
-  currency      String            @db.Char(3)
-  status        SaasInvoiceStatus @default(DRAFT)
-  subtotalMinor BigInt            @map("subtotal_minor")
-  discountMinor BigInt            @map("discount_minor")
-  taxMinor      BigInt            @default(0) @map("tax_minor")
-  totalMinor    BigInt            @map("total_minor")
-  issuedAt      DateTime?         @map("issued_at") @db.Timestamptz(3)
-  dueAt         DateTime?         @map("due_at") @db.Timestamptz(3)
-  paidAt        DateTime?         @map("paid_at") @db.Timestamptz(3)
-  voidedAt      DateTime?         @map("voided_at") @db.Timestamptz(3)
-  voidReason    String?           @map("void_reason")
-  createdBy     String?           @map("created_by") @db.Uuid
-  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime          @default(now()) @map("updated_at") @db.Timestamptz(3)
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantRef       String            @map("tenant_ref") @db.Uuid
+  contractId      String            @map("contract_id") @db.Uuid
+  planVersionId   String            @map("plan_version_id") @db.Uuid
+  snapshotId      String?           @map("snapshot_id") @db.Uuid
+  number          String?           @unique(map: "saas_invoice_number_key")
+  invoiceIndex    Int               @map("invoice_index")
+  periodStart     DateTime          @map("period_start") @db.Date
+  periodEnd       DateTime          @map("period_end") @db.Date
+  currency        String            @db.Char(3)
+  status          SaasInvoiceStatus @default(DRAFT)
+  kind            SaasInvoiceKind   @default(RECURRING)
+  amountPaidMinor BigInt            @default(0) @map("amount_paid_minor")
+  subtotalMinor   BigInt            @map("subtotal_minor")
+  discountMinor   BigInt            @map("discount_minor")
+  taxMinor        BigInt            @default(0) @map("tax_minor")
+  totalMinor      BigInt            @map("total_minor")
+  issuedAt        DateTime?         @map("issued_at") @db.Timestamptz(3)
+  dueAt           DateTime?         @map("due_at") @db.Timestamptz(3)
+  paidAt          DateTime?         @map("paid_at") @db.Timestamptz(3)
+  voidedAt        DateTime?         @map("voided_at") @db.Timestamptz(3)
+  voidReason      String?           @map("void_reason")
+  createdBy       String?           @map("created_by") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime          @default(now()) @map("updated_at") @db.Timestamptz(3)
 
   contract    TenantContract        @relation(fields: [contractId], references: [id], onDelete: Restrict)
   planVersion CommercialPlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
   snapshot    UsageSnapshot?        @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
   lines       SaasInvoiceLine[]
+  payments    SaasPayment[]
 
   @@index([tenantRef, periodStart(sort: Desc)], map: "saas_invoice_tenant_idx")
   @@index([status, dueAt], map: "saas_invoice_status_due_idx")
@@ -2095,4 +2100,92 @@ model PlatformLedgerLine {
   @@index([journalId], map: "platform_ledger_line_journal_idx")
   @@index([accountCode, tenantRef], map: "platform_ledger_line_account_tenant_idx")
   @@map("platform_ledger_line")
+}
+
+// --- SaaS subscriptions (docs/design/saas-billing.md phase 3, migration 0016) ------------------------
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+}
+
+enum ActivationPolicy {
+  IMMEDIATE
+  AFTER_SETUP_PAYMENT
+}
+
+enum SaasInvoiceKind {
+  RECURRING
+  SETUP
+}
+
+enum SaasPaymentMethod {
+  BANK_TRANSFER
+  CASH
+  OTHER
+}
+
+model SaasPayment {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId   String            @map("invoice_id") @db.Uuid
+  tenantRef   String            @map("tenant_ref") @db.Uuid
+  amountMinor BigInt            @map("amount_minor")
+  currency    String            @db.Char(3)
+  method      SaasPaymentMethod
+  reference   String
+  receivedOn  DateTime          @map("received_on") @db.Date
+  note        String            @default("")
+  recordedBy  String?           @map("recorded_by") @db.Uuid
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  invoice SaasInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([method, reference], map: "saas_payment_reference_key")
+  @@index([invoiceId], map: "saas_payment_invoice_idx")
+  @@map("saas_payment")
+}
+
+model TenantSubscription {
+  id                  String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantRef           String             @map("tenant_ref") @db.Uuid
+  contractId          String             @map("contract_id") @db.Uuid
+  status              SubscriptionStatus
+  trialEndsOn         DateTime?          @map("trial_ends_on") @db.Date
+  billedThrough       DateTime           @map("billed_through") @db.Date
+  cancelAtPeriodEnd   Boolean            @default(false) @map("cancel_at_period_end")
+  pastDueSince        DateTime?          @map("past_due_since") @db.Timestamptz(3)
+  suspendedAt         DateTime?          @map("suspended_at") @db.Timestamptz(3)
+  suspendedForBilling Boolean            @default(false) @map("suspended_for_billing")
+  setupPaidAt         DateTime?          @map("setup_paid_at") @db.Timestamptz(3)
+  cancelledAt         DateTime?          @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason        String?            @map("cancel_reason")
+  createdBy           String?            @map("created_by") @db.Uuid
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime           @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  contract TenantContract      @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  events   SubscriptionEvent[]
+
+  @@index([status], map: "tenant_subscription_status_idx")
+  @@map("tenant_subscription")
+}
+
+model SubscriptionEvent {
+  id             BigInt              @id @default(autoincrement())
+  subscriptionId String              @map("subscription_id") @db.Uuid
+  tenantRef      String              @map("tenant_ref") @db.Uuid
+  kind           String
+  fromStatus     SubscriptionStatus? @map("from_status")
+  toStatus       SubscriptionStatus? @map("to_status")
+  detail         Json                @default("{}")
+  actorId        String?             @map("actor_id") @db.Uuid
+  at             DateTime            @default(now()) @db.Timestamptz(3)
+
+  subscription TenantSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+
+  @@index([subscriptionId, at], map: "subscription_event_subscription_idx")
+  @@map("subscription_event")
 }

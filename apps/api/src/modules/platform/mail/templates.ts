@@ -25,7 +25,9 @@ export type EmailTemplate =
   | 'support-request'
   | 'domain-decision'
   | 'export-ready'
-  | 'statement-issued';
+  | 'statement-issued'
+  // SaaS billing (docs/design/saas-billing.md): invoices, reminders, suspension and reactivation
+  | 'saas-invoice';
 
 export interface EmailVariables {
   schoolName: string;
@@ -125,6 +127,40 @@ export function renderEmail(template: EmailTemplate, vars: EmailVariables): Rend
         `Your account at ${school} was just signed in on ${vars.detail ?? 'another device'}, so it was signed out on the device you used before. At ${school}, a learner account can be used on one device at a time.`,
         "If this wasn't you, sign in again and change your password from your Account page, then tell the school's support. Don't share your sign-in details with anyone.",
       ]);
+    case 'saas-invoice': {
+      const invoice =
+        vars.number === undefined || vars.number === '' ? 'your invoice' : `invoice ${vars.number}`;
+      const amount = vars.amount ?? '';
+      const due = vars.dueDate ?? 'the due date';
+      const subject: Record<string, string> = {
+        ISSUED: `New invoice from the platform for ${school}`,
+        DUE_SOON: `Invoice due soon for ${school}`,
+        DUE_TODAY: `Invoice due today for ${school}`,
+        OVERDUE: `Invoice overdue for ${school}`,
+        PAID: `Payment received for ${school}`,
+        SETUP_PAID: `${school} can go live`,
+        SUSPENDED: `${school} has been suspended for an unpaid invoice`,
+        REACTIVATED: `${school} is active again`,
+      };
+      const body: Record<string, string> = {
+        ISSUED: `We've issued ${invoice} for ${amount}, due on ${due}.`,
+        DUE_SOON: `A reminder that ${invoice} for ${amount} is due on ${due}.`,
+        DUE_TODAY: `${invoice} for ${amount} is due today.`.replace(/^./, (c) => c.toUpperCase()),
+        OVERDUE:
+          `${invoice} for ${amount} was due on ${due} and is still unpaid. Please pay it to keep ${school} running without interruption.`.replace(
+            /^./,
+            (c) => c.toUpperCase(),
+          ),
+        PAID: `Thank you. We've received payment of ${amount} for ${invoice}.`,
+        SETUP_PAID: `Thank you. We've received your setup payment of ${amount}. You can take ${school} live from the onboarding checklist.`,
+        SUSPENDED: `${school} has been suspended because ${invoice} for ${amount} is overdue. Your data is kept and the billing pages stay available; the school becomes active again as soon as the invoice is paid.`,
+        REACTIVATED: `Thank you for your payment. ${school} is active again.`,
+      };
+      return render(subject[vars.status ?? ''] ?? `Billing update for ${school}`, [
+        hello,
+        body[vars.status ?? ''] ?? `There is an update about ${invoice}.`,
+      ]);
+    }
     case 'invitation':
       return render(
         `You're invited to ${school}`,

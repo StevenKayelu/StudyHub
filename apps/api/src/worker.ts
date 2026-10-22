@@ -25,6 +25,13 @@ import {
 import { AUTO_SUBMIT_JOB, createAutoSubmitHandler } from './modules/assessment';
 import { AuditService } from './modules/audit';
 import {
+  BILLING_CYCLE_JOB,
+  BILLING_NOTICE_JOB,
+  createBillingCycleHandler,
+  createBillingNoticeHandler,
+  sweepBilling,
+} from './modules/billing';
+import {
   BALANCE_REMINDER_JOB,
   type CommerceDeps,
   createBalanceReminderHandler,
@@ -86,6 +93,8 @@ async function main(): Promise<void> {
     }),
     [USAGE_METER_JOB]: createUsageMeterHandler({ prisma, box }),
     [PURGE_JOB]: createPurgeHandler({ prisma, locations }),
+    [BILLING_CYCLE_JOB]: createBillingCycleHandler({ prisma, box }),
+    [BILLING_NOTICE_JOB]: createBillingNoticeHandler({ prisma, box }),
   };
   const boss = await startWorker({ connectionString: env.DATABASE_URL_APP, logger, handlers });
 
@@ -111,6 +120,10 @@ async function main(): Promise<void> {
   const sweepSchools = (): void => {
     sweepTenants({ prisma, boss }).catch((error: unknown) =>
       logger.error({ err: error }, 'School sweep failed'),
+    );
+    // SaaS billing: one billing-cycle job per school with a subscription (docs/design/saas-billing.md).
+    sweepBilling({ prisma, boss }).catch((error: unknown) =>
+      logger.error({ err: error }, 'Billing sweep failed'),
     );
   };
   sweepSchools();

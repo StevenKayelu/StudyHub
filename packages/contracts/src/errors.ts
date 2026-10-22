@@ -58,6 +58,8 @@ export const ERROR_DEFINITIONS = {
   COURSE_NOT_OPEN: { status: 403, title: 'This course is not open yet', active: true },
   // Content protection (docs/design/content-protection.md): this lesson is stream and view only.
   DOWNLOAD_NOT_ALLOWED: { status: 403, title: 'This file can be viewed but not downloaded', active: true },
+  // SaaS billing (docs/design/saas-billing.md): the contract activates the school once its setup fee is paid.
+  SETUP_PAYMENT_REQUIRED: { status: 402, title: 'Pay the setup invoice to go live', active: true },
   IDEMPOTENCY_KEY_REUSED: {
     status: 422,
     title: 'This request key was already used for another request',

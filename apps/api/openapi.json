@@ -3366,6 +3366,7 @@
               "BALANCE_REQUIRED",
               "COURSE_NOT_OPEN",
               "DOWNLOAD_NOT_ALLOWED",
+              "SETUP_PAYMENT_REQUIRED",
               "IDEMPOTENCY_KEY_REUSED",
               "IDEMPOTENCY_IN_PROGRESS",
               "SUPPORT_READ_ONLY",

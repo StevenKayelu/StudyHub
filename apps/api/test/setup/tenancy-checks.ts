@@ -34,6 +34,10 @@ export const GLOBAL_TABLES: Readonly<Record<string, string>> = {
   platform_ledger_account: 'platform chart of accounts; platform realm only',
   platform_ledger_journal: 'platform ledger (append-only); platform realm only',
   platform_ledger_line: 'platform ledger (append-only); platform realm only',
+  tenant_subscription:
+    'platform record naming a school by tenant_ref; the school reads its own (school_read)',
+  subscription_event: 'platform record (append-only) naming a school by tenant_ref; the school reads its own',
+  saas_payment: 'platform record (append-only) naming a school by tenant_ref; the school reads its own',
 };
 
 /**
@@ -61,6 +65,9 @@ export const GLOBAL_RLS_TABLES: Readonly<Record<string, string>> = {
   platform_ledger_account: 'platform_realm',
   platform_ledger_journal: 'platform_realm',
   platform_ledger_line: 'platform_realm',
+  tenant_subscription: 'platform_realm',
+  subscription_event: 'platform_realm',
+  saas_payment: 'platform_realm',
 };
 
 /**
@@ -72,6 +79,9 @@ export const SCHOOL_READABLE_PLATFORM_RECORDS: ReadonlySet<string> = new Set([
   'usage_snapshot',
   'saas_invoice',
   'saas_invoice_line',
+  'tenant_subscription',
+  'subscription_event',
+  'saas_payment',
 ]);
 /** Platform-owned billing tables with a platform_realm policy (they hold no school data columns). */
 export const PLATFORM_BILLING_TABLES: ReadonlySet<string> = new Set([

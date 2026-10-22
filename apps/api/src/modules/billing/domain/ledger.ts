@@ -28,6 +28,13 @@ export const CHART: readonly AccountDefinition[] = [
     perTenant: false,
   },
   {
+    code: 'cash.bank',
+    name: 'Platform bank account (manual receipts)',
+    type: 'ASSET',
+    normalBalance: 'DEBIT',
+    perTenant: false,
+  },
+  {
     code: 'receivable.saas',
     name: 'SaaS invoices receivable',
     type: 'ASSET',

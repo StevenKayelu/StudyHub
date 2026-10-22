@@ -1535,6 +1535,11 @@ describe('tenant administration, white-label and platform console (M9)', () => {
       )
     ).rows[0].id;
     await storage.put(`t/${delta}/exports/fixture.txt`, Buffer.from('delta file'), 'text/plain');
+    // A platform statement: archived by the purge, not just deleted (migration 0016).
+    await platformSql(
+      `INSERT INTO platform_statement (tenant_id, period, total_due_minor, status) VALUES ($1, '2026-01', 0, 'DRAFT')`,
+      [delta],
+    );
 
     expect(
       code(await school('POST', '/api/v1/admin/offboarding', DELTA, owner, { confirmName: 'Delta' })),
@@ -1619,6 +1624,7 @@ describe('tenant administration, white-label and platform console (M9)', () => {
       [delta],
     );
     expect(archived.rows).toEqual(expect.arrayContaining([{ source_table: 'order', id: order }]));
+    expect(archived.rows.some((r: Json) => r.source_table === 'platform_statement')).toBe(true);
     expect(archived.rows.some((r: Json) => r.source_table === 'audit_log')).toBe(true);
     expect((await platformSql(`SELECT status::text FROM tenant WHERE id = $1`, [delta])).rows[0].status).toBe(
       'DELETED',

@@ -19,3 +19,12 @@ export function applyBps(a: bigint, bps: number): bigint {
 
 export const max0 = (value: bigint): bigint => (value > 0n ? value : 0n);
 export const minBig = (a: bigint, b: bigint): bigint => (a < b ? a : b);
+
+/** "K1,482.90" (ZMW) or "USD 12.50", for emails; bigint-safe. */
+export function formatMinor(amountMinor: bigint, currency: string): string {
+  const sign = amountMinor < 0n ? '-' : '';
+  const absolute = amountMinor < 0n ? -amountMinor : amountMinor;
+  const units = (absolute / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const cents = (absolute % 100n).toString().padStart(2, '0');
+  return `${sign}${currency === 'ZMW' ? 'K' : `${currency} `}${units}.${cents}`;
+}

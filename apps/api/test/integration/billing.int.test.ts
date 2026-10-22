@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { hashPassword, timeStep, totpCode } from '../../src/modules/platform';
-import { cookieFrom, type Harness, PASSWORD, SCHOOLS, startHarness } from '../setup/school-harness';
+import {
+  CONSOLE,
+  consoleSession,
+  freshReauth as renewReauth,
+  platformSql as platformQuery,
+} from '../setup/console-session';
+import { type Harness, SCHOOLS, startHarness } from '../setup/school-harness';
 
 const { acme: ACME } = SCHOOLS;
-const CONSOLE = 'console.localhost';
-const CONSOLE_COOKIE = '__Host-sh_console';
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- test responses
 
 /** A hybrid plan: licence, hosting, an SMS add-on, per student, revenue share and setup. */
@@ -52,18 +55,7 @@ describe('SaaS billing foundation', () => {
   };
   const consoleCall = (method: 'GET' | 'POST' | 'PATCH', url: string, role: string, body?: unknown) =>
     h.call(method, url, { host: CONSOLE, cookie: staff[role], body });
-  async function platformSql(text: string, params: unknown[] = []) {
-    await h.migrator.query('BEGIN');
-    try {
-      await h.migrator.query(`SELECT set_config('app.realm', 'platform', true)`);
-      const result = await h.migrator.query(text, params);
-      await h.migrator.query('COMMIT');
-      return result;
-    } catch (error) {
-      await h.migrator.query('ROLLBACK');
-      throw error;
-    }
-  }
+  const platformSql = (text: string, params: unknown[] = []) => platformQuery(h, text, params);
   /** Inside one school (no platform realm): row-level security applies as for the runtime role. */
   const asSchool = <T>(tenantId: string, query: string, params: unknown[] = []) =>
     h.asTenant(tenantId, () => h.migrator.query(query, params)) as unknown as Promise<{
@@ -72,38 +64,12 @@ describe('SaaS billing foundation', () => {
     }>;
   const sql = (text: string, params: unknown[] = []) =>
     h.asTenant(h.tenants.acme, () => h.migrator.query(text, params));
-  const freshReauth = () => platformSql(`UPDATE platform_session SET reauth_at = now()`);
-
-  async function consoleSession(email: string, role: string): Promise<string> {
-    const { rows } = await platformSql(
-      `INSERT INTO platform_user (email, display_name, role) VALUES ($1, $2, $3::"PlatformRole") RETURNING id`,
-      [email, `Staff ${role}`, role],
-    );
-    await platformSql(`INSERT INTO platform_credential (user_id, password_hash) VALUES ($1, $2)`, [
-      rows[0].id,
-      await hashPassword(PASSWORD),
-    ]);
-    const signedIn = await h.call('POST', '/console/auth/sign-in', {
-      host: CONSOLE,
-      body: { email, password: PASSWORD },
-    });
-    const cookie = cookieFrom(signedIn.headers['set-cookie'], CONSOLE_COOKIE)!;
-    const setup = await h.call('POST', '/console/auth/totp/setup', { host: CONSOLE, cookie });
-    const secret = base32Decode(setup.json().secret);
-    await ok(
-      await h.call('POST', '/console/auth/totp/enable', {
-        host: CONSOLE,
-        cookie,
-        body: { code: totpCode(secret, timeStep()) },
-      }),
-    );
-    return cookie;
-  }
+  const freshReauth = () => renewReauth(h);
 
   beforeAll(async () => {
     h = await startHarness();
     for (const role of ['PLATFORM_OWNER', 'PLATFORM_OPERATOR', 'PLATFORM_SUPPORT']) {
-      staff[role] = await consoleSession(`${role.toLowerCase()}@platform.test`, role);
+      staff[role] = await consoleSession(h, `${role.toLowerCase()}@platform.test`, role);
     }
     // Acme: three learners who joined before August 2026, two enrolled, one instructor and a course.
     for (const n of [1, 2, 3]) await h.member(ACME, h.tenants.acme, `l${n}@example.com`, `Learner ${n}`);
@@ -448,19 +414,3 @@ describe('SaaS billing foundation', () => {
     ).rejects.toThrow();
   });
 });
-
-function base32Decode(text: string): Buffer {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = 0;
-  let value = 0;
-  const bytes: number[] = [];
-  for (const char of text.toUpperCase()) {
-    value = (value << 5) | alphabet.indexOf(char);
-    bits += 5;
-    if (bits >= 8) {
-      bytes.push((value >>> (bits - 8)) & 255);
-      bits -= 8;
-    }
-  }
-  return Buffer.from(bytes);
-}

@@ -1,6 +1,6 @@
 # Design note: SaaS billing, education payments and Lipila
 
-- **Status:** PHASE 2 DONE (financial foundation), 2026-10-21. Decisions 1–6 in §11 were confirmed by the product owner on 2026-10-21. Phases 3–7 are not started.
+- **Status:** PHASE 3 DONE (subscriptions), 2026-10-22. Decisions 1–6 in §11 were confirmed by the product owner on 2026-10-21, and the phase 2 PROPOSED items on 2026-10-22. Phases 4–7 are not started.
 - **Brief:** "Configurable multi-tenant SaaS billing, education payments and Lipila integration" (product owner, 2026-10-21), in seven phases.
 - **Baseline:** branch `saas-billing-wip` from `m10-hardening-wip` (`69db621`). Blueprint revision 4; this brief answers Q-BIZ-8, Q-BIZ-9 and Q-TEN-4/Q-BIZ-1/Q-PAY-1 ("how money flows": now **configurable per tenant** instead of option (a) only).
 - **Gates that stay closed:** live Lipila credentials and real payouts (Q-PAY-3 production approval, M11 pilot); central collection in production until the legal and contractual checks in §6 are done.
@@ -193,3 +193,32 @@ Pure unit tests for the pricing engine (every model, cycle, proration, discounts
 **Not yet (later phases):** subscriptions and their lifecycle, automatic period-end invoicing, payment of invoices, school-facing billing screens, console screens (the API exists), payment modes, Lipila. `platform_statement` rows are still deleted by a school purge (not archived): changing `purge_tenant` needs the definer role and is left for phase 3.
 
 **Tests:** 23 unit tests (`periods.test.ts`, `pricing.test.ts`: every model, proration, rounding, discounts, ledger posting and reversal) and 8 integration scenarios (`billing.int.test.ts`: role and re-authentication gates, version immutability in the API and the database, contract rules and frozen terms, an invoice from real learners, enrolments, payments and a refund priced to the ngwee, issue with balanced postings, append-only and balance-at-commit ledger, void with reversal and re-invoicing, school read-only access and isolation).
+
+## 13. Phase 3: what was built (2026-10-22)
+
+The phase 2 PROPOSED items (billing in arrears, trial proration, the `SAAS` prefix, snapshot counting) were confirmed by the product owner on 2026-10-22.
+
+**Migration `0016_saas_subscriptions`:**
+
+- `tenant_subscription`: one live subscription per school (`TRIALING → ACTIVE → PAST_DUE → SUSPENDED → CANCELLED`, transitions enforced by a trigger, `PAST_DUE` always before `SUSPENDED`), `billed_through` (never moves back), trial end, scheduled cancellation, `suspended_for_billing` (billing may lift only a suspension it made), `setup_paid_at`.
+- `subscription_event`: append-only history of every start, status change, plan change, setup payment, trial end and cancellation (also in the platform and school audit logs).
+- `saas_payment`: append-only manual receipts (bank transfer, cash, other), one per method and reference; ledger `cash.bank`.
+- `saas_invoice.kind` (`RECURRING` in arrears, `SETUP` up front, due at once) and `amount_paid_minor`; the invoice guard now refuses payments on anything but an issued invoice, decreasing payments, and voiding an invoice with payments.
+- `tenant_contract.activation_policy` (`IMMEDIATE` or `AFTER_SETUP_PAYMENT`), frozen with the other terms.
+- The offboarding purge now **archives** platform statements before deleting them (the M9 gap from §12). The migration replaces `purge_tenant` by explicitly acting as its owner (`SET ROLE studyhub_rls_definer`, which the migrator may do but doesn't inherit); the function is otherwise unchanged.
+
+**Lifecycle:**
+
+- **Start** (console): on the school's active contract; trialing when the plan has a trial. The commercial plan's feature plan becomes the school's `plan_id` (the existing feature and limit engine). With `AFTER_SETUP_PAYMENT`, a setup invoice with the one-time charges is issued at once and the owner's **Go live** answers `SETUP_PAYMENT_REQUIRED` (402) until it is paid; then the normal onboarding checklist applies. The first recurring invoice doesn't bill the one-time charges again.
+- **Billing cycle** (worker job `billing.cycle`, one per school from an hourly sweep, also `POST …/subscription/run-cycle`): bills every contract period that has ended since `billed_through` (at most 24 per run), so plan changes and early ends are prorated by the contracts' own dates; ends the trial; applies a scheduled cancellation after the period; then dunning. Running it again changes nothing.
+- **Dunning:** past due once an issued invoice passes its due date; suspended (the school too, if live, with reason `Billing: invoice … is overdue`) only once the oldest overdue invoice is `grace_days` past due; back to active (and the school reactivated, if billing suspended it) as soon as nothing is overdue. A suspension made by staff is never lifted by billing.
+- **Payments** (console, `POST /console/billing/invoices/{id}/payments`): a reference once per method, at most what is owed, partial payments allowed, posted Dr `cash.bank` / Cr `receivable.saas`; a fully paid invoice is marked paid exactly once, then the setup gate lifts and dunning runs.
+- **Plan changes** (`…/subscription/change-plan` with a draft contract starting on the change date): the current contract ends that day, each side is billed for its days, the new features apply at once; a change can't start inside an invoiced period. One-time charges belong to the contract that lists them.
+- **Cancellation** (`…/subscription/cancel`): at period end (the period is billed, then billing stops) or now (the contract ends today and the partial period is billed). School data is never deleted; the school keeps its status (offboarding stays a separate, explicit console action).
+- **Notices** to the school's owners (email and notification centre, template `saas-invoice`): invoice issued, due in 3 days, due today, overdue (each reminder re-checks that the invoice is still unpaid), paid, setup paid, suspended, reactivated.
+
+**PROPOSED in phase 3:** reminder times (3 days before, on the due date, the day after); setup invoices due at once; a plan change bills only the new contract's own one-time charges; cancellation doesn't change the school's status; up to 24 periods billed per cycle run.
+
+**Not yet:** payment through Lipila (phase 4: until then invoices are paid by recorded transfers), school-facing billing pages and the console screens (phase 6; the API exists), the authoritative provider status check before suspending (phase 4, once provider payments exist), service-specific suspension of add-ons.
+
+**Tests:** 6 unit tests (`subscription-rules.test.ts`: transitions, dunning paths including missed days, recovery, suspension date, reminder times) and 9 integration scenarios (`billing-subscriptions.int.test.ts`: start and entitlements; two months billed in arrears once with prorated first period and setup; reminders queued; past due then suspended only after grace, school suspended with history and notice; payments refused when duplicate or too large, partial then full, voiding with payments refused, reactivation, ledger cash and receivable; staff suspension untouched; mid-period plan change billed 15/31 and 16/31 with new features; cancellation at period end; setup-fee gate on go-live, trial into the first invoice without setup; school read-only access). The admin purge test now checks that platform statements are archived.

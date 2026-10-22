@@ -74,6 +74,14 @@ export const QUEUE_DEFINITIONS: ReadonlyArray<Omit<Queue, 'name'> & { name: stri
     retryBackoff: true,
     retentionSeconds: 3 * 24 * 3600,
   },
+  // SaaS billing (docs/design/saas-billing.md): each school's billing cycle and invoice reminders.
+  ...['billing.cycle', 'billing.notice'].map((name) => ({
+    name,
+    retryLimit: 5,
+    retryDelay: 60,
+    retryBackoff: true,
+    retentionSeconds: 14 * 24 * 3600,
+  })),
   {
     name: 'admin.tenant-purge',
     retryLimit: 3,

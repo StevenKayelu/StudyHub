@@ -60,6 +60,7 @@ const NOTIFY: Partial<Record<EmailTemplate, { link: string; category?: 'learning
   'domain-decision': { link: '/admin/domain' },
   'export-ready': { link: '/admin/exports' },
   'statement-issued': { link: '/admin/billing' },
+  'saas-invoice': { link: '/admin/billing' },
 };
 
 /**

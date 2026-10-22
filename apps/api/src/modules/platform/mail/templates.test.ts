@@ -21,6 +21,7 @@ const TEMPLATES: EmailTemplate[] = [
   'domain-decision',
   'export-ready',
   'statement-issued',
+  'saas-invoice',
 ];
 
 describe('school-branded email (F48, UX-15)', () => {

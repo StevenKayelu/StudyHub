@@ -17,6 +17,9 @@ import {
   invoiceVoidSchema,
   planVersionInputSchema,
   pricingPreviewInputSchema,
+  saasPaymentInputSchema,
+  subscriptionCancelSchema,
+  subscriptionChangeSchema,
 } from '@studyhub/contracts';
 import { z } from 'zod';
 
@@ -24,6 +27,7 @@ import { requireRecentReauth, requireRole, requireStaff } from '../../console';
 import { parseOrThrow } from '../../platform';
 import { BillingCatalogueService } from '../application/catalogue.service';
 import { InvoicingService } from '../application/invoicing.service';
+import { SubscriptionsService } from '../application/subscriptions';
 
 const uuid = () => new ParseUUIDPipe();
 const NO_STORE = 'private, no-store';
@@ -49,6 +53,7 @@ export class BillingConsoleController {
   constructor(
     private readonly catalogue: BillingCatalogueService,
     private readonly invoicing: InvoicingService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   // --- Commercial plans ------------------------------------------------------------------------------
@@ -167,6 +172,59 @@ export class BillingConsoleController {
   void(@Param('id', uuid()) id: string, @Body() body: unknown) {
     const { reason } = parseOrThrow(invoiceVoidSchema, body);
     return this.invoicing.void(sensitive('PLATFORM_OWNER', 'PLATFORM_OPERATOR'), id, reason);
+  }
+
+  /** A payment received outside the provider (bank transfer, cash): recorded once per reference. */
+  @Post('invoices/:id/payments')
+  @HttpCode(204)
+  async payment(@Param('id', uuid()) id: string, @Body() body: unknown): Promise<void> {
+    const actor = sensitive('PLATFORM_OWNER', 'PLATFORM_OPERATOR');
+    const input = parseOrThrow(saasPaymentInputSchema, body);
+    await this.subscriptions.recordPayment(actor, await this.invoicing.tenantOf(id), id, input);
+  }
+
+  // --- Subscriptions -------------------------------------------------------------------------------
+
+  @Get('tenants/:tenantId/subscription')
+  @Header('Cache-Control', NO_STORE)
+  subscription(@Param('tenantId', uuid()) tenantId: string) {
+    finance();
+    return this.subscriptions.view(tenantId);
+  }
+
+  @Post('tenants/:tenantId/subscription')
+  @HttpCode(201)
+  start(@Param('tenantId', uuid()) tenantId: string) {
+    return this.subscriptions.start(sensitive('PLATFORM_OWNER', 'PLATFORM_OPERATOR'), tenantId);
+  }
+
+  @Post('tenants/:tenantId/subscription/cancel')
+  @HttpCode(200)
+  cancel(@Param('tenantId', uuid()) tenantId: string, @Body() body: unknown) {
+    return this.subscriptions.cancel(
+      sensitive('PLATFORM_OWNER', 'PLATFORM_OPERATOR'),
+      tenantId,
+      parseOrThrow(subscriptionCancelSchema, body),
+    );
+  }
+
+  @Post('tenants/:tenantId/subscription/change-plan')
+  @HttpCode(200)
+  changePlan(@Param('tenantId', uuid()) tenantId: string, @Body() body: unknown) {
+    const { contractId } = parseOrThrow(subscriptionChangeSchema, body);
+    return this.subscriptions.changePlan(
+      sensitive('PLATFORM_OWNER', 'PLATFORM_OPERATOR'),
+      tenantId,
+      contractId,
+    );
+  }
+
+  /** Runs the school's billing cycle now (it also runs hourly in the worker). */
+  @Post('tenants/:tenantId/subscription/run-cycle')
+  @HttpCode(200)
+  runCycle(@Param('tenantId', uuid()) tenantId: string) {
+    sensitive('PLATFORM_OWNER', 'PLATFORM_OPERATOR');
+    return this.subscriptions.runCycle(tenantId);
   }
 
   @Get('ledger/trial-balance')

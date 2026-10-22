@@ -1,7 +1,8 @@
 import { currentContext, type TenantTx } from '../../platform';
 
 export interface PlatformAuditEntry {
-  actorId: string;
+  /** null: done by the platform itself (a scheduled billing job). */
+  actorId: string | null;
   action: string;
   entityType: string;
   entityId?: string;

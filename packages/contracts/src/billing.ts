@@ -206,6 +206,11 @@ export const contractInputSchema = z
     overrides: z.array(planComponentSchema).max(30).default([]),
     enabledAddons: z.array(key).max(30).default([]),
     discounts: z.array(discountSchema).max(10).default([]),
+    /**
+     * IMMEDIATE: the school goes live as usual. AFTER_SETUP_PAYMENT: its one-time charges are invoiced
+     * up front and the school can go live only once that invoice is paid.
+     */
+    activationPolicy: z.enum(['IMMEDIATE', 'AFTER_SETUP_PAYMENT']).default('IMMEDIATE'),
     /** Day of the month billing periods start on (1–28). */
     billingAnchorDay: z.number().int().min(1).max(28).default(1),
     startsOn: isoDate,
@@ -272,6 +277,8 @@ export const invoiceViewSchema = z.object({
   id: z.uuid().nullable(),
   number: z.string().nullable(),
   tenantId: z.uuid().nullable(),
+  /** SETUP: one-time charges billed up front (the school goes live once paid); RECURRING: in arrears. */
+  kind: z.enum(['RECURRING', 'SETUP']),
   status: z.enum(['PREVIEW', 'DRAFT', 'ISSUED', 'PAID', 'VOID']),
   currency: z.string(),
   periodStart: isoDate,
@@ -280,6 +287,7 @@ export const invoiceViewSchema = z.object({
   discountMinor: z.string(),
   taxMinor: z.string(),
   totalMinor: z.string(),
+  amountPaidMinor: z.string(),
   issuedAt: z.iso.datetime().nullable(),
   dueAt: z.iso.datetime().nullable(),
   lines: z.array(invoiceLineViewSchema),
@@ -291,3 +299,21 @@ export const invoiceDraftInputSchema = z.object({
   forDate: isoDate,
 });
 export const invoiceVoidSchema = z.object({ reason: z.string().trim().min(5).max(500) });
+
+/** POST /console/billing/tenants/{id}/subscription: start billing the school on its active contract. */
+export const subscriptionStartSchema = z.object({ reason: z.string().trim().min(3).max(300).optional() });
+export const subscriptionCancelSchema = z.object({
+  /** true: at the end of the current period; false: now (the final partial period is billed). */
+  atPeriodEnd: z.boolean(),
+  reason: z.string().trim().min(5).max(500),
+});
+/** A plan change: a draft contract that starts on the change date (upgrades and downgrades alike). */
+export const subscriptionChangeSchema = z.object({ contractId: z.uuid() });
+/** A payment received outside the platform's payment provider (bank transfer, cash). */
+export const saasPaymentInputSchema = z.object({
+  amountMinor: z.number().int().min(1).max(100_000_000_000),
+  method: z.enum(['BANK_TRANSFER', 'CASH', 'OTHER']),
+  reference: z.string().trim().min(3).max(120),
+  receivedOn: isoDate,
+  note: z.string().trim().max(500).default(''),
+});
