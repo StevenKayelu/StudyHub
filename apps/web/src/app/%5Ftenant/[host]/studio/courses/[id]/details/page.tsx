@@ -1,4 +1,4 @@
-import { categoryTreeSchema, periodListSchema } from '@studyhub/contracts';
+import { categoryTreeSchema } from '@studyhub/contracts';
 import type { Metadata } from 'next';
 import { getLocale, getTranslations } from 'next-intl/server';
 
@@ -22,17 +22,13 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 /** S-T04 Course details. */
 export default async function DetailsPage({ params }: { params: Params }) {
   const course = await loadStudioCourse((await params).id);
-  const [tree, periodList] = await Promise.all([
-    fetchContent('/api/v1/categories', categoryTreeSchema),
-    fetchContent('/api/v1/periods', periodListSchema),
-  ]);
+  const tree = await fetchContent('/api/v1/categories', categoryTreeSchema);
   const terms = await getTerms(await currentTenant(), await getLocale());
   return (
     <StudioCourseFrame course={course} tab="details">
       <CourseDetailsForm
         course={course}
         categories={tree?.categories ?? []}
-        periods={periodList?.periods ?? []}
         editable={EDITABLE.has(course.status)}
         texts={await studioTexts(terms)}
       />

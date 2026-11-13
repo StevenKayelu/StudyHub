@@ -17,6 +17,8 @@ for (const key of [
 
 /** Where the web server reaches the API (server-side and through the /api rewrite). */
 const apiInternalUrl = process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:4000';
+const API_PROXY_TIMEOUT_MS = 15 * 60 * 1000;
+const DEV_VIDEO_PROXY_BODY_LIMIT = '2gb';
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -49,7 +51,16 @@ const nextConfig: NextConfig = {
   skipProxyUrlNormalize: true,
   reactStrictMode: true,
   // Import only the design-system modules a route uses (keeps Radix out of pages that don't need it).
-  experimental: { optimizePackageImports: ['@studyhub/ui', 'lucide-react'] },
+  experimental: {
+    optimizePackageImports: ['@studyhub/ui', 'lucide-react'],
+    // Dev video uploads pass through Next to the local fake provider. The cap matches Acme's 2 GB
+    // limit; production uploads use the managed provider directly and keep Next's small default.
+    ...(process.env.NODE_ENV === 'development' && {
+      proxyClientMaxBodySize: DEV_VIDEO_PROXY_BODY_LIMIT,
+    }),
+    // The local fake-video upload also needs more than Next's 30s default proxy timeout.
+    proxyTimeout: API_PROXY_TIMEOUT_MS,
+  },
   async headers() {
     return [
       {

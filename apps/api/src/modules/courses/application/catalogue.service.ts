@@ -11,13 +11,7 @@ import { Prisma } from '../../../generated/prisma/client';
 
 import { paymentsProblem, planOffered } from '../../commerce';
 import type { TenantActor } from '../../identity';
-import {
-  type AccessOverride,
-  courseLock,
-  EnrollmentsService,
-  lockView,
-  type PeriodMode,
-} from '../../learning';
+import { EnrollmentsService } from '../../learning';
 import { AppError, TenantDb, type TenantTx } from '../../platform';
 import { readCommerceSettings, readContentSettings, readFeatures } from '../../tenancy';
 import { StudioService } from './studio.service';
@@ -39,17 +33,21 @@ interface CardRow {
   instructor_slug: string | null;
   subject_slug: string | null;
   subject_name: string | null;
-  period_id: string | null;
-  period_name: string | null;
-  period_kind: PeriodKind | null;
-  period_starts_at: Date | null;
-  period_mode: PeriodMode | null;
-  access_override: AccessOverride | null;
+  periods: { id: string; name: string; kind: PeriodKind }[];
 }
 
-/** The period columns every card query selects (`pd` is academic_period). */
-const PERIOD_COLUMNS = Prisma.sql`pd.id AS period_id, pd.name AS period_name, pd.kind AS period_kind,
-       pd.starts_at AS period_starts_at, pd.mode AS period_mode, c.access_override`;
+/** Unique periods assigned to the course's topics. */
+const PERIOD_COLUMNS = Prisma.sql`COALESCE((
+         SELECT json_agg(json_build_object('id', period.id, 'name', period.name, 'kind', period.kind)
+                         ORDER BY period.starts_at)
+           FROM (
+             SELECT DISTINCT ON (pd.id) pd.id, pd.name, pd.kind, pd.starts_at
+               FROM lesson l
+               JOIN academic_period pd ON pd.id = l.period_id
+              WHERE l.course_id = c.id
+              ORDER BY pd.id, pd.starts_at
+           ) period
+       ), '[]'::json) AS periods`;
 
 /**
  * The school's public catalogue (F13, BR-26, BR-28, BR-57). Only PUBLISHED courses whose instructor is
@@ -97,7 +95,6 @@ export class CatalogueService {
           LEFT JOIN instructor_profile p ON p.membership_id = c.owner_membership_id
           LEFT JOIN subject s ON s.id = c.subject_id
           LEFT JOIN category k ON k.id = s.category_id
-          LEFT JOIN academic_period pd ON pd.id = c.period_id
          WHERE c.status = 'PUBLISHED'
            AND coalesce(p.status::text, 'APPROVED') <> 'SUSPENDED'
            AND (${q} = '' OR c.search_vector @@ websearch_to_tsquery('simple'::regconfig, ${q})
@@ -109,8 +106,13 @@ export class CatalogueService {
                 OR (${query.price ?? null} = 'free' AND c.price_minor = 0)
                 OR (${query.price ?? null} = 'paid' AND c.price_minor > 0))
            AND (${query.period ?? null}::text IS NULL
-                OR (${query.period ?? null} = 'open' AND c.period_id IS NULL)
-                OR c.period_id::text = ${query.period ?? null})
+                OR (${query.period ?? null} = 'open' AND EXISTS (
+                     SELECT 1 FROM lesson l WHERE l.course_id = c.id AND l.period_id IS NULL
+                   ))
+                OR EXISTS (
+                     SELECT 1 FROM lesson l
+                      WHERE l.course_id = c.id AND l.period_id::text = ${query.period ?? null}
+                   ))
          ORDER BY
            CASE WHEN ${sort} = 'relevance' THEN 0 ELSE 1 END,
            CASE WHEN ${sort} = 'relevance' THEN -(CASE WHEN ${q} = '' THEN 0::real
@@ -136,14 +138,20 @@ export class CatalogueService {
         where: { slug, status: 'PUBLISHED' },
         include: {
           subject: { select: { slug: true, name: true } },
-          period: { select: { id: true, name: true, kind: true, startsAt: true, mode: true } },
           sections: {
             orderBy: { position: 'asc' },
             select: {
               title: true,
               lessons: {
                 orderBy: { position: 'asc' },
-                select: { id: true, title: true, type: true, durationSeconds: true, isPreview: true },
+                select: {
+                  id: true,
+                  title: true,
+                  type: true,
+                  durationSeconds: true,
+                  isPreview: true,
+                  period: { select: { id: true, name: true, kind: true } },
+                },
               },
             },
           },
@@ -203,7 +211,7 @@ export class CatalogueService {
       durationSeconds: lessons.reduce((total, l) => total + (l.durationSeconds ?? 0), 0),
       instructor: { name: profile?.displayName ?? '', slug: profile?.slug ?? null },
       subject: course.subject === null ? null : { slug: course.subject.slug, name: course.subject.name },
-      ...periodView(course.period, course.accessOverride, new Date()),
+      periods: uniquePeriods(lessons.flatMap((lesson) => (lesson.period === null ? [] : [lesson.period]))),
       description: course.descriptionJson,
       outcomes: course.outcomes,
       requirements: course.requirements,
@@ -235,7 +243,6 @@ export class CatalogueService {
                ${profile.displayName}::text AS instructor_name, ${profile.slug}::text AS instructor_slug,
                s.slug AS subject_slug, s.name AS subject_name, ${PERIOD_COLUMNS}
           FROM course c LEFT JOIN subject s ON s.id = c.subject_id
-          LEFT JOIN academic_period pd ON pd.id = c.period_id
          WHERE c.status = 'PUBLISHED' AND c.owner_membership_id = ${profile.membershipId}::uuid
          ORDER BY c.published_at DESC`,
     );
@@ -265,7 +272,6 @@ export class CatalogueService {
 
   private async cards(rows: CardRow[]): Promise<CourseCard[]> {
     const covers = await this.studio.coverUrls(rows.map((r) => r.cover_asset_id));
-    const now = new Date();
     return rows.map((r) => ({
       slug: r.slug,
       title: r.title,
@@ -278,33 +284,13 @@ export class CatalogueService {
       durationSeconds: r.duration_seconds,
       instructor: { name: r.instructor_name ?? '', slug: r.instructor_slug },
       subject: r.subject_slug === null ? null : { slug: r.subject_slug, name: r.subject_name ?? '' },
-      ...periodView(
-        r.period_id === null || r.period_name === null || r.period_kind === null
-          ? null
-          : {
-              id: r.period_id,
-              name: r.period_name,
-              kind: r.period_kind,
-              startsAt: r.period_starts_at ?? now,
-              mode: r.period_mode ?? 'AUTO',
-            },
-        r.access_override,
-        now,
-      ),
+      periods: r.periods,
     }));
   }
 }
 
-/** A course's period and whether its content is closed now (docs/design/course-periods.md). */
-function periodView(
-  period: { id: string; name: string; kind: PeriodKind; startsAt: Date; mode: PeriodMode } | null,
-  override: AccessOverride | null,
-  now: Date,
-): Pick<CourseCard, 'period' | 'lock'> {
-  return {
-    period: period === null ? null : { id: period.id, name: period.name, kind: period.kind },
-    lock: lockView(courseLock(period, override, now)),
-  };
+function uniquePeriods(periods: { id: string; name: string; kind: PeriodKind }[]) {
+  return [...new Map(periods.map((period) => [period.id, period])).values()];
 }
 
 /** Opaque page cursor (an offset; the catalogue is small per school). */

@@ -91,25 +91,16 @@ export const updateCategorySchema = z.object({
 export const periodKindSchema = z.enum(['TERM', 'SEMESTER', 'SEMINAR']);
 /** AUTO opens the period at `startsAt`; OPEN and LOCKED are an administrator's manual switch. */
 export const periodModeSchema = z.enum(['AUTO', 'OPEN', 'LOCKED']);
-/** An administrator's opening or lock of one course; wins over its period. */
-export const courseAccessOverrideSchema = z.enum(['OPEN', 'LOCKED']);
-
-/** Why a course's content is closed now; `opensAt` null: when an administrator opens it. */
-export const courseLockSchema = z.object({
-  periodName: z.string().nullable(),
-  opensAt: z.iso.datetime().nullable(),
-});
-
-/** A course's period as learners see it (null: an open course). */
+/** A term, semester or seminar as learners see it. */
 export const coursePeriodRefSchema = z.object({ id: z.uuid(), name: z.string(), kind: periodKindSchema });
 
-/** GET /periods: the school's current periods, for the catalogue filter and the Studio picker. */
+/** GET /periods: the school's current periods, for topic assignment and catalogue filtering. */
 export const periodListSchema = z.object({
   periods: z.array(
     coursePeriodRefSchema.extend({
       startsAt: z.iso.datetime(),
       endsAt: z.iso.datetime().nullable(),
-      /** Its courses are open now (unless a course is locked on its own). */
+      /** Topics assigned to it are open now. */
       open: z.boolean(),
     }),
   ),
@@ -124,7 +115,7 @@ export const adminPeriodListSchema = z.object({
       mode: periodModeSchema,
       open: z.boolean(),
       archived: z.boolean(),
-      courseCount: z.number().int(),
+      lessonCount: z.number().int(),
     }),
   ),
 });
@@ -156,15 +147,6 @@ export const updatePeriodSchema = z
   })
   .refine(endsAfterStart, endsAfterStartIssue);
 
-/** PATCH /admin/courses/{id}/period: an administrator moves a course or opens/locks it. */
-export const adminCoursePeriodSchema = z.object({
-  /** null: an open course. */
-  periodId: z.uuid().nullable().optional(),
-  /** null: follow the period. */
-  accessOverride: courseAccessOverrideSchema.nullable().optional(),
-});
-
-export type CourseLock = z.infer<typeof courseLockSchema>;
 export type PeriodList = z.infer<typeof periodListSchema>;
 export type AdminPeriodList = z.infer<typeof adminPeriodListSchema>;
 export type PeriodKind = z.infer<typeof periodKindSchema>;
@@ -266,8 +248,6 @@ export const updateCourseSchema = z.object({
   accessDays: z.number().int().min(1).max(3650).nullable().optional(),
   /** null removes the plan. */
   depositPlan: depositPlanSchema.nullable().optional(),
-  /** The course's term, semester or seminar; null: an open course. */
-  periodId: z.uuid().nullable().optional(),
   /** Content protection while the school lets tutors choose; null follows the default (protected). */
   protectContent: z.boolean().nullable().optional(),
 });
@@ -280,6 +260,8 @@ export const lessonSummarySchema = z.object({
   isPreview: z.boolean(),
   isRequired: z.boolean(),
   durationSeconds: z.number().nullable(),
+  /** The topic's term, semester or seminar; null means it is open. */
+  period: coursePeriodRefSchema.nullable(),
   /** Whether the lesson has publishable content (BR-04). */
   ready: z.boolean(),
 });
@@ -315,6 +297,8 @@ export const createLessonSchema = z.object({
 export const updateLessonSchema = z.object({
   version: z.number().int().min(1),
   title: z.string().trim().min(1).max(120).optional(),
+  /** The topic's term, semester or seminar; null means it is open. */
+  periodId: z.uuid().nullable().optional(),
   content: richTextSchema.nullable().optional(),
   videoAssetId: z.uuid().nullable().optional(),
   /** QUIZ lessons: the course's quiz they run (M7). */
@@ -366,15 +350,10 @@ export const studioCourseSchema = z.object({
   depositPlan: depositPlanSchema.nullable(),
   /** The school's rules for deposit plans (the pricing form's limits). */
   depositRules: depositPlanRulesSchema,
-  periodId: z.uuid().nullable(),
   /** The tutor's choice (null: the default, protected); applies while the school lets tutors choose. */
   protectContent: z.boolean().nullable(),
   /** Who decides protection and downloads at this school (docs/design/content-protection.md). */
   contentRules: z.object({ contentProtection: contentPolicySchema, downloadPolicy: contentPolicySchema }),
-  /** Set by an administrator; wins over the period. */
-  accessOverride: courseAccessOverrideSchema.nullable(),
-  /** The course's content is closed to learners now. */
-  lock: courseLockSchema.nullable(),
   status: courseStatusSchema,
   version: z.number(),
   publishedAt: z.iso.datetime().nullable(),
@@ -427,9 +406,6 @@ export const adminCourseListSchema = z.object({
       status: courseStatusSchema,
       updatedAt: z.iso.datetime(),
       instructorName: z.string(),
-      period: coursePeriodRefSchema.nullable(),
-      accessOverride: courseAccessOverrideSchema.nullable(),
-      lock: courseLockSchema.nullable(),
     }),
   ),
 });
@@ -442,7 +418,7 @@ export const catalogueQuerySchema = z.object({
   subject: z.string().max(80).optional(),
   level: courseLevelSchema.optional(),
   price: z.enum(['free', 'paid']).optional(),
-  /** A period's id, or `open` for courses without one. */
+  /** A period's id, or `open` for courses containing at least one unassigned topic. */
   period: z.union([z.literal('open'), z.uuid()]).optional(),
   sort: z.enum(['relevance', 'newest', 'popular']).optional(),
   cursor: z.string().max(200).optional(),
@@ -461,9 +437,8 @@ export const courseCardSchema = z.object({
   durationSeconds: z.number(),
   instructor: z.object({ name: z.string(), slug: z.string().nullable() }),
   subject: z.object({ slug: z.string(), name: z.string() }).nullable(),
-  period: coursePeriodRefSchema.nullable(),
-  /** Visible and open to enrolment, but its content is closed until then. */
-  lock: courseLockSchema.nullable(),
+  /** Unique periods assigned to topics in this course. */
+  periods: z.array(coursePeriodRefSchema),
 });
 
 export const catalogueResponseSchema = z.object({
@@ -526,6 +501,7 @@ export const courseLandingSchema = courseCardSchema.extend({
           type: lessonTypeSchema,
           durationSeconds: z.number().nullable(),
           isPreview: z.boolean(),
+          period: coursePeriodRefSchema.nullable(),
         }),
       ),
     }),

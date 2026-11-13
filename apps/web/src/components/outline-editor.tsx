@@ -222,6 +222,9 @@ export function OutlineEditor({
                     <NextLink href={`${base}/lessons/${lesson.id}`} className="min-w-0 flex-1 truncate">
                       {lesson.title}
                     </NextLink>
+                    {lesson.period !== null ? (
+                      <span className="text-caption text-muted">{lesson.period.name}</span>
+                    ) : null}
                     {lesson.isPreview ? <span className="text-caption text-accent">{s.preview}</span> : null}
                     <StatusBadge status={lesson.ready ? 'published' : 'attention'}>
                       {lesson.ready ? s.ready : s.needsContent}

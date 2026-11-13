@@ -125,13 +125,14 @@
       "videoUnavailable": "This video can’t be played right now.",
       "saveFailed": "Your progress couldn’t be saved. Check your connection.",
       "noContent": "This lesson has no content yet.",
+      "noTopicsOpen": "No topics are open yet. Check back when their terms start.",
       "states": {
         "COMPLETED": "Completed",
         "IN_PROGRESS": "In progress",
         "NOT_STARTED": "Not started",
         "CURRENT": "Current lesson",
-        "LOCKED": "Locked until the balance is paid",
-        "NOT_OPEN": "Opens with the term"
+        "LOCKED": "Locked",
+        "NOT_OPEN": "Opens with its term"
       },
       "keyboardHint": "Tip: use the ← and → keys for the previous and next lesson.",
       "downloadName": "Download {name}",
@@ -148,6 +149,7 @@
       "notOpen": "This {courseLower} opens on {date}. Until then you can see the outline and the preview lessons.",
       "notOpenManual": "This {courseLower} isn’t open yet. Your school will open it; until then you can see the outline and the preview lessons.",
       "notOpenTitle": "This lesson isn’t open yet",
+      "topicOpensWith": "This topic is part of {period}. It will open when the term opens.",
       "quizNotOpen": "This quiz opens with the {courseLower}",
       "practiceNotOpen": "Practice opens with the {courseLower}",
       "view": "View",
@@ -369,11 +371,6 @@
       "cover": "Cover image",
       "coverHint": "JPEG, PNG or WebP, up to 5 MB. Shown at 16:9.",
       "uploadCover": "Upload cover",
-      "period": "Term or semester",
-      "periodHint": "Learners can enrol any time; the lessons open when the term opens. Choose an open {courseLower} for skills that are always available.",
-      "openCourse": "Open {courseLower} (no term)",
-      "lockedByAdmin": "An administrator has locked this {courseLower}.",
-      "openedByAdmin": "An administrator has opened this {courseLower}.",
       "protect": "Content protection",
       "protectHint": "Protected lessons show the learner’s name as a watermark and can’t be copied or printed. Screenshots can’t be blocked in a browser, but the name shows who shared them.",
       "protectOptions": {
@@ -426,6 +423,9 @@
     },
     "lesson": {
       "title": "Lesson",
+      "period": "Term or semester",
+      "openTopic": "Open topic (no term)",
+      "periodHint": "Learners can access this topic when its term opens. Leave it open for content that is always available.",
       "content": "Content",
       "isPreview": "Free preview",
       "isPreviewHint": "Visitors can open this lesson before enrolling.",
@@ -690,18 +690,7 @@
       "reason": "Reason",
       "by": "by {name}",
       "empty": "No {coursesLower} yet.",
-      "access": "Access",
-      "period": "Term",
-      "openCourse": "Open course (no term)",
-      "override": "Access",
-      "overrides": {
-        "FOLLOW": "Follow the term",
-        "OPEN": "Open now",
-        "LOCKED": "Locked"
-      },
-      "opensOn": "Opens {date}",
-      "notOpen": "Locked",
-      "savePeriod": "Save"
+      "access": "Access"
     },
     "enrollments": {
       "title": "Access to {course}",
@@ -730,7 +719,7 @@
     },
     "periods": {
       "title": "Terms & semesters",
-      "intro": "Arrange {coursesLower} into terms, semesters or seminars. Learners can enrol any time; lessons open when the term opens. {courses} without a term are open all the time.",
+      "intro": "Create terms, semesters or seminars, then assign each topic to one in Studio. Learners can enrol in a course any time; each topic opens when its term opens.",
       "add": "Add term",
       "name": "Name",
       "namePlaceholder": "Term 1 2027",
@@ -742,7 +731,7 @@
       },
       "startsOn": "Opens on",
       "endsOn": "Ends on (optional)",
-      "endsHint": "Shown to learners. {courses} stay open after the end date.",
+      "endsHint": "Shown to learners. Topics stay open after the end date.",
       "dates": "{start} – {end}",
       "from": "From {start}",
       "open": "Open",
@@ -754,11 +743,11 @@
         "LOCKED": "Keep locked"
       },
       "modeLabel": "Opening",
-      "courseCount": "{count, plural, =0 {No {coursesLower}} one {# {courseLower}} other {# {coursesLower}}}",
+      "lessonCount": "{count, plural, =0 {No topics} one {# topic} other {# topics}}",
       "archive": "Archive",
       "restore": "Restore",
       "archived": "Archived",
-      "empty": "No terms yet. All {coursesLower} are open.",
+      "empty": "No terms yet. Every topic is open.",
       "edit": "Edit",
       "save": "Save",
       "cancel": "Cancel"
@@ -997,7 +986,7 @@
     "by": "by {name}",
     "period": "Term",
     "anyPeriod": "Any term",
-    "openCourses": "Open {coursesLower} (no term)",
+    "openCourses": "Courses with open topics",
     "opensOn": "Opens {date}",
     "notOpen": "Not open yet"
   },
@@ -1045,7 +1034,6 @@
     "previewTitle": "Preview: {title}",
     "previewLink": "Preview {title}",
     "previewCta": "Enrol to open every lesson",
-    "lockNotice": "Part of {period}. You can enrol now; the lessons open on {date}.",
     "lockNoticeManual": "This {courseLower} isn’t open yet. You can enrol now; the school will open it."
   },
   "teach": {
@@ -1768,13 +1756,19 @@
       "reviewRequired": "First publication of a {course} needs approval",
       "contentNote": "These are defaults for new content. Existing lessons and quizzes keep their own settings; upload limits apply to new uploads.",
       "uploadTypes": "Allowed document types",
-      "uploadTypeNames": {
-        "application/pdf": "PDF",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PowerPoint",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "Excel",
-        "application/zip": "ZIP"
-      },
+      "uploadTypeNames": [
+        { "type": "application/pdf", "label": "PDF" },
+        {
+          "type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "label": "Word"
+        },
+        {
+          "type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          "label": "PowerPoint"
+        },
+        { "type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "label": "Excel" },
+        { "type": "application/zip", "label": "ZIP" }
+      ],
       "maxDocumentMb": "Largest document (MB, your plan allows {max})",
       "maxVideoGb": "Largest video (GB, your plan allows {max})",
       "downloads": "Allow downloads of lesson files by default",

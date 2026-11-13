@@ -13,7 +13,6 @@ import {
   Query,
 } from '@nestjs/common';
 import {
-  adminCoursePeriodSchema,
   catalogueQuerySchema,
   createCategorySchema,
   createCourseSchema,
@@ -262,12 +261,6 @@ export class ContentAdminController {
   @HttpCode(204)
   async updatePeriod(@Param('id', uuid()) id: string, @Body() body: unknown): Promise<void> {
     await this.periods.update(requireActor(), id, parseOrThrow(updatePeriodSchema, body));
-  }
-
-  @Patch('courses/:id/period')
-  @HttpCode(204)
-  async coursePeriod(@Param('id', uuid()) id: string, @Body() body: unknown): Promise<void> {
-    await this.periods.setCoursePeriod(requireActor(), id, parseOrThrow(adminCoursePeriodSchema, body));
   }
 
   @Get('categories')

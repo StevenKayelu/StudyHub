@@ -297,21 +297,22 @@ export async function bootstrapStorageLocations(options: {
         },
         data: { storageLocationId: BOOTSTRAP_STORAGE_LOCATION_ID },
       });
-      const exports = await tx.dataExport.updateMany({
+      // Not `exports`: compiled to CommonJS, that name would shadow the module's own exports.
+      const exportRows = await tx.dataExport.updateMany({
         where: { storageLocationId: null },
         data: { storageLocationId: BOOTSTRAP_STORAGE_LOCATION_ID },
       });
-      if (assets.count + exports.count > 0)
+      if (assets.count + exportRows.count > 0)
         await tx.auditLog.create({
           data: {
             tenantId: tenant.id,
             action: 'storage.provenance_backfilled',
             entityType: 'storage_location',
             entityId: BOOTSTRAP_STORAGE_LOCATION_ID,
-            after: { assets: assets.count, exports: exports.count },
+            after: { assets: assets.count, exports: exportRows.count },
           },
         });
-      return { assets: assets.count, exports: exports.count };
+      return { assets: assets.count, exports: exportRows.count };
     });
     backfilledAssets += counts.assets;
     backfilledExports += counts.exports;

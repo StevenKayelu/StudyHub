@@ -13,6 +13,8 @@ pnpm dev          # API :4000, worker, web :3000
 pnpm db:down      # stop PostgreSQL (data is kept in the studyhub-pgdata volume)
 ```
 
+The API and worker run compiled JavaScript. In development, Node watches each process's entry point and imported files, rather than the whole `dist` directory, so unrelated compiler output does not repeatedly restart them.
+
 ## Database roles
 
 The roles are created by `infra/postgres/init/01-roles.sql` **only when the data volume is first created**. Passwords come from `.env`:
@@ -54,6 +56,7 @@ If you change the passwords in `.env` after the volume exists, the roles keep th
 - Studio: sign in at http://acme.localhost:3000 as `tutor@acme.test` and open **Studio**. Acme reviews new courses first: approve them as `owner@acme.test` under **Administration → Reviews**.
 - Uploads go from the browser straight to SeaweedFS (http://127.0.0.1:8333, bucket `studyhub-local`, created on first use). The **worker** checks and scans them, so keep it running (`pnpm dev` starts it); without it uploads stay at "Checking the file…".
 - Malware scanning is `eicar-only` locally: upload the EICAR test file to see a rejection. Video uses the development fake provider, which marks a video ready right after upload.
+- The local video upload is proxied through Next.js to the API; development raises the proxy body cap to Acme's 2 GB upload limit and the timeout to 15 minutes. Next buffers proxied request bodies up to this cap in memory, so keep this development-only; production retains the small default and uses the managed video provider directly.
 - Instructor applications: schools add instructors by invitation by default. To try applications, store the setting `instructorOnboardingMode` = `"APPLICATION"` in `tenant_setting` for the school (with the tenant context set, as in "Schools locally"); `/teach` then shows **Apply to teach**.
 - Objects are kept in the `studyhub-objects` volume; `down -v` (below) deletes them too.
 

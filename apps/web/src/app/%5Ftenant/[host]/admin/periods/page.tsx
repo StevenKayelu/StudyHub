@@ -32,7 +32,7 @@ export default async function PeriodsPage() {
       : p.mode === 'LOCKED'
         ? t('admin.periods.locked')
         : t('admin.periods.opensOn', { date: date(p.startsAt) }),
-    courseCountLabel: t('admin.periods.courseCount', { ...terms, count: p.courseCount }),
+    lessonCountLabel: t('admin.periods.lessonCount', { ...terms, count: p.lessonCount }),
   }));
   return (
     <AdminFrame

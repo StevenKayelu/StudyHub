@@ -394,9 +394,6 @@ async function seedCatalogue(client: Client, tenantId: string): Promise<void> {
       );
       if (inserted.rowCount === 0) continue; // already seeded: leave any local edits alone
       const periodId = DEMO_COURSE_PERIODS[course.slug];
-      if (periodId !== undefined) {
-        await client.query('UPDATE course SET period_id = $2 WHERE id = $1', [course.id, periodId]);
-      }
       for (const [sectionIndex, section] of course.sections.entries()) {
         const created = await client.query<{ id: string }>(
           'INSERT INTO section (tenant_id, course_id, title, position) VALUES ($1, $2, $3, $4) RETURNING id',
@@ -405,8 +402,8 @@ async function seedCatalogue(client: Client, tenantId: string): Promise<void> {
         for (const [lessonIndex, title] of section.lessons.entries()) {
           await client.query(
             `INSERT INTO lesson (tenant_id, course_id, section_id, title, type, position, content_json, is_preview,
-               duration_seconds)
-             VALUES ($1, $2, $3, $4, 'TEXT', $5, $6, $7, 300)`,
+               duration_seconds, period_id)
+             VALUES ($1, $2, $3, $4, 'TEXT', $5, $6, $7, 300, $8)`,
             [
               tenantId,
               course.id,
@@ -415,6 +412,7 @@ async function seedCatalogue(client: Client, tenantId: string): Promise<void> {
               lessonIndex,
               JSON.stringify(doc(`${title}: demo reading. Replace this text in Studio.`)),
               sectionIndex === 0 && lessonIndex === 0,
+              periodId ?? null,
             ],
           );
         }

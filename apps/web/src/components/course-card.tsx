@@ -1,10 +1,10 @@
 import 'server-only';
 
 import type { CourseCard as Card } from '@studyhub/contracts';
-import { formatMoney, StatusBadge } from '@studyhub/ui';
+import { formatMoney } from '@studyhub/ui';
 import { BookOpen } from 'lucide-react';
 import NextLink from 'next/link';
-import { getFormatter, getLocale, getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
 /** A formatter for "1 h 20 min" or "45 min" (synchronous once loaded, for use inside lists). */
 export async function durationFormatter(): Promise<(seconds: number) => string> {
@@ -29,19 +29,9 @@ export async function formatPrice(priceMinor: number, currency: string): Promise
   return formatMoney(priceMinor, currency, locale === 'en' ? 'en-ZM' : locale);
 }
 
-/** "Opens 13 Jan 2027" or "Not open yet" for a course whose term hasn't opened (course-periods.md). */
-export async function lockLabel(lock: Card['lock']): Promise<string | null> {
-  if (lock === null) return null;
-  const t = await getTranslations('catalogue');
-  if (lock.opensAt === null) return t('notOpen');
-  const format = await getFormatter();
-  return t('opensOn', { date: format.dateTime(new Date(lock.opensAt), { dateStyle: 'medium' }) });
-}
-
 /** Course card (06 §2.5): cover 16:9 (lazy), title, instructor, level, duration, price. */
 export async function CourseCard({ course, priority = false }: { course: Card; priority?: boolean }) {
   const t = await getTranslations();
-  const locked = await lockLabel(course.lock);
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-md border border-line bg-surface">
       <div className="aspect-video bg-sunken">
@@ -75,10 +65,11 @@ export async function CourseCard({ course, priority = false }: { course: Card; p
           {t(`catalogue.levels.${course.level}`)} · {t('common.lessons', { count: course.lessonCount })}
           {course.durationSeconds > 0 ? ` · ${await formatDuration(course.durationSeconds)}` : ''}
         </p>
-        {course.period !== null || locked !== null ? (
+        {course.periods.length > 0 ? (
           <p className="flex flex-wrap items-center gap-2 text-caption text-muted">
-            {course.period !== null ? <span>{course.period.name}</span> : null}
-            {locked !== null ? <StatusBadge status="pending">{locked}</StatusBadge> : null}
+            {course.periods.map((period) => (
+              <span key={period.id}>{period.name}</span>
+            ))}
           </p>
         ) : null}
         <p className="tabular mt-auto pt-2 text-label text-ink">

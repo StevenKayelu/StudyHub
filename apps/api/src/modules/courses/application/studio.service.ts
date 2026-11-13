@@ -13,7 +13,6 @@ import { Prisma } from '../../../generated/prisma/client';
 import { AuditService } from '../../audit';
 import { type DepositPlanInput, depositPlanProblems, paymentsProblem } from '../../commerce';
 import type { TenantActor } from '../../identity';
-import { lockView, readCourseLock } from '../../learning';
 import { MediaService } from '../../media';
 import { AppError, requireTenantId, TenantDb, type TenantTx } from '../../platform';
 import { readCommerceSettings, readContentSettings } from '../../tenancy';
@@ -45,6 +44,7 @@ type LessonRow = {
   videoAssetId: string | null;
   quizId: string | null;
   attachments: { assetId: string }[];
+  period: { id: string; name: string; kind: 'TERM' | 'SEMESTER' | 'SEMINAR' } | null;
 };
 
 /**
@@ -121,13 +121,11 @@ export class StudioService {
         select: { notes: true },
       });
       const { depositPlans } = await readCommerceSettings(tx);
-      const lock = await readCourseLock(tx, courseId);
       const { contentProtection, downloadPolicy } = await readContentSettings(tx);
       return {
         ...found,
         reviewNote: note?.notes ?? null,
         depositRules: depositPlans,
-        lock,
         contentRules: { contentProtection, downloadPolicy },
       };
     });
@@ -151,11 +149,8 @@ export class StudioService {
       accessDays: course.accessDays,
       depositPlan: storedDepositPlan(course),
       depositRules: course.depositRules,
-      periodId: course.periodId,
       protectContent: course.protectContent,
       contentRules: course.contentRules,
-      accessOverride: course.accessOverride,
-      lock: lockView(course.lock),
       status: course.status,
       version: course.version,
       publishedAt: course.publishedAt?.toISOString() ?? null,
@@ -182,7 +177,6 @@ export class StudioService {
       priceMinor?: number | undefined;
       accessDays?: number | null | undefined;
       depositPlan?: DepositPlanInput | null | undefined;
-      periodId?: string | null | undefined;
       protectContent?: boolean | null | undefined;
     },
   ): Promise<StudioCourse> {
@@ -198,10 +192,6 @@ export class StudioService {
         await this.requireAssets(tx, richTextAssetIds(input.description), { kind: 'IMAGE', readyOnly: true });
       }
       await this.checkDepositPlan(tx, course, input);
-      // Keeping an archived period is fine; choosing one needs a current period of this school.
-      if (input.periodId !== undefined && input.periodId !== null && input.periodId !== course.periodId) {
-        await requirePeriod(tx, input.periodId);
-      }
       // Content protection is the tutor's to choose only while the school lets them.
       if (
         input.protectContent !== undefined &&
@@ -240,7 +230,6 @@ export class StudioService {
           ...(input.language !== undefined && { language: input.language }),
           ...(input.tags !== undefined && { tags: [...new Set(input.tags)] }),
           ...(input.subjectId !== undefined && { subjectId: input.subjectId }),
-          ...(input.periodId !== undefined && { periodId: input.periodId }),
           ...(input.protectContent !== undefined && { protectContent: input.protectContent }),
           ...(input.coverAssetId !== undefined && { coverAssetId: input.coverAssetId }),
           // A price change applies to new orders only (F12): orders snapshot the price (BR-08).
@@ -488,6 +477,7 @@ export class StudioService {
     input: {
       version: number;
       title?: string | undefined;
+      periodId?: string | null | undefined;
       content?: unknown;
       videoAssetId?: string | null | undefined;
       quizId?: string | null | undefined;
@@ -501,10 +491,13 @@ export class StudioService {
       await this.editableCourse(tx, actor, courseId);
       const lesson = await tx.lesson.findFirst({
         where: { id: lessonId, courseId },
-        select: { version: true, type: true },
+        select: { version: true, type: true, periodId: true },
       });
       if (lesson === null) throw new AppError('NOT_FOUND');
       if (lesson.version !== input.version) throw new AppError('VERSION_CONFLICT');
+      if (input.periodId !== undefined && input.periodId !== null) {
+        if (input.periodId !== lesson.periodId) await requirePeriod(tx, input.periodId);
+      }
       if (input.content !== undefined && input.content !== null) {
         await this.requireAssets(tx, richTextAssetIds(input.content), { kind: 'IMAGE', readyOnly: true });
       }
@@ -546,6 +539,7 @@ export class StudioService {
         where: { id: lessonId },
         data: {
           ...(input.title !== undefined && { title: input.title }),
+          ...(input.periodId !== undefined && { periodId: input.periodId }),
           ...(input.content !== undefined && {
             contentJson: input.content === null ? Prisma.DbNull : (sanitizeRichText(input.content) as object),
           }),
@@ -870,6 +864,7 @@ export class StudioService {
       isRequired: lesson.isRequired,
       durationSeconds: lesson.durationSeconds,
       ready,
+      period: lesson.period,
     };
   }
 
@@ -892,6 +887,7 @@ export const LESSON_SELECT = {
   videoAssetId: true,
   quizId: true,
   attachments: { select: { assetId: true }, orderBy: { position: 'asc' } },
+  period: { select: { id: true, name: true, kind: true } },
 } as const;
 
 export type { CourseAction };

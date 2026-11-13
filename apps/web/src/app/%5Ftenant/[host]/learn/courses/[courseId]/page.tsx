@@ -20,11 +20,12 @@ export default async function CoursePlayerEntry({ params }: { params: Promise<{ 
   const t = await getTranslations();
   const terms = await getTerms(tenant, await getLocale());
   const lessons = course === 'locked' ? [] : course.sections.flatMap((section) => section.lessons);
+  const available = lessons.filter((lesson) => !lesson.locked);
   if (course !== 'locked') {
     const target =
-      course.resume?.lessonId ??
-      lessons.find((lesson) => lesson.status !== 'COMPLETED' && !lesson.locked)?.id ??
-      lessons[0]?.id;
+      available.find((lesson) => lesson.id === course.resume?.lessonId)?.id ??
+      available.find((lesson) => lesson.status !== 'COMPLETED')?.id ??
+      available[0]?.id;
     if (target !== undefined) redirect(`/learn/courses/${courseId}/lessons/${target}`);
   }
   return (
@@ -32,7 +33,13 @@ export default async function CoursePlayerEntry({ params }: { params: Promise<{ 
       <StatePanel
         kind={course === 'locked' ? 'permission' : 'empty'}
         headingLevel={1}
-        title={course === 'locked' ? t('course.previewCta', terms) : t('learn.player.noContent')}
+        title={
+          course === 'locked'
+            ? t('course.previewCta', terms)
+            : lessons.length > 0
+              ? t('learn.player.noTopicsOpen')
+              : t('learn.player.noContent')
+        }
         actions={
           <NextLink href="/learn" className={buttonClasses('primary')}>
             {t('learn.title')}

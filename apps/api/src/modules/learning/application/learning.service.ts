@@ -16,7 +16,7 @@ import { MediaService } from '../../media';
 import { AppError, isSchoolReadOnly, requireTenantId, TenantDb, type TenantTx } from '../../platform';
 import { readContentSettings } from '../../tenancy';
 import { canDownload, isProtected, viewableInBrowser } from '../domain/content-policy';
-import { courseLock } from '../domain/period-access';
+import { periodLock } from '../domain/period-access';
 import { courseProgress, type LessonProgressStatus, nextLessonState } from '../domain/progress-rules';
 import {
   activeEnrollment,
@@ -26,7 +26,6 @@ import {
   inCatalogue,
   lessonRefusal,
   lockedLessons,
-  lockView,
   refusal,
 } from './access';
 
@@ -92,6 +91,7 @@ async function orderedLessons(tx: TenantTx, courseId: string) {
           durationSeconds: true,
           isPreview: true,
           isRequired: true,
+          period: { select: { id: true, name: true, kind: true, startsAt: true, mode: true } },
         },
       },
     },
@@ -214,7 +214,6 @@ export class LearningService {
         course: { id: course.id, slug: course.slug, title: course.title, status: course.status },
         access: grant.access,
         readOnly: isSchoolReadOnly(),
-        lock: grant.access === 'ENROLLED' ? lockView(grant.lock) : null,
         enrollment:
           grant.enrollment === null
             ? null
@@ -231,6 +230,10 @@ export class LearningService {
           lessons: section.lessons.map((lesson) => ({
             ...lesson,
             locked: locked.has(lesson.id),
+            periodLocked:
+              grant.access === 'ENROLLED' &&
+              !lesson.isPreview &&
+              periodLock(lesson.period, new Date()) !== null,
             status: (byLesson.get(lesson.id)?.status ?? 'NOT_STARTED') as LessonProgressStatus,
             positionSeconds: byLesson.get(lesson.id)?.positionSeconds ?? 0,
           })),
@@ -501,6 +504,7 @@ export class LearningService {
 
   async myLearning(actor: TenantActor | null): Promise<MyLearning> {
     const member = requireActor(actor);
+    const now = new Date();
     const rows = await this.db.run(async (tx) => {
       const enrollments = await tx.enrollment.findMany({
         where: { membershipId: member.membershipId, status: 'ACTIVE' },
@@ -520,13 +524,10 @@ export class LearningService {
               title: true,
               coverAssetId: true,
               ownerMembershipId: true,
-              accessOverride: true,
-              period: { select: { name: true, startsAt: true, mode: true } },
             },
           },
         },
       });
-      const now = new Date();
       const live = enrollments.filter((e) => e.expiresAt === null || e.expiresAt > now);
       const expired = enrollments.filter((e) => !live.includes(e));
       if (expired.length > 0 && !isSchoolReadOnly()) {
@@ -538,7 +539,14 @@ export class LearningService {
       const courseIds = live.map((e) => e.course.id);
       const lessons = await tx.lesson.findMany({
         where: { courseId: { in: courseIds } },
-        select: { id: true, courseId: true, title: true, isRequired: true },
+        select: {
+          id: true,
+          courseId: true,
+          title: true,
+          isRequired: true,
+          isPreview: true,
+          period: { select: { name: true, startsAt: true, mode: true } },
+        },
       });
       const progress = await tx.lessonProgress.findMany({
         where: { enrollmentId: { in: live.map((e) => e.id) } },
@@ -554,13 +562,17 @@ export class LearningService {
       rows.live.flatMap((e) => (e.course.coverAssetId === null ? [] : [e.course.coverAssetId])),
     );
     const names = new Map(rows.profiles.map((p) => [p.membershipId, p.displayName]));
-    const now = new Date();
     return {
       items: rows.live.map((e) => {
         const lessons = rows.lessons.filter((l) => l.courseId === e.course.id);
         const mine = rows.progress.filter((p) => p.enrollmentId === e.id);
         const completed = new Set(mine.filter((p) => p.status === 'COMPLETED').map((p) => p.lessonId));
-        const resumeLesson = lessons.find((l) => l.id === e.lastLessonId);
+        const accessible = lessons.filter((lesson) => {
+          return lesson.isPreview || periodLock(lesson.period, now) === null;
+        });
+        const resumeLesson =
+          accessible.find((lesson) => lesson.id === e.lastLessonId) ??
+          accessible.find((lesson) => !completed.has(lesson.id));
         return {
           enrollmentId: e.id,
           startedAt: e.startedAt.toISOString(),
@@ -575,7 +587,6 @@ export class LearningService {
             coverUrl: e.course.coverAssetId === null ? null : (covers.get(e.course.coverAssetId) ?? null),
             instructorName: names.get(e.course.ownerMembershipId) ?? '',
           },
-          lock: lockView(courseLock(e.course.period, e.course.accessOverride, now)),
           resume:
             resumeLesson === undefined
               ? null
@@ -626,6 +637,7 @@ export class LearningService {
         type: true,
         isPreview: true,
         isRequired: true,
+        period: { select: { name: true, startsAt: true, mode: true } },
         downloadable: true,
         durationSeconds: true,
         contentJson: true,
@@ -639,8 +651,9 @@ export class LearningService {
       lesson.course;
     const grant = await grantFor(tx, actor, course, expired);
     if (grant !== null) {
-      // Before the course's period opens, or beyond what a deposit opened: no content, video or files.
-      if ((await lockedLessons(tx, grant, course.id)).has(lesson.id)) throw lessonRefusal(grant, course.id);
+      if ((await lockedLessons(tx, grant, course.id)).has(lesson.id)) {
+        throw lessonRefusal(grant, course.id, lesson.id, periodLock(lesson.period, new Date()));
+      }
       return { lesson, course, access: grant.access, enrollment: grant.enrollment };
     }
     if (lesson.isPreview && (await inCatalogue(tx, actor, course))) {

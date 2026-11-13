@@ -70,10 +70,21 @@ export default async function LessonPage({ params }: { params: Params }) {
   }
 
   if (lesson === 'notOpen') {
-    // Course periods: the term hasn't opened; the frame's banner says when. The outline stays.
+    const topic = course.sections
+      .flatMap((section) => section.lessons)
+      .find((outlineLesson) => outlineLesson.id === lessonId);
     return (
       <PlayerFrame course={course} currentLessonId={lessonId} terms={terms}>
-        <StatePanel kind="permission" headingLevel={1} title={t('learn.player.notOpenTitle')} />
+        <StatePanel
+          kind="permission"
+          headingLevel={1}
+          title={t('learn.player.notOpenTitle')}
+          message={
+            topic?.period === null || topic?.period === undefined
+              ? undefined
+              : t('learn.player.topicOpensWith', { period: topic.period.name })
+          }
+        />
       </PlayerFrame>
     );
   }

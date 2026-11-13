@@ -35,7 +35,7 @@ async function setSemesterMode(page: Page, mode: 'Follow dates' | 'Open now'): P
   ).toBeVisible();
 }
 
-test.describe('course periods', () => {
+test.describe('topic periods', () => {
   test.describe.configure({ mode: 'serial' });
 
   test('administrators see their terms and add one', async ({ page }) => {
@@ -71,24 +71,24 @@ test.describe('course periods', () => {
     await page.goto(await linkFromEmail(email));
     await page.waitForURL(school(ACME, '/learn'));
 
-    // The catalogue: filter by the semester; the card says when it opens.
+    // The catalogue: filter by the semester; cards identify terms assigned to their topics.
     await page.goto(school(ACME, `/browse?period=${SEMESTER}`));
     const card = page.locator('article', {
       has: page.getByRole('link', { name: 'Chemistry for semester two' }),
     });
-    await expect(card.getByText(/^Opens /)).toBeVisible();
+    await expect(card.getByText('Semester 2')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Algebra essentials' })).toHaveCount(0);
     await expectNoSeriousAxeViolations(page);
     await page.goto(school(ACME, '/browse?period=open'));
     await expect(page.getByRole('link', { name: 'Algebra essentials' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Chemistry for semester two' })).toHaveCount(0);
 
-    // Enrol now; the lessons stay closed until the semester starts.
+    // Enrol now; each topic remains locked until its semester starts, while preview content is open.
     await page.goto(school(ACME, `/c/${COURSE}`));
-    await expect(page.getByTestId('course-lock')).toContainText('Part of Semester 2');
+    await expect(page.getByText('Semester 2').first()).toBeVisible();
     await page.getByRole('button', { name: 'Enrol for free' }).click();
     await page.waitForURL(/\/learn\/courses\/[0-9a-f-]{36}\/lessons\/[0-9a-f-]{36}$/);
-    await expect(page.getByText(/opens on .*Until then you can see the outline/).first()).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
     await page.goto(school(ACME, `/learn/courses/${COURSE_ID}`));
     await page
@@ -97,6 +97,9 @@ test.describe('course periods', () => {
       .getByRole('link', { name: /The periodic table/ })
       .click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('This lesson isn’t open yet');
+    await expect(
+      page.getByText('This topic is part of Semester 2. It will open when the term opens.'),
+    ).toBeVisible();
     await expectNoSeriousAxeViolations(page);
 
     // The school opens the semester early (in another browser): the lesson opens.

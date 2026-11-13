@@ -1,5 +1,4 @@
 import {
-  adminCoursePeriodSchema,
   createCourseSchema,
   createOrderSchema,
   createLessonSchema,
@@ -85,6 +84,7 @@ export const ISOLATION_PAYLOADS: Readonly<Record<string, (ids: Ids) => unknown>>
     updateLessonSchema.parse({
       version: 1,
       title: 'Isolation probe',
+      periodId: id(ids, 'academic_period'),
       attachmentAssetIds: [id(ids, 'asset')],
     }),
   'POST /api/v1/admin/subjects': (ids) =>
@@ -93,8 +93,6 @@ export const ISOLATION_PAYLOADS: Readonly<Record<string, (ids: Ids) => unknown>>
   'PATCH /api/v1/admin/subjects/:id': () => updateCategorySchema.parse({ name: 'Isolation probe' }),
   'PATCH /api/v1/admin/periods/:id': () =>
     updatePeriodSchema.parse({ name: 'Isolation probe', mode: 'OPEN' }),
-  'PATCH /api/v1/admin/courses/:id/period': (ids) =>
-    adminCoursePeriodSchema.parse({ periodId: id(ids, 'academic_period'), accessOverride: 'OPEN' }),
   'POST /api/v1/admin/courses/:id/enrollments': () =>
     grantEnrollmentSchema.parse({ email: 'probe@beta.test', reason: 'Isolation probe' }),
   'POST /api/v1/admin/enrollments/:id/revoke': () =>

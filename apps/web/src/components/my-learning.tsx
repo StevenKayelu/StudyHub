@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { MyLearning } from '@studyhub/contracts';
-import { buttonClasses, Card, ProgressLine, StatusBadge } from '@studyhub/ui';
+import { buttonClasses, Card, ProgressLine } from '@studyhub/ui';
 import { BookOpen } from 'lucide-react';
 import NextLink from 'next/link';
 import { getFormatter, getTranslations } from 'next-intl/server';
@@ -82,13 +82,6 @@ export async function EnrolledCourse({ item }: { item: Item }) {
         </h3>
         {item.course.instructorName !== '' ? (
           <p className="text-body-sm text-muted">{item.course.instructorName}</p>
-        ) : null}
-        {item.lock !== null ? (
-          <StatusBadge status="pending">
-            {item.lock.opensAt === null
-              ? t('notOpenYet')
-              : t('opensOn', { date: format.dateTime(new Date(item.lock.opensAt), { dateStyle: 'medium' }) })}
-          </StatusBadge>
         ) : null}
         <div className="mt-auto pt-2">
           <ProgressLine

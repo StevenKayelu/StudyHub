@@ -7,8 +7,8 @@ type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-ex
 
 const DAY_MS = 86_400_000;
 
-/** Terms, semesters and seminars (docs/design/course-periods.md), end to end. */
-describe('course periods', () => {
+/** Topic-level terms, semesters and seminars (docs/design/course-periods.md), end to end. */
+describe('topic periods', () => {
   let h: Harness;
   const cookies: Record<string, string> = {};
   let courseId = '';
@@ -39,18 +39,19 @@ describe('course periods', () => {
     expect(response.statusCode, response.body).toBe(status);
     return status === 204 ? {} : response.json();
   };
+  const lessonStudio = async (id: string, body: Json) => {
+    const path = `/api/v1/studio/courses/${courseId}/lessons/${id}`;
+    const current = await ok(await req('GET', path, { cookie: tutor() }));
+    return req('PATCH', path, {
+      cookie: tutor(),
+      body: { version: current.version, ...body },
+    });
+  };
   const sql = (text: string, params: unknown[] = []) =>
     h.asTenant(h.tenants.acme, () => h.migrator.query(text, params));
   const owner = () => cookies['owner@acme.test']!;
   const tutor = () => cookies['tutor@acme.test']!;
   const learner = () => cookies['l1@example.com']!;
-  const studio = async (id: string, body: Json) => {
-    const current = await ok(await req('GET', `/api/v1/studio/courses/${id}`, { cookie: tutor() }));
-    return req('PATCH', `/api/v1/studio/courses/${id}`, {
-      cookie: tutor(),
-      body: { version: current.version, ...body },
-    });
-  };
   const lesson = (n: number) => req('GET', `/api/v1/learn/lessons/${lessons[n]}`, { cookie: learner() });
 
   beforeAll(async () => {
@@ -88,6 +89,17 @@ describe('course periods', () => {
       if (slug === 'public-speaking') openCourseId = id;
       else courseId = id;
     }
+    const openSectionId = (
+      await sql(
+        `INSERT INTO section (tenant_id, course_id, title, position) VALUES ($1, $2, 'Topics', 0) RETURNING id`,
+        [h.tenants.acme, openCourseId],
+      )
+    ).rows[0].id as string;
+    await sql(
+      `INSERT INTO lesson (tenant_id, course_id, section_id, title, type, position, content_json)
+       VALUES ($1, $2, $3, 'Open lesson', 'TEXT', 0, '{"type":"doc","content":[]}')`,
+      [h.tenants.acme, openCourseId, openSectionId],
+    );
     const sectionId = (
       await sql(
         `INSERT INTO section (tenant_id, course_id, title, position) VALUES ($1, $2, 'Part 1', 1) RETURNING id`,
@@ -120,6 +132,7 @@ describe('course periods', () => {
   });
 
   let termId = '';
+  let semesterId = '';
 
   it('administrators create periods; tutors and learners cannot', async () => {
     const startsAt = new Date(Date.now() + 10 * DAY_MS).toISOString();
@@ -131,13 +144,14 @@ describe('course periods', () => {
     });
     expect(bad.statusCode).toBe(422);
     termId = (await ok(await req('POST', '/api/v1/admin/periods', { cookie: owner(), body }), 201)).id;
-    await ok(
+    const openTerm = await ok(
       await req('POST', '/api/v1/admin/periods', {
         cookie: owner(),
         body: { name: 'Semester 1', kind: 'SEMESTER', startsAt: new Date(Date.now() - DAY_MS).toISOString() },
       }),
       201,
     );
+    semesterId = openTerm.id;
     const list = await ok(await req('GET', '/api/v1/periods', { cookie: learner() }));
     expect(list.periods.map((p: Json) => [p.name, p.kind, p.open])).toEqual([
       ['Semester 1', 'SEMESTER', true],
@@ -147,55 +161,60 @@ describe('course periods', () => {
     expect(audit.rows.map((r) => r.action)).toContain('period.created');
   });
 
-  it('tutors put a course in a period in Studio; open courses have none', async () => {
-    const missing = await studio(courseId, { periodId: '00000000-0000-4000-8000-000000000000' });
+  it('tutors assign terms to individual topics in Studio', async () => {
+    const missing = await lessonStudio(lessons[1]!, { periodId: '00000000-0000-4000-8000-000000000000' });
     expect(missing.statusCode).toBe(422);
     expect(missing.json().errors[0]).toMatchObject({ field: 'periodId', code: 'not_found' });
-    const saved = await ok(await studio(courseId, { periodId: termId }));
+    const saved = await ok(await lessonStudio(lessons[1]!, { periodId: termId }));
     expect(saved).toMatchObject({
-      periodId: termId,
-      accessOverride: null,
-      lock: { periodName: 'Term 2 2027' },
+      period: { id: termId, name: 'Term 2 2027', kind: 'TERM' },
     });
+    await ok(await lessonStudio(lessons[2]!, { periodId: semesterId }));
 
     const catalogue = await ok(await req('GET', '/api/v1/courses', { cookie: learner() }));
     const card = catalogue.items.find((c: Json) => c.slug === 'algebra-term-2');
-    expect(card.period).toMatchObject({ id: termId, name: 'Term 2 2027', kind: 'TERM' });
-    expect(card.lock.opensAt).not.toBeNull();
+    expect(card.periods).toEqual(
+      expect.arrayContaining([
+        { id: termId, name: 'Term 2 2027', kind: 'TERM' },
+        { id: semesterId, name: 'Semester 1', kind: 'SEMESTER' },
+      ]),
+    );
     const byTerm = await ok(await req('GET', `/api/v1/courses?period=${termId}`, { cookie: learner() }));
     expect(byTerm.items.map((c: Json) => c.slug)).toEqual(['algebra-term-2']);
     const open = await ok(await req('GET', '/api/v1/courses?period=open', { cookie: learner() }));
-    expect(open.items.map((c: Json) => c.slug)).toEqual(['public-speaking']);
-    expect(open.items[0]).toMatchObject({ period: null, lock: null });
+    expect(open.items.map((c: Json) => c.slug)).toEqual(
+      expect.arrayContaining(['algebra-term-2', 'public-speaking']),
+    );
   });
 
-  it('learners enrol in advance, but content stays locked until the term opens', async () => {
+  it('learners can open topics in an open term while a different topic remains locked', async () => {
     const landing = await ok(await req('GET', '/api/v1/courses/algebra-term-2', { cookie: learner() }));
     expect(landing.viewer.canEnrolFree).toBe(true);
-    expect(landing.lock).not.toBeNull();
+    expect(landing.periods.map((p: Json) => p.id)).toContain(termId);
     await ok(await req('POST', '/api/v1/courses/algebra-term-2/enrol', { cookie: learner() }));
 
     const player = await ok(await req('GET', `/api/v1/learn/courses/${courseId}`, { cookie: learner() }));
-    expect(player.lock).toMatchObject({ periodName: 'Term 2 2027' });
-    expect(player.sections[0].lessons.map((l: Json) => l.locked)).toEqual([false, true, true]);
+    expect(player.sections[0].lessons.map((l: Json) => l.locked)).toEqual([false, true, false]);
+    expect(player.sections[0].lessons.map((l: Json) => l.periodLocked)).toEqual([false, true, false]);
     await ok(await lesson(0));
+    await ok(await lesson(2));
     const locked = await lesson(1);
     expect(locked.statusCode).toBe(403);
-    expect(locked.json()).toMatchObject({ code: 'COURSE_NOT_OPEN', courseId, periodName: 'Term 2 2027' });
+    expect(locked.json()).toMatchObject({
+      code: 'COURSE_NOT_OPEN',
+      courseId,
+      lessonId: lessons[1],
+      periodName: 'Term 2 2027',
+    });
     const progress = await req('PUT', `/api/v1/learn/lessons/${lessons[1]}/progress`, {
       cookie: learner(),
       body: { status: 'COMPLETED', positionSeconds: 0 },
     });
     expect(progress.json().code).toBe('COURSE_NOT_OPEN');
     const attempt = await req('POST', `/api/v1/learn/quizzes/${quizId}/attempts`, { cookie: learner() });
-    expect(attempt.json().code).toBe('COURSE_NOT_OPEN');
-    const practice = await req('POST', `/api/v1/learn/courses/${courseId}/practice`, {
-      cookie: learner(),
-      body: { count: 1 },
-    });
-    expect(practice.json().code).toBe('COURSE_NOT_OPEN');
+    expect(attempt.json().code).not.toBe('COURSE_NOT_OPEN');
     const mine = await ok(await req('GET', '/api/v1/me/enrollments', { cookie: learner() }));
-    expect(mine.items[0].lock).toMatchObject({ periodName: 'Term 2 2027' });
+    expect(mine.items[0]).not.toHaveProperty('lock');
 
     // The tutor and administrators still open everything.
     await ok(await req('GET', `/api/v1/learn/lessons/${lessons[1]}`, { cookie: tutor() }));
@@ -209,10 +228,10 @@ describe('course periods', () => {
     );
     await ok(await lesson(1));
     const player = await ok(await req('GET', `/api/v1/learn/courses/${courseId}`, { cookie: learner() }));
-    expect(player.lock).toBeNull();
+    expect(player.sections[0].lessons.map((l: Json) => l.locked)).toEqual([false, false, false]);
   });
 
-  it('administrators keep a period locked or open it early, and override single courses', async () => {
+  it('administrators keep a period locked or open its assigned topics early', async () => {
     const lock = (body: Json) => req('PATCH', `/api/v1/admin/periods/${termId}`, { cookie: owner(), body });
     expect(
       (await req('PATCH', `/api/v1/admin/periods/${termId}`, { cookie: tutor(), body: { mode: 'LOCKED' } }))
@@ -220,33 +239,7 @@ describe('course periods', () => {
     ).toBe(403);
     await ok(await lock({ mode: 'LOCKED' }), 204);
     expect((await lesson(1)).json()).toMatchObject({ code: 'COURSE_NOT_OPEN', opensAt: null });
-
-    // One course opened on its own while its term stays locked.
-    const override = (body: Json) =>
-      req('PATCH', `/api/v1/admin/courses/${courseId}/period`, { cookie: owner(), body });
-    expect(
-      (
-        await req('PATCH', `/api/v1/admin/courses/${courseId}/period`, {
-          cookie: tutor(),
-          body: { accessOverride: 'OPEN' },
-        })
-      ).statusCode,
-    ).toBe(403);
-    await ok(await override({ accessOverride: 'OPEN' }), 204);
-    await ok(await lesson(1));
-    const admin = await ok(await req('GET', '/api/v1/admin/courses', { cookie: owner() }));
-    expect(admin.courses.find((c: Json) => c.id === courseId)).toMatchObject({
-      period: { id: termId },
-      accessOverride: 'OPEN',
-      lock: null,
-    });
-
-    // A locked course stays locked even if its tutor makes it an open course.
-    await ok(await override({ accessOverride: 'LOCKED' }), 204);
-    await ok(await studio(courseId, { periodId: null }));
-    expect((await lesson(1)).json()).toMatchObject({ code: 'COURSE_NOT_OPEN', periodName: null });
-
-    await ok(await override({ periodId: termId, accessOverride: null }), 204);
+    await ok(await lesson(2));
     await ok(await lock({ mode: 'OPEN' }), 204);
     await ok(await lesson(1));
 
@@ -255,7 +248,7 @@ describe('course periods', () => {
     const list = await ok(await req('GET', '/api/v1/periods', { cookie: learner() }));
     expect(list.periods.map((p: Json) => p.id)).not.toContain(termId);
     const all = await ok(await req('GET', '/api/v1/admin/periods', { cookie: owner() }));
-    expect(all.periods.find((p: Json) => p.id === termId)).toMatchObject({ archived: true, courseCount: 1 });
-    expect((await studio(openCourseId, { periodId: termId })).statusCode).toBe(422);
+    expect(all.periods.find((p: Json) => p.id === termId)).toMatchObject({ archived: true, lessonCount: 1 });
+    expect((await lessonStudio(lessons[0]!, { periodId: termId })).statusCode).toBe(422);
   });
 });

@@ -56,14 +56,16 @@ export default async function CourseLandingPage({ params }: { params: Params }) 
       <article className="grid gap-8 py-4 lg:grid-cols-[1fr_20rem]">
         <div className="flex flex-col gap-6">
           <header className="flex flex-col gap-2">
-            {course.subject !== null || course.period !== null ? (
+            {course.subject !== null || course.periods.length > 0 ? (
               <p className="flex flex-wrap gap-x-3 text-label">
                 {course.subject !== null ? (
                   <NextLink href={`/browse?subject=${course.subject.slug}`}>{course.subject.name}</NextLink>
                 ) : null}
-                {course.period !== null ? (
-                  <NextLink href={`/browse?period=${course.period.id}`}>{course.period.name}</NextLink>
-                ) : null}
+                {course.periods.map((period) => (
+                  <NextLink key={period.id} href={`/browse?period=${period.id}`}>
+                    {period.name}
+                  </NextLink>
+                ))}
               </p>
             ) : null}
             <h1 className="text-h1">{course.title}</h1>
@@ -145,6 +147,9 @@ export default async function CourseLandingPage({ params }: { params: Params }) 
                             {lesson.isPreview ? (
                               <span className="text-caption text-accent">{t('course.preview')}</span>
                             ) : null}
+                            {lesson.period !== null ? (
+                              <span className="text-caption text-muted">{lesson.period.name}</span>
+                            ) : null}
                             {lesson.durationSeconds !== null && lesson.durationSeconds > 0 ? (
                               <span className="tabular text-caption text-muted">
                                 {duration(lesson.durationSeconds)}
@@ -207,18 +212,6 @@ export default async function CourseLandingPage({ params }: { params: Params }) 
             <p className="tabular text-h2" data-testid="course-price">
               {await formatPrice(course.priceMinor, course.currency)}
             </p>
-            {course.lock !== null ? (
-              <p className="text-body-sm text-muted" data-testid="course-lock">
-                {course.lock.opensAt === null || course.lock.periodName === null
-                  ? t('course.lockNoticeManual', terms)
-                  : t('course.lockNotice', {
-                      period: course.lock.periodName,
-                      date: (await getFormatter()).dateTime(new Date(course.lock.opensAt), {
-                        dateStyle: 'long',
-                      }),
-                    })}
-              </p>
-            ) : null}
             <CourseAction
               course={{ id: course.id, slug: course.slug, priceMinor: course.priceMinor }}
               viewer={course.viewer}

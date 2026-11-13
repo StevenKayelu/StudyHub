@@ -20,7 +20,7 @@ export interface PeriodRow {
   archived: boolean;
   datesLabel: string;
   statusLabel: string;
-  courseCountLabel: string;
+  lessonCountLabel: string;
 }
 
 const KINDS: PeriodKind[] = ['TERM', 'SEMESTER', 'SEMINAR'];
@@ -163,7 +163,7 @@ function PeriodItem({ period, texts }: { period: PeriodRow; texts: StudioTexts }
         <div className="flex min-w-0 flex-1 flex-col">
           <h2 className="text-h3">{period.name}</h2>
           <span className="text-caption text-muted">
-            {p.kinds[period.kind]} · {period.datesLabel} · {period.courseCountLabel}
+            {p.kinds[period.kind]} · {period.datesLabel} · {period.lessonCountLabel}
           </span>
         </div>
         {period.archived ? (
@@ -235,57 +235,6 @@ export function PeriodManager({ periods, texts }: { periods: PeriodRow[]; texts:
       {periods.map((period) => (
         <PeriodItem key={period.id} period={period} texts={texts} />
       ))}
-    </div>
-  );
-}
-
-/** One course's term and access on the admin course list. */
-export function CoursePeriodControl({
-  courseId,
-  periodId,
-  accessOverride,
-  periods,
-  texts,
-}: {
-  courseId: string;
-  periodId: string | null;
-  accessOverride: 'OPEN' | 'LOCKED' | null;
-  periods: { id: string; name: string }[];
-  texts: StudioTexts;
-}) {
-  const c = texts.admin.courseList;
-  const action = useAction(texts);
-  const save = (body: Record<string, unknown>) =>
-    void action.run(() => callApi('PATCH', `/api/v1/admin/courses/${courseId}/period`, body));
-  // A course may sit in an archived period: keep it selectable so the select shows it.
-  const options = [
-    { value: 'open', label: c.openCourse },
-    ...periods.map((p) => ({ value: p.id, label: p.name })),
-  ];
-  return (
-    <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-end">
-      {action.feedback}
-      <div className="flex-1">
-        <Select
-          label={c.period}
-          value={periodId ?? 'open'}
-          disabled={action.busy}
-          onValueChange={(value) => save({ periodId: value === 'open' ? null : value })}
-          options={options}
-        />
-      </div>
-      <div className="flex-1">
-        <Select
-          label={c.override}
-          value={accessOverride ?? 'FOLLOW'}
-          disabled={action.busy}
-          onValueChange={(value) => save({ accessOverride: value === 'FOLLOW' ? null : value })}
-          options={(['FOLLOW', 'OPEN', 'LOCKED'] as const).map((value) => ({
-            value,
-            label: c.overrides[value],
-          }))}
-        />
-      </div>
     </div>
   );
 }

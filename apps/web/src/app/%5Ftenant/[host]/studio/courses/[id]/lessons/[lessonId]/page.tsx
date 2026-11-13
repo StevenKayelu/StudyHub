@@ -1,4 +1,4 @@
-import { lessonDetailSchema, quizListSchema } from '@studyhub/contracts';
+import { lessonDetailSchema, periodListSchema, quizListSchema } from '@studyhub/contracts';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getLocale } from 'next-intl/server';
@@ -40,6 +40,7 @@ export default async function LessonPage({ params }: { params: Params }) {
   const course = await loadStudioCourse(id);
   const lesson = await loadLesson(course.id, lessonId);
   const terms = await getTerms(await currentTenant(), await getLocale());
+  const periods = (await fetchContent('/api/v1/periods', periodListSchema))?.periods ?? [];
   const quizzes =
     lesson.type === 'QUIZ'
       ? ((await fetchContent(`/api/v1/studio/courses/${course.id}/quizzes`, quizListSchema))?.items ?? [])
@@ -53,6 +54,7 @@ export default async function LessonPage({ params }: { params: Params }) {
       <LessonEditor
         courseId={course.id}
         initial={lesson}
+        periods={periods}
         editable={EDITABLE.has(course.status)}
         texts={await studioTexts(terms)}
         quizzes={quizzes}

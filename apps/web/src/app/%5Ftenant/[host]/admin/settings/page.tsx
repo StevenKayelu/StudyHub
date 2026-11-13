@@ -46,7 +46,10 @@ export default async function AdminSettingsPage() {
   ]);
   if (settings === null) return null;
   const texts = await formTexts();
-  const uploadTypeNames = t.raw('schoolAdmin.settings.uploadTypeNames') as Record<string, string>;
+  const uploadTypeNames = t.raw('schoolAdmin.settings.uploadTypeNames') as {
+    type: string;
+    label: string;
+  }[];
   const last = settings.lastChange;
   const { general, content, planCaps } = settings;
   const reason: ApiField = { kind: 'textarea', name: 'reason', label: s('reason'), rows: 2, required: true };
@@ -146,8 +149,10 @@ export default async function AdminSettingsPage() {
             kind: 'multi',
             name: 'allowedUploadTypes',
             label: s('uploadTypes'),
-            // MIME types contain dots, which message paths treat as nesting: read the names as one object.
-            options: DOCUMENT_TYPES.map((type) => ({ value: type, label: uploadTypeNames[type] ?? type })),
+            options: DOCUMENT_TYPES.map((type) => ({
+              value: type,
+              label: uploadTypeNames.find((name) => name.type === type)?.label ?? type,
+            })),
             defaultValue: content.allowedUploadTypes,
           },
           {

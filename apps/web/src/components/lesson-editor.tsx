@@ -1,6 +1,6 @@
 'use client';
 
-import type { LessonDetail } from '@studyhub/contracts';
+import type { LessonDetail, PeriodList } from '@studyhub/contracts';
 import { Alert, Button, Checkbox, TextField } from '@studyhub/ui';
 import type { JSONContent } from '@tiptap/react';
 import { FileText, PlayCircle, Trash2 } from 'lucide-react';
@@ -27,6 +27,7 @@ const formatSize = (bytes: number) =>
 export function LessonEditor({
   courseId,
   initial,
+  periods,
   editable,
   texts,
   quizzes = [],
@@ -34,6 +35,7 @@ export function LessonEditor({
 }: {
   courseId: string;
   initial: LessonDetail;
+  periods: PeriodList['periods'];
   editable: boolean;
   texts: StudioTexts;
   /** QUIZ lessons: the course's quizzes to choose from. */
@@ -83,6 +85,9 @@ export function LessonEditor({
               ...(lesson.type === 'TEXT' && content.current !== null && { content: content.current }),
               isPreview: data.get('isPreview') === 'on',
               isRequired: data.get('isRequired') === 'on',
+              ...(text(data, 'periodId') !== (lesson.period?.id ?? '') && {
+                periodId: text(data, 'periodId') === '' ? null : text(data, 'periodId'),
+              }),
               ...(lesson.type !== 'QUIZ' &&
                 downloadPolicy === 'TUTOR_CHOOSES' && { downloadable: data.get('downloadable') === 'on' }),
             }),
@@ -124,6 +129,36 @@ export function LessonEditor({
                 <p className="text-body-sm text-danger">{form.fieldError('content')}</p>
               ) : null}
             </div>
+          ) : null}
+          {periods.length > 0 || lesson.period !== null ? (
+            <label className="flex flex-col gap-1 text-label text-ink">
+              {l.period}
+              <select
+                id="periodId"
+                name="periodId"
+                defaultValue={lesson.period?.id ?? ''}
+                aria-describedby="periodId-hint"
+                className="h-11 rounded-md border border-strong bg-surface px-3 text-body text-ink"
+              >
+                <option value="">{l.openTopic}</option>
+                {periods.map((period) => (
+                  <option key={period.id} value={period.id}>
+                    {period.name}
+                  </option>
+                ))}
+                {lesson.period !== null && !periods.some((period) => period.id === lesson.period?.id) ? (
+                  <option value={lesson.period.id}>
+                    {lesson.period.name || texts.admin.periods.archived}
+                  </option>
+                ) : null}
+              </select>
+              <span id="periodId-hint" className="text-body-sm font-normal text-muted">
+                {l.periodHint}
+              </span>
+              {form.fieldError('periodId') !== undefined ? (
+                <span className="text-body-sm font-normal text-danger">{form.fieldError('periodId')}</span>
+              ) : null}
+            </label>
           ) : null}
           <Checkbox
             name="isPreview"

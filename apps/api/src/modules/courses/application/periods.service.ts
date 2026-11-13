@@ -3,7 +3,7 @@ import type { AdminPeriodList, PeriodKind, PeriodList, PeriodMode } from '@study
 
 import { AuditService } from '../../audit';
 import { can, type TenantActor } from '../../identity';
-import { courseLock } from '../../learning';
+import { periodLock } from '../../learning';
 import { AppError, requireTenantId, TenantDb, type TenantTx } from '../../platform';
 
 /** A current (not archived) period of this school, or a field error on `periodId`. */
@@ -45,7 +45,7 @@ export class PeriodsService {
         kind: p.kind,
         startsAt: p.startsAt.toISOString(),
         endsAt: p.endsAt?.toISOString() ?? null,
-        open: courseLock(p, null, now) === null,
+        open: periodLock(p, now) === null,
       })),
     };
   }
@@ -55,7 +55,7 @@ export class PeriodsService {
     const periods = await this.db.run((tx) =>
       tx.academicPeriod.findMany({
         orderBy: [{ archivedAt: { sort: 'desc', nulls: 'first' } }, ...PERIOD_ORDER],
-        include: { _count: { select: { courses: true } } },
+        include: { _count: { select: { lessons: true } } },
       }),
     );
     const now = new Date();
@@ -67,9 +67,9 @@ export class PeriodsService {
         startsAt: p.startsAt.toISOString(),
         endsAt: p.endsAt?.toISOString() ?? null,
         mode: p.mode,
-        open: courseLock(p, null, now) === null,
+        open: periodLock(p, now) === null,
         archived: p.archivedAt !== null,
-        courseCount: p._count.courses,
+        lessonCount: p._count.lessons,
       })),
     };
   }
@@ -152,41 +152,6 @@ export class PeriodsService {
         entityId: id,
         actorId: actor.userId,
         before: { name: period.name, mode: period.mode, startsAt: period.startsAt, endsAt: period.endsAt },
-        after: input,
-      });
-    });
-  }
-
-  /** An administrator moves a course to a period (or makes it open), or opens or locks it on its own. */
-  async setCoursePeriod(
-    actor: TenantActor,
-    courseId: string,
-    input: { periodId?: string | null | undefined; accessOverride?: 'OPEN' | 'LOCKED' | null | undefined },
-  ): Promise<void> {
-    requireAdmin(actor);
-    await this.db.run(async (tx) => {
-      const course = await tx.course.findFirst({
-        where: { id: courseId },
-        select: { periodId: true, accessOverride: true },
-      });
-      if (course === null) throw new AppError('NOT_FOUND');
-      if (input.periodId !== undefined && input.periodId !== null && input.periodId !== course.periodId) {
-        await requirePeriod(tx, input.periodId);
-      }
-      await tx.course.update({
-        where: { id: courseId },
-        data: {
-          ...(input.periodId !== undefined && { periodId: input.periodId }),
-          ...(input.accessOverride !== undefined && { accessOverride: input.accessOverride }),
-          updatedAt: new Date(),
-        },
-      });
-      await this.audit.record(tx, {
-        action: 'course.period_changed',
-        entityType: 'course',
-        entityId: courseId,
-        actorId: actor.userId,
-        before: course,
         after: input,
       });
     });

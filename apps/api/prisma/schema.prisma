@@ -691,11 +691,6 @@ enum PeriodMode {
   LOCKED
 }
 
-enum CourseAccessOverride {
-  OPEN
-  LOCKED
-}
-
 /// A term, semester or seminar (docs/design/course-periods.md). AUTO opens it at starts_at.
 model AcademicPeriod {
   id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -710,7 +705,7 @@ model AcademicPeriod {
   createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime   @default(now()) @map("updated_at") @db.Timestamptz(3)
 
-  courses Course[]
+  lessons Lesson[]
 
   @@unique([tenantId, id], map: "academic_period_tenant_id_id_key")
   @@index([tenantId, startsAt], map: "academic_period_tenant_starts_idx")
@@ -740,10 +735,6 @@ model Course {
   depositMinor      BigInt?                  @map("deposit_minor")
   depositLessonPct  Int?                     @map("deposit_lesson_pct") @db.SmallInt
   balanceDueDays    Int?                     @map("balance_due_days")
-  /// Course periods (docs/design/course-periods.md): null = an open course.
-  periodId          String?                  @map("period_id") @db.Uuid
-  /// An administrator's lock or opening of this course; wins over the period.
-  accessOverride    CourseAccessOverride?    @map("access_override")
   /// Content protection (docs/design/content-protection.md): null follows the default (protected).
   protectContent    Boolean?                 @map("protect_content")
   status            CourseStatus             @default(DRAFT)
@@ -757,7 +748,6 @@ model Course {
   searchVector      Unsupported("tsvector")? @map("search_vector")
 
   subject     Subject?           @relation(fields: [tenantId, subjectId], references: [tenantId, id], onDelete: Restrict)
-  period      AcademicPeriod?    @relation(fields: [tenantId, periodId], references: [tenantId, id], onDelete: Restrict)
   sections    Section[]
   lessons     Lesson[]
   submissions CourseSubmission[]
@@ -770,7 +760,6 @@ model Course {
   @@unique([tenantId, slug], map: "course_tenant_slug_key")
   @@unique([tenantId, id], map: "course_tenant_id_id_key")
   @@index([tenantId, ownerMembershipId, status], map: "course_tenant_owner_status_idx")
-  @@index([tenantId, periodId], map: "course_tenant_period_idx")
   @@map("course")
 }
 
@@ -812,6 +801,7 @@ model Lesson {
   tenantId        String     @map("tenant_id") @db.Uuid
   courseId        String     @map("course_id") @db.Uuid
   sectionId       String     @map("section_id") @db.Uuid
+  periodId        String?    @map("period_id") @db.Uuid
   title           String
   type            LessonType
   position        Int
@@ -828,12 +818,14 @@ model Lesson {
 
   course      Course             @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Cascade)
   section     Section            @relation(fields: [tenantId, sectionId], references: [tenantId, id], onDelete: Cascade)
+  period      AcademicPeriod?    @relation(fields: [tenantId, periodId], references: [tenantId, id], onDelete: Restrict)
   attachments LessonAttachment[]
   progress    LessonProgress[]
 
   @@unique([tenantId, id], map: "lesson_tenant_id_id_key")
   @@unique([tenantId, sectionId, position], map: "lesson_section_position_key")
   @@index([tenantId, courseId], map: "lesson_tenant_course_idx")
+  @@index([tenantId, periodId], map: "lesson_tenant_period_idx")
   @@map("lesson")
 }
 

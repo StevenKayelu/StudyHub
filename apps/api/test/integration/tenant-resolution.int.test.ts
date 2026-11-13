@@ -109,7 +109,6 @@ const CONTENT_ROUTES: readonly string[] = [
   'GET /api/v1/studio/quizzes/:id',
   'GET /api/v1/studio/quizzes/:id/analytics',
   'PATCH /api/v1/admin/categories/:id',
-  'PATCH /api/v1/admin/courses/:id/period',
   'PATCH /api/v1/admin/periods/:id',
   'PATCH /api/v1/admin/subjects/:id',
   'PATCH /api/v1/studio/courses/:id',

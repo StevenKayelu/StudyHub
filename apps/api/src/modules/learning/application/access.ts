@@ -4,7 +4,7 @@ import { can, type TenantActor } from '../../identity';
 import { AppError, isSchoolReadOnly, type TenantTx } from '../../platform';
 import { readContentSettings, readFeatures } from '../../tenancy';
 import { lockedLessonIds } from '../domain/deposit-access';
-import { type CourseLock, courseLock } from '../domain/period-access';
+import { type PeriodLock, periodLock } from '../domain/period-access';
 
 /** The course fields every access decision needs. */
 export interface CourseForAccess {
@@ -37,40 +37,24 @@ const ENROLLMENT_FIELDS = {
   balanceDueAt: true,
 } as const;
 
-/** `lock`: the course's period (or an administrator) keeps an enrolled learner out for now. */
 export type Grant = {
   access: Exclude<LearnAccess, 'PREVIEW'>;
   enrollment: EnrollmentRow | null;
-  lock: CourseLock | null;
 };
 
-/** Whether the course is open now (docs/design/course-periods.md); null when it is. */
-export async function readCourseLock(
-  tx: TenantTx,
-  courseId: string,
-  now = new Date(),
-): Promise<CourseLock | null> {
-  const course = await tx.course.findUnique({
-    where: { id: courseId },
-    select: { accessOverride: true, period: { select: { name: true, startsAt: true, mode: true } } },
-  });
-  if (course === null) return null;
-  return courseLock(course.period, course.accessOverride, now);
-}
-
-/** A lock as the API shows it. */
-export function lockView(lock: CourseLock | null) {
-  return lock === null ? null : { periodName: lock.periodName, opensAt: lock.opensAt?.toISOString() ?? null };
-}
-
-/** The refusal for content of a course whose period hasn't opened (403, course-periods.md decision 8). */
-export function courseNotOpen(lock: CourseLock, courseId: string): AppError {
+/** The refusal for content of a topic whose period hasn't opened. */
+export function topicNotOpen(lock: PeriodLock, courseId: string, lessonId: string): AppError {
   return new AppError('COURSE_NOT_OPEN', {
     detail:
       lock.opensAt === null
-        ? 'This course is not open yet. Your school will open it.'
-        : 'This course opens at the start of its term.',
-    extensions: { courseId, periodName: lock.periodName, opensAt: lock.opensAt?.toISOString() ?? null },
+        ? 'This topic is not open yet. Your school will open it.'
+        : 'This topic opens at the start of its term.',
+    extensions: {
+      courseId,
+      lessonId,
+      periodName: lock.periodName,
+      opensAt: lock.opensAt?.toISOString() ?? null,
+    },
   });
 }
 
@@ -119,13 +103,10 @@ export async function grantFor(
   if (actor === null) return null;
   if (course.firstPublishedAt !== null) {
     const enrollment = await activeEnrollment(tx, actor.membershipId, course.id, expired);
-    if (enrollment !== null) {
-      return { access: 'ENROLLED', enrollment, lock: await readCourseLock(tx, course.id) };
-    }
+    if (enrollment !== null) return { access: 'ENROLLED', enrollment };
   }
-  if (course.ownerMembershipId === actor.membershipId)
-    return { access: 'OWNER', enrollment: null, lock: null };
-  if (can(actor, 'admin.access')) return { access: 'ADMIN', enrollment: null, lock: null };
+  if (course.ownerMembershipId === actor.membershipId) return { access: 'OWNER', enrollment: null };
+  if (can(actor, 'admin.access')) return { access: 'ADMIN', enrollment: null };
   return null;
 }
 
@@ -168,7 +149,15 @@ async function readingOrder(tx: TenantTx, courseId: string) {
     where: { courseId },
     orderBy: { position: 'asc' },
     select: {
-      lessons: { orderBy: { position: 'asc' }, select: { id: true, isPreview: true, quizId: true } },
+      lessons: {
+        orderBy: { position: 'asc' },
+        select: {
+          id: true,
+          isPreview: true,
+          quizId: true,
+          period: { select: { name: true, startsAt: true, mode: true } },
+        },
+      },
     },
   });
   return sections.flatMap((section) => section.lessons);
@@ -188,19 +177,30 @@ export function balanceRequired(enrollment: EnrollmentRow, courseId: string): Ap
 }
 
 /**
- * Lessons of the course an enrolled learner can't open yet: every lesson but the previews while the
- * course is not open, else those beyond a deposit. Empty for owners, administrators and full access.
+ * Lessons an enrolled learner can't open yet: those in unopened periods, plus those beyond a deposit.
+ * Preview lessons remain open. Empty for owners, administrators and full access.
  */
 export async function lockedLessons(tx: TenantTx, grant: Grant, courseId: string): Promise<Set<string>> {
   if (grant.access !== 'ENROLLED') return new Set();
-  const limit = grant.lock !== null ? 0 : (grant.enrollment?.accessLimitPct ?? null);
-  if (limit === null) return new Set();
-  return lockedLessonIds(await readingOrder(tx, courseId), limit);
+  const lessons = await readingOrder(tx, courseId);
+  const locked = new Set(
+    lessons
+      .filter((lesson) => !lesson.isPreview && periodLock(lesson.period, new Date()) !== null)
+      .map((lesson) => lesson.id),
+  );
+  const limit = grant.enrollment?.accessLimitPct ?? null;
+  for (const id of lockedLessonIds(lessons, limit)) locked.add(id);
+  return locked;
 }
 
-/** The refusal for a locked lesson: the period first, then the deposit. */
-export function lessonRefusal(grant: Grant, courseId: string): AppError {
-  if (grant.lock !== null) return courseNotOpen(grant.lock, courseId);
+/** The refusal for a locked topic: its period first, then the deposit. */
+export function lessonRefusal(
+  grant: Grant,
+  courseId: string,
+  lessonId: string,
+  lock: PeriodLock | null,
+): AppError {
+  if (lock !== null) return topicNotOpen(lock, courseId, lessonId);
   if (grant.enrollment !== null) return balanceRequired(grant.enrollment, courseId);
   return new AppError('ENROLMENT_INACTIVE');
 }
@@ -215,18 +215,24 @@ export async function requireQuizOpen(
   courseId: string,
   quizId: string,
 ): Promise<void> {
-  if (grant.access === 'ENROLLED' && grant.lock !== null) throw courseNotOpen(grant.lock, courseId);
   const enrollment = grant.enrollment;
-  if (grant.access !== 'ENROLLED' || enrollment === null || enrollment.accessLimitPct === null) return;
+  if (grant.access !== 'ENROLLED' || enrollment === null) return;
   const lessons = await readingOrder(tx, courseId);
-  const locked = lockedLessonIds(lessons, enrollment.accessLimitPct);
-  const open = lessons.some((lesson) => lesson.quizId === quizId && !locked.has(lesson.id));
-  if (!open) throw balanceRequired(enrollment, courseId);
+  const associated = lessons.filter((lesson) => lesson.quizId === quizId);
+  if (associated.length === 0) {
+    if (enrollment.accessLimitPct !== null) throw balanceRequired(enrollment, courseId);
+    return;
+  }
+  const locked = await lockedLessons(tx, grant, courseId);
+  const open = associated.some((lesson) => !locked.has(lesson.id));
+  if (open) return;
+  const lockedLesson = associated.find((lesson) => locked.has(lesson.id));
+  const period = lockedLesson === undefined ? null : periodLock(lockedLesson.period, new Date());
+  throw lessonRefusal(grant, courseId, lockedLesson?.id ?? '', period);
 }
 
-/** Practice draws on the whole question bank, so it needs the full, open course (decision 2). */
+/** Practice draws on the whole question bank, so a deposit still needs full course access. */
 export function requireFullAccess(grant: Grant, courseId: string): void {
-  if (grant.access === 'ENROLLED' && grant.lock !== null) throw courseNotOpen(grant.lock, courseId);
   if (grant.access === 'ENROLLED' && grant.enrollment !== null && grant.enrollment.accessLimitPct !== null) {
     throw balanceRequired(grant.enrollment, courseId);
   }
